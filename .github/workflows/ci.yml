@@ -25,3 +25,12 @@ jobs:
       - run: python scripts/check_deps.py
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # Determinism: the pinned vectors must come out identical on every OS (Blueprint §18.3).
+      - run: cargo run -q -p pg-cli -- selftest
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2

@@ -16,7 +16,7 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 1. Tag `m0.0` once CI for the bootstrap commit is confirmed green; tag `m0.1` after acceptance.
 2. 0.2: `Clock`/tick flags, system pipeline with extension-point slots, `SimInput` log + ordering, `TickReport`, replay; `pg sim` / `pg replay` CLI. Checkpoint review after 0.2.
-3. Run `cargo deny check` locally once the background install finishes; fix `deny.toml` if its schema or license list needs adjusting.
+3. ~~Run `cargo deny check` locally~~ done: advisories, bans, licenses, sources all ok (cargo-deny 0.20.2). Own crates are skipped for license checks (`[licenses.private] ignore`) until D-002 is resolved.
 
 ## Shell note
 
