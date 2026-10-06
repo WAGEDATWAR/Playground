@@ -7,3 +7,11 @@
     test,
     allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)
 )]
+
+pub mod canon;
+pub mod hash;
+pub mod id;
+pub mod num;
+pub mod rng;
+pub mod table;
+pub mod vectors;

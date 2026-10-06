@@ -21,3 +21,10 @@ Format: **ID — title** · area · status (`proposed` / `accepted` / `rejected`
 ## Modding
 
 - **S-020 — "Mod cookbook" sample packs as CI conformance tests** · modding · proposed · Already implied by Blueprint §23.12; suggest writing the first three samples (new need, new action, new hook) during the 0.9 spike so API ergonomics get tested early. · Low.
+
+## Determinism and testing (added in 0.1)
+
+- **S-004 — Cross-check `Canon` against an independent JSON canonicalizer** · testing · proposed · Property-test that `Canon::to_canonical_string` equals RFC 8785 (JCS) output for integer-only documents using a third-party implementation as a dev-dependency, so a bug in our escaping/ordering cannot hide behind our own vectors. · Low.
+- **S-005 — Compile-time registry of RNG stream names** · determinism · proposed · Stream names are strings today; a small registry (const list + test that every `rand`/`Rng::new` call site uses a registered name, mirrored in `pg-api` for pack streams) would catch typos that silently create a "new" stream. · Low–medium.
+- **S-006 — Typed draw helpers** · determinism · proposed · Add `weighted_pick`, `normal-ish` (sum of draws, integer) and `dice(n, sides)` helpers once the schedule and conversation systems show which shapes they need; avoids each system hand-rolling its own sampling. · Low, do on demand.
+- **S-007 — Make `StateHash` human-diffable in logs** · tooling · proposed · Show per-table short hashes (`pawns:3fa9b2c1 objects:…`) in the 0.2 per-day hash log so a divergence is localized at a glance (pairs with S-002). · Low.

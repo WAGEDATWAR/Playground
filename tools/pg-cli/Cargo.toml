@@ -10,3 +10,4 @@ pg-runtime = { path = "../../crates/pg-runtime" }
 pg-host-os = { path = "../../crates/pg-host-os" }
 pg-core = { path = "../../crates/pg-core" }
 pg-content = { path = "../../crates/pg-content" }
+serde_json = "1.0.151"

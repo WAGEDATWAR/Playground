@@ -6,5 +6,9 @@ license.workspace = true
 publish = false
 
 [dependencies]
+blake3 = { version = "1.8.7", default-features = false, features = ["std", "pure"] }
 pg-content = { path = "../../crates/pg-content" }
 pg-host = { path = "../../crates/pg-host" }
+
+[dev-dependencies]
+proptest = "1.11.0"
