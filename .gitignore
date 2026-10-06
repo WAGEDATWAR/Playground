@@ -1,0 +1,7 @@
+/target
+**/*.rs.bk
+*.pgsave
+/saves/
+/mods-dev/
+.vscode/
+.idea/

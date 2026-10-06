@@ -1,0 +1,3 @@
+[toolchain]
+channel = "stable"   # TODO(phase 0.0): pin an exact version once the toolchain is installed
+components = ["rustfmt", "clippy"]

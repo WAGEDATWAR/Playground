@@ -1,0 +1,12 @@
+[package]
+name = "pg-app"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+pg-runtime = { path = "../../crates/pg-runtime" }
+pg-render = { path = "../../crates/pg-render" }
+pg-host-os = { path = "../../crates/pg-host-os" }
+pg-ui-model = { path = "../../crates/pg-ui-model" }

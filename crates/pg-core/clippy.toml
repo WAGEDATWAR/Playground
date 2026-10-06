@@ -1,0 +1,10 @@
+# Determinism lint policy for the simulation core (Blueprint §5.2). Applies to this crate only.
+disallowed-types = [
+  { path = "std::collections::HashMap", reason = "iteration order is nondeterministic; use BTreeMap" },
+  { path = "std::collections::HashSet", reason = "iteration order is nondeterministic; use BTreeSet" },
+  { path = "std::time::Instant", reason = "no clock in core" },
+  { path = "std::time::SystemTime", reason = "no clock in core" },
+]
+disallowed-methods = [
+  { path = "std::collections::hash_map::DefaultHasher::new", reason = "unspecified algorithm; use the pinned hash" },
+]

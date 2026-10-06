@@ -1,0 +1,16 @@
+[package]
+name = "pg-runtime"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+pg-core = { path = "../../crates/pg-core" }
+pg-content = { path = "../../crates/pg-content" }
+pg-script = { path = "../../crates/pg-script" }
+pg-persist = { path = "../../crates/pg-persist" }
+pg-ai = { path = "../../crates/pg-ai" }
+pg-worldgen = { path = "../../crates/pg-worldgen" }
+pg-ui-model = { path = "../../crates/pg-ui-model" }
+pg-host = { path = "../../crates/pg-host" }

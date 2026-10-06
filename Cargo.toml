@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = ["crates/*", "tools/*"]
+
+[workspace.package]
+edition = "2021"
+license = "UNLICENSED"   # placeholder until a license is chosen (see docs/DECISIONS.md)
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "unwind"   # required for the tick-level safety net (Blueprint §17, §24)
