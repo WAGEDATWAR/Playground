@@ -4,11 +4,11 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Phase 0 / Milestone 0.0 — Bootstrap.** Toolchain verified (Rust 1.99.0 pinned, MSVC Build Tools present). Skeleton builds, passes `clippy -D warnings`, tests, `fmt --check` and `scripts/check_deps.py` locally on Windows. Remaining for 0.0: push to GitHub and get CI green on all 3 OSes, then tag `m0.0`.
+**Phase 0 / Milestone 0.0 — Bootstrap.** Toolchain verified (Rust 1.99.0 pinned, MSVC Build Tools present). Skeleton builds, passes `clippy -D warnings`, tests, `fmt --check` and `scripts/check_deps.py` locally on Windows. Remaining for 0.0: first push (user) and CI green on all 3 OSes, then tag `m0.0`.
 
 ## Blocked / waiting on user
 
-- [ ] **GitHub repo:** the GitHub connector failed to connect in this session (HTTP 400, "Authorization header is badly formatted") and `gh` CLI is not installed, so I could not create the repo. User will create an empty **private** repo `Playground` and send the URL; then `git remote add origin <url>`, rename branch to `main`, push, watch CI, tag `m0.0`.
+- [ ] **First push.** Private repo created: https://github.com/WAGEDATWAR/Playground (empty, via GitHub MCP, 2026-10-06). `origin` is set and the branch is renamed to `main`, but local git has no stored GitHub credentials, so the user must run `git push -u origin main` once from their own terminal (Git Credential Manager will prompt). Then: confirm CI green on Windows / Linux / macOS, fix any OS-specific issue, tag `m0.0`.
 
 ## Next up
 
