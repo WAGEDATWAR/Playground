@@ -8,12 +8,12 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Blocked / waiting on user
 
-- [ ] **Rust toolchain not installed** on this machine (no `cargo`, `rustc`, `rustup`; MSVC Build Tools not detected). Need permission to install, or the user installs it. Nothing can be compiled or tested until then.
-- [ ] **GitHub:** `gh` CLI is not installed and not authenticated; git has no remote. Need the repository name and visibility (default proposal: `Playground`, private), and either the user installs/authenticates `gh` or creates an empty repo and gives me its URL.
+- [ ] **Rust toolchain:** user will install it (rustup from rustup.rs + Visual Studio Build Tools "Desktop development with C++"). Waiting for the user to say it is done; then verify with `cargo --version` and `link.exe` availability.
+- [ ] **GitHub repo:** user will create an empty **private** repo named `Playground` and give me the URL; then `git remote add origin <url>` and push `master` (consider renaming branch to `main`).
 
 ## Next up
 
-1. Commit the skeleton locally (done once docs are written).
+1. ~~Commit the skeleton locally~~ (done: `3eba2da`). `.gitattributes` added to stop LF/CRLF churn.
 2. After toolchain install: pin the exact toolchain in `rust-toolchain.toml`, run `cargo build` / `cargo clippy` / `cargo fmt` on the skeleton, fix anything the unverified skeleton got wrong.
 3. Add CI (`.github/workflows/ci.yml`), `cargo-deny` config, `scripts/check-deps`.
 4. Push to GitHub, protect nothing yet, tag `m0.0` when CI is green on all three OSes.
