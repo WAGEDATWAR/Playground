@@ -128,16 +128,6 @@ impl ToCanon for Probe {
     }
 }
 
-impl ToCanon for BTreeMap<String, u32> {
-    fn to_canon(&self) -> Canon {
-        Canon::Map(
-            self.iter()
-                .map(|(k, v)| (k.clone(), v.to_canon()))
-                .collect(),
-        )
-    }
-}
-
 impl ToCanon for WorldState {
     fn to_canon(&self) -> Canon {
         Canon::map([

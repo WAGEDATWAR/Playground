@@ -8,7 +8,7 @@
     allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)
 )]
 
-pub mod canon;
+pub use pg_canon as canon;
 pub mod dev;
 pub mod hash;
 pub mod id;

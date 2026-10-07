@@ -1,12 +1,16 @@
-//! Canonical serialization (Blueprint §5.4).
+#![forbid(unsafe_code)]
+//! Canonical values and serialization (Blueprint §5.4).
+//!
+//! This crate has no dependencies and sits below both `pg-content` and `pg-core`, which is why it is
+//! its own crate (see `docs/DECISIONS.md` D-010).
 //!
 //! The canonical form of a value is JSON with **sorted keys, no whitespace and integers only**:
 //! there is no way to express a float, so authoritative state cannot smuggle one into a hash.
 //! Keys sort by their UTF-8 bytes. Strings escape `"`, `\`, and control characters (< 0x20) and are
 //! otherwise written as raw UTF-8. Two equal values always have byte-identical canonical forms.
 
-use crate::id::{EntityId, IdCounters};
-use crate::table::Table;
+pub mod json;
+
 use std::collections::BTreeMap;
 
 /// A tree of canonical values.
@@ -216,29 +220,11 @@ impl<T: ToCanon> ToCanon for [T] {
     }
 }
 
-impl ToCanon for EntityId {
-    fn to_canon(&self) -> Canon {
-        Canon::Str(self.to_string())
-    }
-}
-
-impl<T: ToCanon> ToCanon for Table<T> {
-    /// A map from the id's text to the row. The text form is unique per id, so the canonical form
-    /// does not depend on the (separate) iteration order of the table.
+impl<V: ToCanon> ToCanon for BTreeMap<String, V> {
     fn to_canon(&self) -> Canon {
         Canon::Map(
             self.iter()
-                .map(|(id, row)| (id.to_string(), row.to_canon()))
-                .collect(),
-        )
-    }
-}
-
-impl ToCanon for IdCounters {
-    fn to_canon(&self) -> Canon {
-        Canon::Map(
-            self.iter()
-                .map(|(kind, n)| (kind.prefix().to_owned(), n.to_canon()))
+                .map(|(k, v)| (k.clone(), v.to_canon()))
                 .collect(),
         )
     }
@@ -247,7 +233,6 @@ impl ToCanon for IdCounters {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::id::Kind;
 
     #[test]
     fn scalars() {
@@ -305,22 +290,5 @@ mod tests {
             c.to_canonical_string(),
             r#"{"empty":{},"list":[1,null,false],"none":null}"#
         );
-    }
-
-    #[test]
-    fn tables_and_counters_serialize_by_id_text() {
-        let mut t = Table::new();
-        t.insert(EntityId::new(Kind::Pawn, 11), 7i32).unwrap();
-        t.insert(EntityId::new(Kind::Pawn, 2), 3i32).unwrap();
-        assert_eq!(
-            t.to_canon().to_canonical_string(),
-            r#"{"pawn_2":3,"pawn_b":7}"#
-        );
-
-        let mut c = IdCounters::new();
-        c.allocate(Kind::Pawn).unwrap();
-        c.allocate(Kind::Pawn).unwrap();
-        c.allocate(Kind::Object).unwrap();
-        assert_eq!(c.to_canon().to_canonical_string(), r#"{"obj":2,"pawn":3}"#);
     }
 }

@@ -1,0 +1,11 @@
+[package]
+name = "pg-canon"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+
+[dev-dependencies]
+proptest = "1.11.0"

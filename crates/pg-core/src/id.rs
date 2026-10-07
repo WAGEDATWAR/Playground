@@ -7,6 +7,7 @@
 //! Ordering is by `(kind, counter)`, which is the order every table iterates in. It is *not*
 //! the lexicographic order of the textual form.
 
+use crate::canon::{Canon, ToCanon};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
@@ -210,10 +211,35 @@ impl IdCounters {
     }
 }
 
+impl ToCanon for EntityId {
+    fn to_canon(&self) -> Canon {
+        Canon::Str(self.to_string())
+    }
+}
+
+impl ToCanon for IdCounters {
+    fn to_canon(&self) -> Canon {
+        Canon::Map(
+            self.iter()
+                .map(|(kind, n)| (kind.prefix().to_owned(), n.to_canon()))
+                .collect(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    #[test]
+    fn counters_serialize_by_kind_prefix() {
+        let mut c = IdCounters::new();
+        c.allocate(Kind::Pawn).unwrap();
+        c.allocate(Kind::Pawn).unwrap();
+        c.allocate(Kind::Object).unwrap();
+        assert_eq!(c.to_canon().to_canonical_string(), r#"{"obj":2,"pawn":3}"#);
+    }
 
     #[test]
     fn display_matches_spec_examples() {

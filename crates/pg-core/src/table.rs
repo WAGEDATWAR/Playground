@@ -4,6 +4,7 @@
 //! The API is deliberately small and panic-free; swapping the backing store for a dense sorted
 //! `Vec` later must not change iteration order or hashes.
 
+use crate::canon::{Canon, ToCanon};
 use crate::id::EntityId;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -87,6 +88,18 @@ impl<T> Table<T> {
     }
 }
 
+impl<T: ToCanon> ToCanon for Table<T> {
+    /// A map from the id's text to the row. The text form is unique per id, so the canonical form
+    /// does not depend on the table's (separate) iteration order.
+    fn to_canon(&self) -> Canon {
+        Canon::Map(
+            self.iter()
+                .map(|(id, row)| (id.to_string(), row.to_canon()))
+                .collect(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -95,6 +108,17 @@ mod tests {
 
     fn pawn(n: u32) -> EntityId {
         EntityId::new(Kind::Pawn, n)
+    }
+
+    #[test]
+    fn tables_serialize_by_id_text() {
+        let mut t = Table::new();
+        t.insert(pawn(11), 7i32).unwrap();
+        t.insert(pawn(2), 3i32).unwrap();
+        assert_eq!(
+            t.to_canon().to_canonical_string(),
+            r#"{"pawn_2":3,"pawn_b":7}"#
+        );
     }
 
     #[test]

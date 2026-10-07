@@ -192,6 +192,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "pg-canon"
+version = "0.0.1"
+dependencies = [
+ "proptest",
+]
+
+[[package]]
 name = "pg-cli"
 version = "0.0.1"
 dependencies = [
@@ -211,6 +218,7 @@ name = "pg-core"
 version = "0.0.1"
 dependencies = [
  "blake3",
+ "pg-canon",
  "pg-content",
  "pg-host",
  "proptest",

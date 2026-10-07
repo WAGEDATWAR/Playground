@@ -12,8 +12,9 @@ import sys
 ALLOWED = {
     "pg-host": set(),
     "pg-host-os": {"pg-host"},
-    "pg-content": set(),
-    "pg-core": {"pg-content", "pg-host"},
+    "pg-canon": set(),
+    "pg-content": {"pg-canon"},
+    "pg-core": {"pg-canon", "pg-content", "pg-host"},
     "pg-api": set(),
     "pg-script": {"pg-core", "pg-api"},
     "pg-persist": {"pg-core", "pg-content", "pg-host"},
