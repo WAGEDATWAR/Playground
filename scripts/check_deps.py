@@ -20,7 +20,7 @@ ALLOWED = {
     "pg-persist": {"pg-core", "pg-content", "pg-host"},
     "pg-ai": {"pg-core", "pg-content", "pg-host"},
     "pg-worldgen": {"pg-core", "pg-content"},
-    "pg-ui-model": {"pg-core"},
+    "pg-ui-model": {"pg-core", "pg-host"},
     "pg-runtime": {"pg-core", "pg-content", "pg-script", "pg-persist", "pg-ai",
                    "pg-worldgen", "pg-ui-model", "pg-host"},
     "pg-render": {"pg-ui-model"},

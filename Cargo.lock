@@ -2532,6 +2532,7 @@ name = "pg-ui-model"
 version = "0.0.1"
 dependencies = [
  "pg-core",
+ "pg-host",
 ]
 
 [[package]]

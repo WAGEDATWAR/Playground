@@ -7,3 +7,4 @@ publish = false
 
 [dependencies]
 pg-core = { path = "../../crates/pg-core" }
+pg-host = { version = "0.0.1", path = "../pg-host" }
