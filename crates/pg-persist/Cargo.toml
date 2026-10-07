@@ -9,3 +9,8 @@ publish = false
 pg-core = { path = "../../crates/pg-core" }
 pg-content = { path = "../../crates/pg-content" }
 pg-host = { path = "../../crates/pg-host" }
+ruzstd = "0.9.0"
+blake3 = { version = "1.8.7", default-features = false, features = ["std", "pure"] }
+
+[dev-dependencies]
+proptest = "1.11.0"
