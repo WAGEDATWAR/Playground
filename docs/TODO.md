@@ -4,9 +4,9 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Milestone 0.10 (app shell, graphical main menu, dev overlay): implemented, waiting for the checkpoint.** `m0.9` accepted and tagged; S-034..S-036 accepted (Roadmap v4.6, D-032). 0.10 delivered: `pg-ui-model` (screen state machines, widget tree with text snapshots, generated Options, AI options with the Player2 sign-in flow, overlay model, keyboard and no-dead-end exploration tests), `AppController` in `pg-runtime` (worlds, settings, AI keys, sign-in, export/import, crash prompt, thumbnails, overlay data) tested over in-memory services, `pg-render` (camera, run-merged tile rectangles), the `pg-app` window shell (winit, wgpu via egui-wgpu, egui) with the map view, pause menu, overlay (time scrub, bundle button, script cost, reasons, packs, shadow status), `--smoke`, `--demo`, `--shadow`. Decision D-033, Blueprint v2.9, suggestions S-037..S-039.
+**Stage 0 gate (milestone 0.11): implemented, waiting for your verification.** `m0.10` is accepted and tagged; S-037..S-039 accepted (Roadmap v4.7, D-034); the Blueprint was consolidated to v3.0 (D-035). 0.11 delivered: scenario runner environments and the `migrate`, `soak` and state-hash steps; three gate scenarios and the 30-day soak (shadow-verified, bounded, hash-pinned); `pg-app --smoke` with a relaunch; CI steps and a soak job on all three systems; `pg check` at 29 checks; the gate report `docs/gates/stage-0.md`; decision D-036. 719 tests.
 
-**Checkpoint for you:** launch the game (`cargo run -p pg-app`) and click through it as listed in `docs/BUILDING.md`, section "Playing the game (0.10)". CI should be green on all three OSes (it runs `pg-app --smoke`). After acceptance: tag `m0.10`, then 0.11 (the Stage 0 gate).
+**Gate for you:** read `docs/gates/stage-0.md`, click through the game once more (`docs/BUILDING.md`, "Playing the game"), and confirm CI is green on all three systems including the soak job. After acceptance: tag `m0.11` (Stage 0 complete) and start Stage 1 planning.
 
 ## Blocked / waiting on user
 
@@ -14,8 +14,8 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Next up
 
-1. Push 0.10, check CI on all three OSes, tag `m0.10` on acceptance.
-2. 0.11 Stage 0 gate (menu-flow acceptance scenario, soak with shadow verification, cross-OS golden replay).
+1. Push 0.11, check CI (including the soak job and the pinned hashes on Linux and macOS), tag `m0.11` on acceptance.
+2. Stage 1 planning: a Stage 1 plan in `docs/PLAN.md` (needs, mood, memory, social, conversation, worldgen v1, native renderer, inspector, base pack content; S-034, S-037, S-038, S-039 land here).
 3. Prune dev scaffolding as real systems land (D-009).
 
 ## Shell note

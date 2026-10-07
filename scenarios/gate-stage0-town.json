@@ -1,0 +1,30 @@
+{
+  "format": "playground-scenario",
+  "version": 1,
+  "name": "Stage 0 gate: the sample town runs, saves, reloads and recovers without touching another save",
+  "description": "A deterministic 12-resident town runs two days, is saved and reloaded identically, resumes identically from a snapshot, round-trips through export and import, and survives damage to its newest save (falling back, then losing its index) while a second world in another slot stays untouched.",
+  "world": { "name": "Gate Town", "seed": "gate-stage0" },
+  "steps": [
+    { "op": "create_map", "w": 48, "h": 36, "style": 1 },
+    { "op": "spawn_pawns", "count": 12 },
+    { "op": "run", "days": 2 },
+    { "op": "expect", "pawns": 12, "day": 2 },
+    { "op": "reload", "slot": "main" },
+    { "op": "fork", "ticks": 4000 },
+    { "op": "export_import" },
+    { "op": "save", "slot": "other" },
+    { "op": "run", "ticks": 5000 },
+    { "op": "save", "slot": "main" },
+    { "op": "run", "ticks": 5000 },
+    { "op": "save", "slot": "main" },
+    { "op": "corrupt", "slot": "main", "how": "flip" },
+    { "op": "load", "slot": "main", "expect": "fell_back" },
+    { "op": "expect", "pawns": 12 },
+    { "op": "run", "days": 1 },
+    { "op": "save", "slot": "main" },
+    { "op": "corrupt", "slot": "main", "how": "delete_manifest" },
+    { "op": "load", "slot": "main", "expect": "no_manifest" },
+    { "op": "load", "slot": "other", "expect": "clean" },
+    { "op": "expect", "pawns": 12, "day": 2, "hash": "a7d1b7b1" }
+  ]
+}

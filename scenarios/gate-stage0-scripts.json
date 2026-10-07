@@ -1,0 +1,26 @@
+{
+  "format": "playground-scenario",
+  "version": 1,
+  "name": "Stage 0 gate: a world with script packs runs, resumes and reloads deterministically",
+  "description": "A town with the three cookbook packs loaded runs a day, reloads identically, resumes identically from a snapshot (every script VM rebuilt), is re-simulated on another thread count each day for a short soak, and survives damage to its newest save. Pack data is part of the saved and hashed world.",
+  "world": {
+    "name": "Script Gate Town",
+    "seed": "gate-scripts",
+    "packs": ["data/base", "packs/cookbook/caffeine", "packs/cookbook/evening_legs", "packs/cookbook/birthdays"]
+  },
+  "steps": [
+    { "op": "create_map", "w": 40, "h": 30, "style": 1 },
+    { "op": "spawn_pawns", "count": 10 },
+    { "op": "run", "days": 1 },
+    { "op": "reload", "slot": "main" },
+    { "op": "fork", "ticks": 6000 },
+    { "op": "export_import" },
+    { "op": "soak", "days": 4, "shadow_threads": 2 },
+    { "op": "save", "slot": "main" },
+    { "op": "run", "ticks": 3000 },
+    { "op": "save", "slot": "main" },
+    { "op": "corrupt", "slot": "main", "how": "flip" },
+    { "op": "load", "slot": "main", "expect": "fell_back" },
+    { "op": "expect", "pawns": 10, "day": 5, "hash": "ae71a176" }
+  ]
+}

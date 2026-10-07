@@ -83,7 +83,7 @@ USAGE:
     pg bugbundle run <file.pgbundle>        Replay a bundle and verify its hashes.
     pg scenario run <file.json>...          Run scenario files (build, run, save, reload, damage, recover, assert).
     pg content diff <packs-a> <packs-b>     Compare two content sets (comma-separated pack dirs each).
-    pg ai providers                         The four providers, their hosts, recommended models and whether a key is stored.
+    pg ai providers                         The five providers, their hosts, recommended models and whether a key is stored.
     pg ai key set <provider> [--from-env VAR] | clear <provider> | status
         Manage provider keys in the OS credential store (never in files).
     pg ai settings show | set [--provider P] [--model M | --default-model] [--enable | --disable] [--dir D]

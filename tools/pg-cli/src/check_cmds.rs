@@ -183,6 +183,21 @@ pub fn check_cmd(rest: &[String]) -> Result<ExitCode, String> {
             needs: Some("scenarios/persistence.json"),
         },
         Check {
+            name: "gate scenario: sample town",
+            args: args(&["scenario", "run", "scenarios/gate-stage0-town.json"]),
+            needs: Some("scenarios/gate-stage0-town.json"),
+        },
+        Check {
+            name: "gate scenario: migrated fixture",
+            args: args(&["scenario", "run", "scenarios/gate-stage0-migrate.json"]),
+            needs: Some("scenarios/gate-stage0-migrate.json"),
+        },
+        Check {
+            name: "gate scenario: script packs",
+            args: args(&["scenario", "run", "scenarios/gate-stage0-scripts.json"]),
+            needs: Some("scenarios/gate-stage0-scripts.json"),
+        },
+        Check {
             name: "save create",
             args: vec![
                 "save".into(),

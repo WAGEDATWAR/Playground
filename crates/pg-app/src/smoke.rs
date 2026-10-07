@@ -169,6 +169,29 @@ pub fn run(content: Arc<ContentSet>) -> Result<(), String> {
         h.shapes > 100,
         &format!("{} shapes were tessellated across all screens", h.shapes),
     )?;
+    let played = app.model.hud().tick;
+    drop(app);
+
+    // Relaunch: a brand-new app on the same folder offers the world and continues it.
+    let mut services = real_services(&dir)?;
+    let secrets: Arc<dyn SecretStore> = Arc::new(MemSecretStore::new());
+    services.secrets = secrets;
+    let mut app = App::new(AppController::new(services, Some(content)));
+    h.frame(&mut app);
+    expect(
+        matches!(app.model.screen(), Screen::MainMenu)
+            && app.model.worlds().iter().any(|w| w.name == "Smoke Town"),
+        "a relaunch shows the main menu with the saved world",
+    )?;
+    app.dispatch(UiEvent::Click("main.continue".into()));
+    h.until(&mut app, "the relaunched world to load", |a| {
+        matches!(a.model.screen(), Screen::InGame) && a.model.hud().pawns > 0
+    })?;
+    expect(
+        app.model.hud().tick >= played && !app.model.hud().running,
+        "Continue after a relaunch resumes at the saved moment, paused",
+    )?;
+    app.dispatch(UiEvent::CloseRequested);
     drop(app);
     let _ = std::fs::remove_dir_all(&dir);
     println!("smoke test passed");

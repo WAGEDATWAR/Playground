@@ -10,6 +10,7 @@ pub mod guard;
 pub mod keyframes;
 pub mod pool;
 pub mod profile;
+pub mod scenario_env;
 pub mod session;
 pub mod settings;
 pub mod sim_loop;

@@ -542,7 +542,15 @@ pub fn scenario_cmd(args: &[String]) -> Result<ExitCode, String> {
                     sc.name,
                     sc.steps.len()
                 );
-                let report = scenario::run(&sc);
+                // The scenario may name content packs (and so scripts); they are loaded from the working
+                // directory, which is the repository root when run as documented.
+                let content = if sc.packs.is_empty() {
+                    None
+                } else {
+                    Some(crate::shared::load_content(&sc.packs)?)
+                };
+                let env = pg_runtime::scenario_env::RuntimeEnv::new(content, ".");
+                let report = scenario::run_with(&sc, &env);
                 for o in &report.outcomes {
                     println!(
                         "  {:>2} {:<14} {}  {}",

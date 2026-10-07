@@ -20,11 +20,19 @@
 //! Steps: `create_map`, `spawn_pawns`, `command`, `run` (`ticks` or `days`), `save`, `load` (optional
 //! `expect`: `clean`, `fell_back`, `no_manifest`, `damaged`, `newer`), `reload` (save, load, hashes must
 //! match), `corrupt` (`flip`, `truncate`, `garbage`, `delete`, `delete_manifest`), `export_import`, `fork`
-//! (snapshot/resume equivalence over `ticks`), and `expect` (`pawns`, `commitments`, `tick`, `day`).
+//! (snapshot/resume equivalence over `ticks`), `expect` (`pawns`, `commitments`, `tick`, `day`, `hash`),
+//! `migrate` (load a pinned old save through the migration chain, check its recorded hash and carry on from
+//! it) and `soak` (run N days with invariants, optionally re-simulating every day on another thread count:
+//! shadow verification). The world section may name content `packs` (folders) for the environment to load.
+//!
+//! What a step needs from the machine (which pipeline to build, how to read a fixture, what the scripts
+//! cost) comes from a [`ScenarioEnv`]; the default [`DevEnv`] is the plain dev pipeline, and the runtime
+//! supplies one with content, scripts and thread counts.
 
 use crate::export::{export_world, import_world, ImportOptions};
+use crate::migrate::Migrations;
 use crate::store::{LoadError, LoadOptions, Recovery, SlotStore};
-use pg_core::canon::json;
+use pg_core::canon::{json, ToCanon};
 use pg_core::commands::Command;
 use pg_core::id::{EntityId, Kind};
 use pg_core::input::SimInput;
@@ -36,6 +44,44 @@ use pg_core::world::WorldState;
 use pg_host::{MemStorage, Storage};
 
 pub const SCENARIO_FORMAT: &str = "playground-scenario";
+
+/// What a scenario step needs from the machine around it.
+pub trait ScenarioEnv {
+    /// A sim resumed from `snapshot`, running its path batches on `threads` threads (so a run on a different
+    /// thread count is a shadow verification).
+    fn restore(&self, snapshot: SimSnapshot, threads: usize) -> Sim;
+
+    /// A sim for a brand-new world.
+    fn new_sim(&self, world: WorldState) -> Sim {
+        self.restore(
+            SimSnapshot {
+                world,
+                pending: Vec::new(),
+                next_seq: 0,
+            },
+            1,
+        )
+    }
+
+    /// The bytes of a file named in a scenario (a pinned fixture).
+    fn read_file(&self, path: &str) -> Result<Vec<u8>, String> {
+        Err(format!("this environment cannot read files ('{path}')"))
+    }
+
+    /// Total script fuel used so far, if scripts run; a soak checks that its daily cost stays flat.
+    fn script_fuel(&self) -> Option<u64> {
+        None
+    }
+}
+
+/// The plain dev pipeline with no content and no scripts.
+pub struct DevEnv;
+
+impl ScenarioEnv for DevEnv {
+    fn restore(&self, snapshot: SimSnapshot, _threads: usize) -> Sim {
+        Sim::restore(snapshot, dev_pipeline())
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Step {
@@ -70,6 +116,20 @@ pub enum Step {
         ticks: u64,
     },
     Expect(Expectation),
+    /// Loads a pinned save from `fixture` through the migrations, checks the hash recorded in `hash_file`
+    /// and continues from that world.
+    Migrate {
+        fixture: String,
+        hash_file: String,
+    },
+    /// Runs `days` days. With `shadow_threads`, every day is run a second time from the same snapshot on
+    /// that many threads and the hashes must agree. The state may not grow more than
+    /// `max_growth_permille` per mille over its size on day 5, and neither may the daily script fuel.
+    Soak {
+        days: u64,
+        shadow_threads: Option<usize>,
+        max_growth_permille: u64,
+    },
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -78,6 +138,8 @@ pub struct Expectation {
     pub commitments: Option<usize>,
     pub tick: Option<u64>,
     pub day: Option<u64>,
+    /// A prefix of the state hash (8 to 64 hex characters): pins the exact state across operating systems.
+    pub hash: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -86,6 +148,8 @@ pub struct Scenario {
     pub description: String,
     pub world_name: String,
     pub seed: String,
+    /// Content pack folders the environment should load (relative to where the scenario is run).
+    pub packs: Vec<String>,
     pub steps: Vec<Step>,
 }
 
@@ -179,7 +243,7 @@ fn parse_step(r: Reader<'_>) -> Result<Step, ReadError> {
             })
         }
         "expect" => {
-            r.only(&["op", "pawns", "commitments", "tick", "day"])?;
+            r.only(&["op", "pawns", "commitments", "tick", "day", "hash"])?;
             let e = Expectation {
                 pawns: match r.maybe("pawns")? {
                     Some(v) => Some(v.reader().usize()?),
@@ -197,8 +261,40 @@ fn parse_step(r: Reader<'_>) -> Result<Step, ReadError> {
                     Some(v) => Some(v.reader().u64()?),
                     None => None,
                 },
+                hash: match r.maybe("hash")? {
+                    Some(v) => {
+                        let h = v.reader().str()?;
+                        if !(8..=64).contains(&h.len()) || !h.bytes().all(|b| b.is_ascii_hexdigit())
+                        {
+                            return Err(v.reader().err("expected 8 to 64 hex characters"));
+                        }
+                        Some(h.to_ascii_lowercase())
+                    }
+                    None => None,
+                },
             };
             Ok(Step::Expect(e))
+        }
+        "migrate" => {
+            r.only(&["op", "fixture", "hash_file"])?;
+            Ok(Step::Migrate {
+                fixture: r.child("fixture")?.reader().str()?.to_owned(),
+                hash_file: r.child("hash_file")?.reader().str()?.to_owned(),
+            })
+        }
+        "soak" => {
+            r.only(&["op", "days", "shadow_threads", "max_growth_permille"])?;
+            Ok(Step::Soak {
+                days: r.child("days")?.reader().u64()?,
+                shadow_threads: match r.maybe("shadow_threads")? {
+                    Some(t) => Some(t.reader().usize()?),
+                    None => None,
+                },
+                max_growth_permille: match r.maybe("max_growth_permille")? {
+                    Some(g) => g.reader().u64()?,
+                    None => 1500,
+                },
+            })
         }
         other => Err(op.reader().err(format!("unknown step '{other}'"))),
     }
@@ -218,7 +314,13 @@ impl Scenario {
                 return Err(r.err("unsupported scenario version"));
             }
             let world = r.child("world")?;
-            world.reader().only(&["name", "seed"])?;
+            world.reader().only(&["name", "seed", "packs"])?;
+            let mut packs = Vec::new();
+            if let Some(list) = world.reader().maybe("packs")? {
+                for p in list.reader().list()? {
+                    packs.push(p.reader().str()?.to_owned());
+                }
+            }
             let steps = r
                 .child("steps")?
                 .reader()
@@ -234,6 +336,7 @@ impl Scenario {
                 },
                 world_name: world.reader().child("name")?.reader().str()?.to_owned(),
                 seed: world.reader().child("seed")?.reader().str()?.to_owned(),
+                packs,
                 steps,
             })
         };
@@ -277,6 +380,8 @@ impl Step {
             Step::ExportImport => "export_import",
             Step::Fork { .. } => "fork",
             Step::Expect(_) => "expect",
+            Step::Migrate { .. } => "migrate",
+            Step::Soak { .. } => "soak",
         }
     }
 }
@@ -287,17 +392,6 @@ fn dev_pipeline() -> Pipeline {
     p
 }
 
-fn restore(world: WorldState) -> Sim {
-    Sim::restore(
-        SimSnapshot {
-            world,
-            pending: Vec::new(),
-            next_seq: 0,
-        },
-        dev_pipeline(),
-    )
-}
-
 fn command_input(c: Command) -> SimInput {
     SimInput::Command {
         actor: None,
@@ -305,12 +399,13 @@ fn command_input(c: Command) -> SimInput {
     }
 }
 
-struct Runner {
+struct Runner<'a> {
     sim: Sim,
     mem: MemStorage,
+    env: &'a dyn ScenarioEnv,
 }
 
-impl Runner {
+impl Runner<'_> {
     fn run_step(&mut self, step: &Step) -> Result<String, String> {
         match step {
             Step::CreateMap { w, h, style } => {
@@ -377,7 +472,7 @@ impl Runner {
             }
             Step::Fork { ticks } => {
                 let snap = self.sim.snapshot();
-                let mut resumed = Sim::restore(snap, dev_pipeline());
+                let mut resumed = self.env.restore(snap, 1);
                 resumed.run_ticks(*ticks).map_err(|e| e.to_string())?;
                 self.sim.run_ticks(*ticks).map_err(|e| e.to_string())?;
                 if resumed.world().state_hash() != self.sim.world().state_hash() {
@@ -385,6 +480,12 @@ impl Runner {
                 }
                 Ok(format!("{ticks} ticks identical after snapshot/resume"))
             }
+            Step::Migrate { fixture, hash_file } => self.migrate(fixture, hash_file),
+            Step::Soak {
+                days,
+                shadow_threads,
+                max_growth_permille,
+            } => self.soak(*days, *shadow_threads, *max_growth_permille),
             Step::Expect(e) => {
                 let w = self.sim.world();
                 let mut problems = Vec::new();
@@ -403,6 +504,15 @@ impl Runner {
                 );
                 check("tick", e.tick, w.clock.tick());
                 check("day", e.day, w.clock.day());
+                if let Some(want) = &e.hash {
+                    let got = w.state_hash().to_hex();
+                    if !got.starts_with(want.as_str()) {
+                        problems.push(format!(
+                            "state hash: expected {want}..., found {}",
+                            &got[..want.len().min(got.len())]
+                        ));
+                    }
+                }
                 if problems.is_empty() {
                     Ok("as expected".to_owned())
                 } else {
@@ -410,6 +520,112 @@ impl Runner {
                 }
             }
         }
+    }
+
+    fn migrate(&mut self, fixture: &str, hash_file: &str) -> Result<String, String> {
+        let text = String::from_utf8(self.env.read_file(fixture)?)
+            .map_err(|_| format!("{fixture} is not text"))?;
+        let want = String::from_utf8(self.env.read_file(hash_file)?)
+            .map_err(|_| format!("{hash_file} is not text"))?;
+        let raw = json::parse(&text).map_err(|e| format!("{fixture}: {e}"))?;
+        let schema = raw
+            .get("schema")
+            .and_then(|s| s.as_i64())
+            .and_then(|s| u32::try_from(s).ok())
+            .ok_or_else(|| format!("{fixture} has no schema number"))?;
+        let migrations = Migrations::builtin();
+        let migrated = migrations
+            .migrate(raw, schema)
+            .map_err(|e| format!("{fixture}: {e}"))?;
+        let world = WorldState::from_canon(&migrated).map_err(|e| format!("{fixture}: {e}"))?;
+        let got = world.state_hash().to_hex();
+        if got != want.trim() {
+            return Err(format!(
+                "the migrated world hashes to {} but {hash_file} records {}",
+                &got[..8],
+                want.trim().chars().take(8).collect::<String>()
+            ));
+        }
+        let (pawns, tick) = (world.pawns.len(), world.clock.tick());
+        self.sim = self.env.new_sim(world);
+        Ok(format!(
+            "schema {schema} -> {} migrated; {pawns} pawn(s) at tick {tick}; hash {}",
+            migrations.current(),
+            &got[..8]
+        ))
+    }
+
+    fn soak(
+        &mut self,
+        days: u64,
+        shadow_threads: Option<usize>,
+        max_growth_permille: u64,
+    ) -> Result<String, String> {
+        let pawns = self.sim.world().pawns.len();
+        let inputs_before = self.sim.applied_inputs().len();
+        let mut sizes: Vec<u64> = Vec::new();
+        let mut fuel: Vec<u64> = Vec::new();
+        for day in 1..=days {
+            let snap = self.sim.snapshot();
+            let fuel_before = self.env.script_fuel();
+            self.sim
+                .run_ticks(TICKS_PER_DAY)
+                .map_err(|e| e.to_string())?;
+            if let (Some(a), Some(b)) = (fuel_before, self.env.script_fuel()) {
+                fuel.push(b.saturating_sub(a));
+            }
+            if let Some(threads) = shadow_threads {
+                let mut other = self.env.restore(snap, threads);
+                other.run_ticks(TICKS_PER_DAY).map_err(|e| e.to_string())?;
+                if other.world().state_hash() != self.sim.world().state_hash() {
+                    return Err(format!(
+                        "shadow verification diverged on day {day} ({threads} thread(s) disagree with the main run)"
+                    ));
+                }
+            }
+            sizes.push(self.sim.world().to_canon().to_canonical_string().len() as u64);
+        }
+        let mut notes = vec![format!("{days} day(s)")];
+        // Bounded state: after the first days settle, the world may not keep growing.
+        if sizes.len() > 5 {
+            let base = sizes.get(4).copied().unwrap_or(1).max(1);
+            let worst = sizes.iter().skip(5).copied().max().unwrap_or(base);
+            if worst * 1000 > base * max_growth_permille {
+                return Err(format!(
+                    "the world state grew from {base} to {worst} bytes (more than {max_growth_permille} per mille of day 5)"
+                ));
+            }
+            notes.push(format!("state {base} -> {worst} bytes"));
+        }
+        if fuel.len() > 5 {
+            let base = fuel.get(4).copied().unwrap_or(1).max(1);
+            let worst = fuel.iter().skip(5).copied().max().unwrap_or(base);
+            if worst * 1000 > base * max_growth_permille {
+                return Err(format!(
+                    "script fuel per day grew from {base} to {worst} (more than {max_growth_permille} per mille of day 5)"
+                ));
+            }
+            notes.push(format!("script fuel per day {base} -> {worst}"));
+        }
+        if self.sim.world().pawns.len() != pawns {
+            return Err(format!(
+                "the population changed during the soak ({pawns} -> {})",
+                self.sim.world().pawns.len()
+            ));
+        }
+        let inputs_after = self.sim.applied_inputs().len();
+        if inputs_after != inputs_before {
+            return Err(format!(
+                "the input log grew by {} during a run with no inputs",
+                inputs_after.saturating_sub(inputs_before)
+            ));
+        }
+        if let Some(t) = shadow_threads {
+            notes.push(format!(
+                "every day re-simulated on {t} thread(s): identical"
+            ));
+        }
+        Ok(notes.join("; "))
     }
 
     fn slot_id(slot: &str) -> String {
@@ -454,7 +670,7 @@ impl Runner {
         match result {
             Ok(loaded) => {
                 let gen = loaded.generation;
-                self.sim = restore(loaded.world);
+                self.sim = self.env.new_sim(loaded.world);
                 Ok(format!("loaded generation {gen} ({got})"))
             }
             Err(_) => Ok(format!("refused as expected ('{got}')")),
@@ -496,14 +712,20 @@ impl Runner {
     }
 }
 
-/// Runs a scenario against a fresh world and an in-memory store. Stops at the first failing step.
+/// Runs a scenario against a fresh world and an in-memory store, in the plain dev environment.
 pub fn run(scenario: &Scenario) -> ScenarioReport {
+    run_with(scenario, &DevEnv)
+}
+
+/// Runs a scenario in `env`. Stops at the first failing step.
+pub fn run_with(scenario: &Scenario, env: &dyn ScenarioEnv) -> ScenarioReport {
     let mut runner = Runner {
-        sim: Sim::with_dev_systems(WorldState::new(
+        sim: env.new_sim(WorldState::new(
             scenario.world_name.clone(),
             scenario.seed.clone(),
         )),
         mem: MemStorage::new(),
+        env,
     };
     let mut outcomes = Vec::new();
     for (index, step) in scenario.steps.iter().enumerate() {
@@ -648,5 +870,108 @@ mod tests {
             r#"{BUILD}{{"op":"command","cmd":{{"type":"dev_nudge","amount":42}}}},{{"op":"expect","pawns":5}}"#
         ));
         assert!(run_text(&text).unwrap().ok());
+    }
+
+    // ---- environment-dependent steps ------------------------------------------------------------------
+
+    /// Reads fixtures from the repository, like the CLI does.
+    struct FileEnv;
+
+    impl ScenarioEnv for FileEnv {
+        fn restore(&self, snapshot: SimSnapshot, _threads: usize) -> Sim {
+            Sim::restore(snapshot, dev_pipeline())
+        }
+
+        fn read_file(&self, path: &str) -> Result<Vec<u8>, String> {
+            std::fs::read(format!("{}/../../{path}", env!("CARGO_MANIFEST_DIR")))
+                .map_err(|e| format!("{path}: {e}"))
+        }
+    }
+
+    #[test]
+    fn a_pinned_old_save_is_migrated_checked_and_carried_on() {
+        let text = scenario(
+            r#"{"op":"migrate","fixture":"fixtures/saves/world-v3.json","hash_file":"fixtures/saves/world-v3.hash"},
+               {"op":"run","days":1},{"op":"reload","slot":"a"},{"op":"expect","pawns":4}"#,
+        );
+        let sc = Scenario::parse(&text).unwrap();
+        let r = run_with(&sc, &FileEnv);
+        assert!(r.ok(), "{:?}", r.outcomes);
+        assert!(
+            r.outcomes[0].message.contains("migrated"),
+            "{}",
+            r.outcomes[0].message
+        );
+        // The default environment cannot read files and says so.
+        let r = run(&sc);
+        assert!(
+            !r.ok() && r.outcomes[0].message.contains("cannot read files"),
+            "{:?}",
+            r.outcomes
+        );
+        // A wrong recorded hash is a failure that names both.
+        let bad = scenario(
+            r#"{"op":"migrate","fixture":"fixtures/saves/world-v3.json","hash_file":"fixtures/saves/world-v3.json"}"#,
+        );
+        let r = run_with(&Scenario::parse(&bad).unwrap(), &FileEnv);
+        assert!(!r.ok());
+    }
+
+    #[test]
+    fn a_soak_checks_shadow_verification_bounds_and_the_input_log() {
+        let text = scenario(&format!(
+            r#"{BUILD}{{"op":"soak","days":8,"shadow_threads":2}},{{"op":"expect","day":8,"pawns":5}}"#
+        ));
+        let r = run_text(&text).unwrap();
+        assert!(r.ok(), "{:?}", r.outcomes);
+        assert!(
+            r.outcomes[2].message.contains("identical"),
+            "{}",
+            r.outcomes[2].message
+        );
+        // Parsing: the defaults and the strictness.
+        assert!(Scenario::parse(&scenario(r#"{"op":"soak","days":3,"nope":1}"#)).is_err());
+    }
+
+    #[test]
+    fn a_soak_catches_a_system_that_depends_on_something_outside_the_world() {
+        use pg_core::pipeline::{Cadence, Placement, System, SystemSlot, TickCtx};
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static OUTSIDE: AtomicU64 = AtomicU64::new(0);
+        struct Leaky;
+        impl System for Leaky {
+            fn id(&self) -> &str {
+                "test.leaky"
+            }
+            fn run(&mut self, ctx: &mut TickCtx<'_>) {
+                ctx.world.probe.value +=
+                    i64::try_from(OUTSIDE.fetch_add(1, Ordering::SeqCst) % 7).unwrap_or(0);
+            }
+        }
+        struct LeakyEnv;
+        impl ScenarioEnv for LeakyEnv {
+            fn restore(&self, snapshot: SimSnapshot, _t: usize) -> Sim {
+                let mut p = dev_pipeline();
+                let _ = p.add_extension(
+                    SystemSlot::Maintenance,
+                    Placement::After,
+                    Cadence::Tick,
+                    Box::new(Leaky),
+                );
+                Sim::restore(snapshot, p)
+            }
+        }
+        let text = scenario(&format!(
+            r#"{BUILD}{{"op":"soak","days":2,"shadow_threads":2}}"#
+        ));
+        let r = run_with(&Scenario::parse(&text).unwrap(), &LeakyEnv);
+        assert!(!r.ok());
+        assert!(
+            r.outcomes[2]
+                .message
+                .contains("shadow verification diverged"),
+            "{}",
+            r.outcomes[2].message
+        );
     }
 }

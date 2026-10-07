@@ -1,0 +1,18 @@
+{
+  "format": "playground-scenario",
+  "version": 1,
+  "name": "Stage 0 gate: a pinned old save migrates and keeps living",
+  "description": "The schema 3 fixture is loaded through the migration chain, must hash to the value recorded when it was written, and the world then runs, saves, reloads identically and recovers from damage like any other.",
+  "world": { "name": "Fixture", "seed": "unused" },
+  "steps": [
+    { "op": "migrate", "fixture": "fixtures/saves/world-v3.json", "hash_file": "fixtures/saves/world-v3.hash" },
+    { "op": "expect", "pawns": 4 },
+    { "op": "run", "days": 1 },
+    { "op": "reload", "slot": "migrated" },
+    { "op": "run", "ticks": 3000 },
+    { "op": "save", "slot": "migrated" },
+    { "op": "corrupt", "slot": "migrated", "how": "truncate" },
+    { "op": "load", "slot": "migrated", "expect": "fell_back" },
+    { "op": "expect", "pawns": 4, "hash": "37f2686e" }
+  ]
+}

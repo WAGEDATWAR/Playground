@@ -55,6 +55,9 @@ jobs:
       - run: cargo run -q -p pg-cli -- pack test packs/cookbook/birthdays
       - run: cargo run -q -p pg-cli -- pack docs --luau
       - run: cargo run -q -p pg-cli -- content schema templates
+      # Stage 0 gate scenarios (0.11): the sample town, a migrated fixture and a world with script packs, each
+      # pinned to a final state hash that must be the same on every OS.
+      - run: cargo run -q -p pg-cli -- scenario run scenarios/gate-stage0-town.json scenarios/gate-stage0-migrate.json scenarios/gate-stage0-scripts.json
       # The app (0.10): a scripted session through every menu and an in-game run, with the real UI code under a
       # headless egui context. The window itself is not opened in CI.
       - run: cargo run -q -p pg-app -- --smoke
@@ -69,3 +72,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
+
+  soak:
+    name: 30-day soak (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # 30 game days with script packs loaded; every day re-simulated on another thread count (shadow
+      # verification); bounded state and script cost; the final hash is pinned and must match on every OS.
+      - run: cargo run --release -q -p pg-cli -- scenario run scenarios/soak-30-days.json

@@ -203,3 +203,16 @@ town run at 1x, 9x and 27x; pause; Escape and Save and go to main menu; Saved wo
 Export, Delete); Continue; Options (scale, window mode, autosave, language `pseudo` to see every string
 transformed); Options, AI provider, Player2 (sign-in shows a code and link); close the window while a world
 runs and relaunch to see it saved; F3 for the overlay.
+
+## Gate scenarios and the soak (0.11)
+
+```bash
+# The three Stage 0 gate scenarios (about a minute in a debug build).
+cargo run -p pg-cli -- scenario run scenarios/gate-stage0-town.json scenarios/gate-stage0-migrate.json scenarios/gate-stage0-scripts.json
+
+# The 30-day soak with script packs and shadow verification (about 90 seconds in release mode, ten minutes in debug).
+cargo run --release -p pg-cli -- scenario run scenarios/soak-30-days.json
+```
+
+The gate report with every clause, its evidence and its command is `docs/gates/stage-0.md`.
+
