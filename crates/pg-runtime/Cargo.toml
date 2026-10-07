@@ -14,3 +14,6 @@ pg-ai = { path = "../../crates/pg-ai" }
 pg-worldgen = { path = "../../crates/pg-worldgen" }
 pg-ui-model = { path = "../../crates/pg-ui-model" }
 pg-host = { path = "../../crates/pg-host" }
+
+[dev-dependencies]
+proptest = "1.11.0"

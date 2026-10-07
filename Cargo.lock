@@ -968,6 +968,7 @@ dependencies = [
  "pg-script",
  "pg-ui-model",
  "pg-worldgen",
+ "proptest",
 ]
 
 [[package]]
