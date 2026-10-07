@@ -4,7 +4,7 @@ Roadmap v4.7, Stage 0 "Done when", checked clause by clause. Each clause names t
 command that reruns it. "Local" is a run on the Windows development machine on 2026-10-08; "CI" is the same
 command on Windows, Linux and macOS (`.github/workflows/ci.yml`). The CI column is filled in when CI is green.
 
-**Status: ready for your verification (second review).** The first review's changes (in-game layout, drawers, developer mode; D-037) are in. Everything below passes locally; the two things only you can judge are
+**Status: accepted (`m0.11`), CI green on Windows, Linux and macOS.** The first review's changes (in-game layout, drawers, developer mode; D-037) are in. Everything below passes locally; the two things only you can judge are
 the feel of the app (clause 1) and whether the evidence is enough to call Stage 0 done.
 
 | # | Clause | Evidence | Rerun | Local | CI |

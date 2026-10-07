@@ -4,11 +4,9 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Stage 0 gate (milestone 0.11): implemented, waiting for your verification.** `m0.10` is accepted and tagged; S-037..S-039 accepted (Roadmap v4.7, D-034); the Blueprint was consolidated to v3.0 (D-035). 0.11 delivered: scenario runner environments and the `migrate`, `soak` and state-hash steps; three gate scenarios and the 30-day soak (shadow-verified, bounded, hash-pinned); `pg-app --smoke` with a relaunch; CI steps and a soak job on all three systems; `pg check` at 29 checks; the gate report `docs/gates/stage-0.md`; decision D-036. 719 tests.
+**Stage 0 is complete: `m0.11` is accepted and tagged.** (Gate report `docs/gates/stage-0.md`; Blueprint v3.1, D-037.)
 
-**Review changes after your testing (D-037, Blueprint v3.1):** focus-loss notice centred; simulation controls bottom right; saving only in the pause menu; speeds in one drawer button; drawers (list or grid, placed opposite the nearest border, scale-aware, scrollable); developer-mode toggle in Options (gates F3); pause-on-focus-loss toggle (already in Options). Submitted for another review.
-
-**Gate for you:** read `docs/gates/stage-0.md`, click through the game once more (`docs/BUILDING.md`, "Playing the game"), and confirm CI is green on all three systems including the soak job. After acceptance: tag `m0.11` (Stage 0 complete) and start Stage 1 planning.
+**Stage 1 planning:** the plan for milestones 1.0 to 1.9 is in `docs/PLAN.md` ("Phase 1"), waiting for your approval and answers to its five open questions (visual style, native dialog crate, mood list, default town size and population, checkpoints). No Stage 1 code until then.
 
 ## Blocked / waiting on user
 
@@ -16,8 +14,8 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Next up
 
-1. Push 0.11, check CI (including the soak job and the pinned hashes on Linux and macOS), tag `m0.11` on acceptance.
-2. Stage 1 planning: a Stage 1 plan in `docs/PLAN.md` (needs, mood, memory, social, conversation, worldgen v1, native renderer, inspector, base pack content; S-034, S-037, S-038, S-039 land here).
+1. You review the Stage 1 plan; I fold in your answers (and record any decision in `docs/DECISIONS.md`).
+2. Start 1.0 (content and state for residents) once the plan is accepted.
 3. Prune dev scaffolding as real systems land (D-009).
 
 ## Shell note
