@@ -5,7 +5,9 @@ pub mod archive;
 pub mod codec;
 pub mod compat;
 pub mod export;
+pub mod logfile;
 pub mod migrate;
+pub mod scenario;
 pub mod store;
 
 #[cfg(test)]
