@@ -1,26 +1,25 @@
-# Playground — Architecture Blueprint v2.9
+# Playground — Architecture Blueprint v3.0
 
-**Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.1 and Roadmap v4.2. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). It is a spec, not final source; names and signatures may shift during implementation, but the contracts and invariants may not. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
+**Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.2 and Roadmap v4.7. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). Where a part is built, the text describes it **as built** and the code is the authority on names and signatures; where it is not built yet, the sketch is a contract whose invariants may not change. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems and the presentation layer. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
 
-**What changed from v1.0:** the platform-agnostic PAL, web/mobile shells, hosted AI gateway and touch input are removed. The project is one native binary with a thin host-services layer, a dedicated simulation thread, a worker pool, and an embedded Luau VM per content pack. The TypeScript reference notation is replaced by Rust. A new §23 defines the modding API objectives and implementation; extension points are cross-referenced from §4, §6, §8, §12, §13, §17, §18, §20 and §21.
+**Status (v3.0):** the document now describes the system **as built through milestone 0.10** (the end of Stage 0 apart from the gate, 0.11). Notes that earlier versions kept per milestone have been folded into the sections they belong to, text that disagreed with the code was corrected (listed in `docs/DECISIONS.md` D-035), and the presentation layer (§14) was rewritten around the three-layer UI that was built.
 
-**v2.1 (during Phase 0):** added the `pg-canon` crate (§1, §2). The canonical value type and serialization moved out of `pg-core` into a dependency-free crate because `pg-content` needs them and `pg-core` depends on `pg-content`. It also holds a strict, integer-only JSON parser (rejects floats, duplicate keys, lone surrogates and over-deep nesting) used for content packs and replay logs. See `docs/DECISIONS.md` D-010, D-011.
+### Revision history
 
-**v2.2 (during Phase 0):** scheduled the accepted developer-experience suggestions (`docs/SUGGESTIONS.md`): reproducibility tooling (§20, replay diff and bisect, bug bundles, scenario files), the RNG stream registry (§5.1), canonical-JSON cross-checking (§18), the content compatibility report and `pg content diff` (§4.2, §13.4), pack-authoring aids (§23.12), and the reason-code and event viewers (§20). Stage tags show when each lands.
-
-**v2.3 (during Phase 0):** scheduled three performance and simulation suggestions: path-search scratch buffers (§19), pawn-aware routing (§7.3, Stage 1) and compressed, trimmable replay logs (§20, milestone 0.6).
-
-**v2.4 (during Phase 0):** milestone 0.5 made the scheduler, commitment and action sections precise where the first implementation had to choose (§8.5 replan timing and displacement scope, §8.6 gathering radius and slot-length changes, §8.7 which parts of the action skeleton exist). No behaviour was removed.
-
-**v2.5 (during Phase 0):** milestone 0.6 made persistence precise where the first implementation had to choose: the manifest lists both generations (§13.1, §13.4), the `.pgsave`/`.pglog`/`.pgbundle` container layout, the pure-Rust zstd encoder and its single level (§13.1), what a save contains and what it deliberately does not (§13.2), replay-log trimming and bug bundles (§20), and a known difference between `Canon` and RFC 8785 key ordering (§5.4).
-
-**v2.6 (during Phase 0):** the Stage 0 app shell and graphical main menu are specified as a milestone of their own (§14.3 "Stage 0 scope"), and Roadmap v4.3 makes them part of the Stage 0 gate.
-
-**v2.7 (during Phase 0):** milestone 0.7 specifics (§3 services and redaction, §10 provider set, Player2 and the device-code sign-in, key and log hygiene) and the architecture additions accepted as S-022 to S-030: typed event catalog (§6.2, §20), row-level state hashes (§5.4), save summaries (§13.1), schema-driven settings (§13.1, §14.3), string tables (§14.3), automatic bug bundles, keyframe snapshots and shadow verification (§6.4, §17, §18), headless UI snapshots (§14.3).
-
-**v2.8 (during Phase 0):** milestone 0.9 (the ScriptVm spike) settled what the first implementation had to choose. §23.4: the compiler is configured so removed and replaced builtins cannot be reached through Luau's fast-call and `pairs` lowering, and string functions need no length caps because Luau's pattern matcher is interruptible by fuel. §23.5 and §23.10: pack components apply to every entity of their kinds, are stored only when written, and are hashed only when present. §23.6: quarantine from deterministic failures is world state. §23.15: `call` takes its context as data and returns buffered commands; registrations are returned rather than pushed to a registrar. See `docs/spikes/scriptvm.md` and D-031.
-
-**v2.9 (during Phase 0):** milestone 0.10 (app shell and graphical main menu), §14: the UI is three layers. `pg-ui-model` holds pure screen state machines from events to state and effects, plus the widget tree (with text snapshots, focus order and keyboard navigation); `pg-runtime::app::AppController` performs effects against the host traits and the running world; `pg-app` is a thin winit, wgpu and egui shell that draws the widget tree and the map through egui's painter. Import and export use folders until native dialogs (S-037), the pause menu pauses a running world, AccessKit is deferred (S-038). See D-033.
+| Version | Settled | Where |
+| --- | --- | --- |
+| 1.0 | First blueprint (web and mobile oriented) | — |
+| 2.0 | Native Rust binary, Luau scripting layer, host-services layer, simulation thread and worker pool, §23 modding API | whole document |
+| 2.1 | `pg-canon` crate: integer-only canonical values and strict JSON, split out of `pg-core` (D-010, D-011) | §1, §2, §5.4 |
+| 2.2 | Reproducibility and authoring tooling: replay diff and bisect, bug bundles, scenario files, RNG stream registry, compatibility report | §5.1, §13, §18, §20, §23.12 |
+| 2.3 | Path scratch buffers (conditional), pawn-aware routing (Stage 1), compressed and trimmable replay logs | §7.3, §19, §20 |
+| 2.4 | Scheduler, commitments and action skeleton made precise (milestone 0.5) | §8.5 to §8.7 |
+| 2.5 | Persistence made precise: containers, both generations in the manifest, pure-Rust zstd, crash-safe saves (milestone 0.6, D-024) | §13, §20 |
+| 2.6 | The app shell and graphical main menu became a Stage 0 milestone (D-025) | §14 |
+| 2.7 | Host services and redaction, five providers including Player2 and device-code sign-in (0.7); typed event catalog, row-level hashes, save summaries, settings registry, string tables, bug-bundle-on-crash, keyframes, shadow verification (0.8, S-022 to S-030) | §3, §5.4, §6, §10, §13, §14 |
+| 2.8 | ScriptVm spike outcome (0.9): compiler configuration, no string caps, extension data semantics, quarantine as world state, the `ScriptVm` trait as built (D-031) | §23 |
+| 2.9 | App shell and main menu (0.10): the three-layer UI (D-033) | §14 |
+| 3.0 | Consolidation: as-built description through 0.10, notes folded into their sections, corrections (D-035) | whole document |
 
 ## 0. Architectural principles
 
@@ -41,8 +40,8 @@
 ```
 +---------------------------- playground (one native binary) ------------------------------+
 |  UI thread (main)                                     Worker pool (jobs)                  |
-|  window | input | renderer (wgpu) | UI (egui) | audio   path batches | autosave encode    |
-|     ^ RenderSnapshot (triple buffer)  | Commands (SPSC)    worldgen | validation | HTTPS  |
+|  window | input | UI (egui, wgpu) | app controller   autosave encode | shadow verification  |
+|     ^ RenderSnapshot (Arc swap)       | Control (channel)  sign-in | connection tests       |
 |     |                                 v                                                   |
 |  +--+---------------------------------------------------------------------------+       |
 |  | Sim thread: fixed-step runtime: command queue, job results, session, autosave |       |
@@ -68,48 +67,74 @@
 
 **Threads.**
 
-- **UI thread (main).** Window, input, renderer, UI and audio. Never touches `WorldState`.
-- **Sim thread.** Owns `WorldState`, the core and every Luau VM (Luau states are single-threaded). Runs the fixed-step loop on its own accumulator, decoupled from display refresh.
-- **Worker pool.** Pure jobs only: batched pathfinding, autosave encode and compress, worldgen, pack and content validation, HTTPS requests. Results return to the sim thread and are applied at tick boundaries in a deterministic order (§6.5).
+- **UI thread (main).** Window, input, the egui frame and (later) audio. It owns the UI model and the app controller, never touches `WorldState`, and draws from the latest `RenderSnapshot`.
+- **Sim thread (`pg-sim`).** Owns `WorldState`, the core and every Luau VM (Luau states are single-threaded). Runs the fixed-step loop on its own accumulator, decoupled from display refresh (§6.1).
+- **Worker pool.** Owned (`'static`) jobs only: autosave encode and compress, shadow verification re-simulation, connection tests, and later conversation, AI and worldgen work. Results come back through job handles and are applied by the sim thread. Path batches borrow map data and so use scoped threads behind the `BatchExecutor` trait instead (§6.5, §7.3). The sign-in flow runs on its own short-lived thread with a cancel token.
 
-**Hand-offs.** The sim thread publishes `RenderSnapshot`s into a lock-free triple buffer (the last two ticks, for interpolation). The UI thread sends `Command`s over a single-producer queue; the runtime stamps each with its application tick and records it (§5.3).
+**Hand-offs.** The sim thread publishes an immutable `RenderSnapshot` through a `SnapshotPublisher` (one `Arc` swapped under a short lock; readers clone the `Arc` and then work without a lock; unchanged maps are shared between snapshots). The UI side sends `Control` messages (run-state events, commands, save, rewind, bundle) over a channel; the loop applies commands at the next tick and the runtime records every applied input with its tick (§5.3). Loop events (saved, save failed, crashed, diverged, rewound, bundle written) come back over a second channel.
 
-**Dependency rule (enforced by CI via `cargo` metadata checks):**
-`pg-app → pg-runtime → {pg-core, pg-content, pg-script, pg-persist, pg-ai, pg-worldgen, pg-ui-model} → pg-host`. `pg-script → {pg-core, pg-api}`. `pg-canon` (dependency-free) sits below everything: `pg-content → pg-canon` and `pg-core → pg-canon`. `pg-core` may import only `pg-content` types and `pg-host` *types* it never calls, and it defines the `ScriptHost` trait that `pg-script` implements (dependency inversion), so the core never links the VM. Nothing imports `pg-app`. `pg-core` is `#![forbid(unsafe_code)]`.
+**Dependency rule (enforced by `scripts/check_deps.py` in CI from `cargo metadata`):**
+
+| Crate | May depend on (workspace) |
+| --- | --- |
+| `pg-host`, `pg-canon`, `pg-api` | nothing |
+| `pg-host-os` | `pg-host` |
+| `pg-content` | `pg-canon`, `pg-api` |
+| `pg-core` | `pg-canon`, `pg-content`, `pg-host`, `pg-api` |
+| `pg-script` | `pg-core`, `pg-api`, `pg-content` |
+| `pg-persist`, `pg-ai` | `pg-core`, `pg-content`, `pg-host` |
+| `pg-worldgen` | `pg-core`, `pg-content` |
+| `pg-ui-model` | `pg-core`, `pg-host` |
+| `pg-runtime` | `pg-core`, `pg-content`, `pg-script`, `pg-persist`, `pg-ai`, `pg-worldgen`, `pg-ui-model`, `pg-host` |
+| `pg-render` | nothing (plain geometry) |
+| `pg-app` | `pg-runtime`, `pg-render`, `pg-host-os`, `pg-ui-model`, `pg-host`, `pg-core`, `pg-content`, `pg-ai` |
+| `pg-cli` | `pg-runtime`, `pg-host-os`, `pg-core`, `pg-content`, `pg-persist`, `pg-host`, `pg-ai`, `pg-script`, `pg-api` |
+
+External crates are restricted too: `mlua` only in `pg-script`, `wgpu` and `winit` only in `pg-render` and `pg-app`, `egui` only in `pg-app`, `rand` only in `pg-cli`; the build also fails if `mlua` is built with `luau-jit` (§23.4). `pg-core` never links the VM: it defines the `HookHost` trait (§23.9) that the script host implements (dependency inversion). Nothing imports `pg-app`. `pg-core` is `#![forbid(unsafe_code)]` with the determinism lint set (§5.2).
 
 ## 2. Workspace layout
 
 ```
 playground/
-  Cargo.toml  rust-toolchain.toml  clippy.toml  deny.toml      pinned toolchain, lint and license policy
+  Cargo.toml  rust-toolchain.toml  deny.toml  .cargo/config.toml      pinned toolchain; license policy; numeric build flags (§24)
   crates/
-    pg-core/      time, rng, ids, tables, world, spatial, needs, mood, memory,
-                  social, schedule, commitments, actions, events, conversation, ext (extension points),
-                  [later] economy, property, lifecycle, psychology, services, governance, proposals
-    pg-canon/     integer-only canonical values, canonical serialization, strict JSON parser;
-                  no dependencies; shared by pg-content and pg-core
-    pg-api/       single source of truth for the scripting API: function and type specs, capabilities,
-                  hook clamps, since/deprecated versions, docs (pure data; no VM)
-    pg-content/   schemas, template resolver, validators, pack manifest + loader, built-in templates
-    pg-script/    Luau host (VM per pack), sandbox profile, value marshalling, fuel and memory metering,
-                  bindings generated from pg-api, script-defined component support.
-                  All Luau access goes through the `ScriptVm` boundary (§23.15); only one private
-                  module inside this crate imports the binding crate (mlua initially)
-    pg-persist/   codecs, migrations, slot manager, export/import, archive safety
-    pg-ai/        provider adapters, prompt builders, fallback dialogue, client
-    pg-worldgen/  generator pipeline, editor commands, town validators
-    pg-runtime/   sim loop, command queue, job queue, session, autosave policy, snapshot publisher
-    pg-ui-model/  view-model builders, UI state machines (no drawing)
-    pg-host/      host-service traits + in-memory test doubles
-    pg-host-os/   OS implementations: filesystem, credential store, HTTPS, native dialogs
-    pg-render/    wgpu 2D tile/sprite renderer, camera, sprite atlases, bitmap text
-    pg-app/       the binary: window loop, egui screens, audio, wiring
+    pg-canon/     integer-only canonical values (`Canon`), canonical serialization, strict JSON parser; no dependencies
+    pg-api/       the scripting API as data: function and type specs, capabilities, hook points with
+                  combiners and clamps, since/deprecated versions; generators for pg.d.luau and the
+                  reference docs; the shared "did you mean" hint code. No VM
+    pg-content/   schemas, template resolver, validators, pack manifest and loader (data, strings,
+                  scripts), content set with load order and content refs, settings registry, string
+                  tables and pseudo-locale, JSON Schema export
+    pg-core/      time, rng, ids, tables, world state, spatial (maps, occupancy, pathfinding, movement),
+                  pawns, schedule and reservations, commitments, actions, tick pipeline, events and the
+                  event catalog, input queue, replay and state hashing, reason codes, extension data
+                  (`ext`) and hook points (`hooks`), dev scaffolding.  [later] needs, mood, memory,
+                  social, conversation, economy, property, lifecycle, psychology, governance, proposals
+    pg-script/    the `ScriptVm` boundary (`vm`), the Luau implementation (`luau`, the only module that
+                  imports `mlua`, with its sandbox `prelude.luau`), and the script host (`host`: VMs per
+                  pack, systems, hooks, fuel, quarantine, cost meter)
+    pg-persist/   containers (`.pgsave`, `.pglog`, `.pgbundle`), the slot store (generations, manifest and
+                  summary, recovery, delete), migrations, compatibility report, export/import, hardened
+                  archive reader, crash reports
+    pg-ai/        provider adapters (five), client with cache, rate cap, retry and circuit breaker,
+                  settings and key manager, device-code sign-in, self-check
+    pg-worldgen/  [Stage 1] generator pipeline, editor commands, validators (a placeholder until then)
+    pg-runtime/   the sim loop and session thread, run states and accumulator, autosave, keyframes and
+                  rewind, shadow verification, panic guard, worker pool, snapshot publisher, profiler,
+                  device settings, developer-tool registry, thumbnails, and the app controller
+    pg-ui-model/  the widget tree, event and effect vocabulary, the screen state machines, the developer
+                  overlay model, the map palette. No drawing, no I/O
+    pg-host/      host-service traits, in-memory doubles, `Secret`, `redact()`, logging
+    pg-host-os/   OS implementations: filesystem, credential store, HTTPS, clock
+    pg-render/    camera and tile rectangles (plain geometry); the tile and sprite renderer with atlases is Stage 1
+    pg-app/       the binary: winit window, egui frame, map view, wiring, `--smoke`
   tools/
-    pg-cli/       headless sim, replay runner, content linter, save inspector, bench,
-                  `pg pack` (lint, test, docs, pack, new)
-  data/
-    base/         the base game's own content pack (same format as user packs; §23.3)
-  fixtures/  golden/  docs/ (generated API reference)
+    pg-cli/       the `pg` command-line tools (§20)
+  data/base/      the base game's own content pack (same format as user packs; §23.3)
+  packs/          `cookbook/` sample packs that double as conformance tests; `golden/` their recorded hashes
+  golden/  fixtures/  scenarios/    golden replay logs, pinned save fixtures, scenario files
+  scripts/        `check_deps.py` (dependency and feature rules)
+  docs/           reference/ (the three specifications), spikes/, PLAN, TODO, SUGGESTIONS, DECISIONS, BUILDING
 ```
 
 ## 3. Host services layer \[S0\]
@@ -125,9 +150,10 @@ trait Storage {                            // atomic named blobs under the user-
     fn free_space(&self) -> Option<u64>;
 }
 trait SecretStore {                        // provider keys only; OS credential store
-    fn get(&self, key: &str) -> Result<Option<String>, SecretError>;
-    fn set(&self, key: &str, value: &str) -> Result<(), SecretError>;
-    fn delete(&self, key: &str) -> Result<(), SecretError>;
+    fn get(&self, name: &str) -> Result<Option<Secret>, SecretError>;
+    fn set(&self, name: &str, value: &Secret) -> Result<(), SecretError>;
+    fn delete(&self, name: &str) -> Result<(), SecretError>;
+    fn is_persistent(&self) -> bool;       // false: keys last for the session only (shown to the player)
 }
 trait Net {                                // blocking; always called from a worker thread
     fn request(&self, req: HttpRequest, cancel: &CancelToken) -> NetResult;
@@ -146,7 +172,7 @@ trait Audio { fn play(&self, id: &str, bus: Bus); fn set_volume(&self, bus: Bus,
 
 **Rules:** no wall clock inside `pg-core`; secrets never pass through `Storage`; exports are built by `pg-persist`, which strips secrets; on Linux where no credential service is available, the key is kept for the session only and is never written to disk in plaintext.
 
-**Implementation notes (0.7).** Beyond the traits above, `pg-host` has `LogSink` (with `RedactingLog`, `MemLog`, `StderrLog`), `Secret` and `redact()`, `AllowListNet`, and doubles for every trait (`MemSecretStore`, `ScriptedNet` that records requests, `FixedClock`, `ScriptedDialogs`, `NullAudio`, fault-injecting `MemStorage`). `pg-host-os` provides `FsStorage`, `KeyringSecretStore` (Windows Credential Manager, macOS Keychain, Linux Secret Service, with the session-only fallback), `UreqNet` (rustls, `https_only`, no redirects) and `SystemClock`. The native-dialogs implementation arrives with the app shell (0.10).
+**As built.** Beyond the traits above, `pg-host` has `LogSink` (with `RedactingLog`, `MemLog`, `StderrLog`), `Secret` and `redact()`, `AllowListNet`, `CancelToken`, and an in-memory double for every trait (`MemStorage` with fault injection, `MemSecretStore`, `ScriptedNet` that records requests, `FixedClock`, `ScriptedDialogs`, `NullAudio`). `pg-host-os` provides `FsStorage`, `KeyringSecretStore` (Windows Credential Manager, macOS Keychain, Linux Secret Service, with the session-only fallback), `UreqNet` (rustls, `https_only`, no redirects) and `SystemClock`. The `Dialogs` trait has doubles but no OS implementation yet: the app imports and exports through the `imports/` and `exports/` folders of the data directory, and native dialogs arrive in Stage 1 (S-037). Opening a link in the browser and showing a file in the file manager are two small closures the app hands to the controller (`AppServices`, §14.2), not host traits.
 
 ## 4. Data model
 
@@ -313,17 +339,17 @@ fn rand(world_seed: &Seed, stream: StreamId, keys: &[Key], counter: u32) -> u32
 All external influence on the world is a `SimInput` stamped with the tick at which it applies:
 
 ```rust
-enum SimInput {
-    Command    { tick: u64, cmd: Command },                                  // player actions, time control
-    Dialogue   { tick: u64, conversation_id: ConversationId, lines: Vec<DialogueLine>, source: DialogueSource /* Ai | Fallback */ },
-    Proposal   { tick: u64, pawn_id: EntityId, proposal: ActionProposal },   // [S10]
-    SettingChange { tick: u64, key: SettingKey, value: SettingValue },
-    PackQuarantined { tick: u64, pack_id: PackId, reason: QuarantineReason },  // recorded so replay reproduces it (§23.6)
-    ScriptReload { tick: u64, pack_id: PackId, content_hash: Hash },           // dev builds only (§20)
+enum SimInput {                                                   // as built
+    SettingChange(SettingChange),                                 // world settings (slot length)
+    Command { actor: Option<EntityId>, cmd: Command },            // player actions, time control, dev commands
+    // arrive with their stages:
+    // Dialogue { conversation_id, lines, source /* Ai | Fallback */ }   [S1]
+    // Proposal { pawn_id, proposal }                                    [S10]
 }
+struct StampedInput { tick: u64, seq: u64, input: SimInput }      // the queue stamps the tick and a sequence number
 ```
 
-AI text is nondeterministic, so its **result is recorded as an input** and replay uses the recording. Script behavior is deterministic by contract (§23.5), so scripts need no recording beyond their content hash in `content_refs`. Therefore `(initial snapshot | seed + content refs) + SimInput log` always reproduces the same state.
+Inputs apply at the start of the tick they are stamped with, ordered by (tick, kind order, sequence). AI text is nondeterministic, so its **result is recorded as an input** and replay uses the recording. Script behavior is deterministic by contract (§23.5), so scripts need no recording beyond their content hash in `content_refs`; a pack's quarantine is **world state** (§23.6), not an input, and developer hot reload is a tool, not part of a replay. Therefore `(initial snapshot | seed + content refs) + SimInput log` always reproduces the same state. Replay logs record every applied input, per-table hashes per day and the content refs, and are versioned (format 4); a log may carry a start state so it can be trimmed (§20).
 
 ### 5.4 State hashing
 
@@ -331,7 +357,7 @@ AI text is nondeterministic, so its **result is recorded as an input** and repla
 
 **Known difference from RFC 8785 (0.6, D-022):** `Canon` writes object members in Unicode code point order (UTF-8 byte order); RFC 8785 sorts by UTF-16 code units. They agree except when keys mix characters from U+E000-U+FFFF with supplementary-plane characters. Engine keys are ASCII, so hashes and saves are unaffected and remain deterministic; the difference is pinned by a test and matters only if canonical JSON is ever handed to an external RFC 8785 verifier with such keys.
 
-**Row-level hashes (S-023, milestone 0.8).** Each table's hash becomes the combination of per-row hashes (row id and the row's canonical form), so a divergence can be localised below the table: `pg replay --bisect` and the divergence detector name the entity (`pawns: pawn_3`). Day hashes recorded in logs stay per-table; a per-row dump is produced on mismatch. Memory and CPU cost are about those of hashing the table whole.
+**Row-level hashes.** Each table's hash is the combination of per-row hashes (row id and the row's canonical form), so a divergence can be localised below the table: `pg replay --bisect` and the divergence detector name the entity (`pawns: pawn_3`). Day hashes recorded in logs stay per-table; a per-row dump is produced on mismatch. Memory and CPU cost are about those of hashing the table whole. Pack extension data (`ext`) is a table of its own that is left out of the hash while empty, so worlds without packs hash as they always did (§23.10).
 
 ## 6. Simulation loop and time \[S0\]
 
@@ -339,17 +365,16 @@ AI text is nondeterministic, so its **result is recorded as an input** and repla
 
 - **Tick** = smallest simulation step. `TICKS_PER_GAME_MINUTE = 10` (constant). A game day = 1,440 minutes = 14,400 ticks.
 - **Slot** = schedule slot, default 30 game minutes = 300 ticks (data setting `slot_minutes`).
-- **Day length setting** `day_real_seconds` (1,200–1,800; default 1,500) and **speed** (1×, 2×, 4×, 8×). At 1× a tick is about 100 ms of real time, so the sim has a large per-tick budget on a desktop CPU. Headless and developer fast-forward run unthrottled.
+- **Speed.** Four speeds: **1x, 3x, 9x and 27x** are 10, 30, 90 and 270 ticks per real second. At 1x a tick is 100 ms and a game day lasts 24 real minutes (inside the 20–30 minute target); there is no separate day-length setting. Headless and developer fast-forward run unthrottled.
 
-The core knows only ticks. The sim thread converts real time to a tick count:
+The core knows only ticks. The sim thread converts real time to a tick count with an accumulator that keeps the fractional remainder:
 
 ```
-ticks_per_real_second = 14400 / day_real_seconds * speed
-accumulator += real_delta_seconds * ticks_per_real_second      // fractional kept in the runtime
-while accumulator >= 1 && ticks_run_this_frame < MAX_TICKS_PER_FRAME { step(); accumulator -= 1 }
+ticks = accumulator.advance(elapsed, speed)          // at most MAX_TICKS_PER_FRAME (50) per frame
+for _ in 0..ticks { step() }
 ```
 
-If the machine cannot keep up, the world runs slower (excess accumulator is dropped); it never skips ticks.
+If the machine cannot keep up, the world runs slower (the excess is dropped); it never skips ticks and never spirals.
 
 ### 6.2 Tick pipeline (fixed order)
 
@@ -376,28 +401,31 @@ If the machine cannot keep up, the world runs slower (excess accumulator is drop
 
 Systems whose per-pawn work is independent may run data-parallel on the worker pool (for example needs and mood updates), provided results are merged in ascending id order and golden replays stay identical. This is an optimization gated on measurement (§19), not a requirement.
 
-**Event catalog (S-022, milestone 0.8).** Events stay `(kind, detail)` values that are not part of hashed state, but each kind is declared once in a catalog (kind, category, field schema using `ParamSchema`, default visibility). Debug builds validate every emitted event against it; packs register `<pack>.<kind>`; `pg events list` and the overlay's event viewer read the same catalog.
+**Event catalog (S-022).** Events stay `(kind, detail)` values that are not part of hashed state, but each kind is declared once in a catalog (kind, category, field schema using `ParamSchema`, default visibility). Debug builds validate every emitted event against it; packs register `<pack>.<kind>`; `pg events list` and the overlay's event viewer read the same catalog (Appendix B).
 
 ### 6.3 Movement speed versus tile scale
 
 One tile is about 1 m, but a game day lasts about 25 real minutes, so physically accurate walking would cross the town in a blink. **Movement speed is a tuned abstraction**, stored as `move_ticks_per_tile` (a data value of at least 1 tick per tile, tuned so typical in-town trips take roughly 5–20 game minutes; if that needs finer speed control, raise `TICKS_PER_GAME_MINUTE`). It is a setting, not a derived value, and is listed in the roadmap's tuning decisions.
 
-### 6.4 Run states
+### 6.4 Run states and the runtime loop
 
 ```
-Running <-> PausedByUser
-Running -> Suspended (window focus lost or minimized; autosave fires)
-Suspended -> AwaitingResume (window focused; show a prompt) -> Running | PausedByUser
-Running -> Exiting (close requested; autosave; then quit)
+Paused <-> Running(speed)                  the player pauses, resumes and changes speed
+Running -> Suspended                       the window lost focus or was minimised (if the setting is on); a save starts
+Suspended -> Running | Paused              only when the player resumes: the world never resumes by itself
+any -> Closing -> Stopped                  close requested: final save, then the loop ends
+any -> Crashed                             a tick panicked: the world is frozen, never continued
 ```
 
-The world never advances while Suspended or AwaitingResume. The "pause on focus loss" behavior is a device setting, default on.
+`RunState`, `RunEvent` and the transition function are pure (`pg-runtime::control`) and table-tested. A loaded world starts **Paused**. The pause menu pauses a running world and resumes it when closed (a UI rule, §14.3). The accumulator, the autosave timer (every N minutes of running time; a setting) and the 50-tick frame cap live in the same module. `SimLoop` owns the sim, the input log, the keyframe ring, the run state and the save and shadow jobs; `Session` runs it on the `pg-sim` thread with a frame interval of a few milliseconds and exposes `send`, `snapshot`, `events` and `shutdown`.
 
-**Runtime safety nets (S-028, S-029, S-030, milestone 0.8).** (a) *Keyframes:* the sim thread keeps a memory-bounded ring of snapshots (default one per simulated hour, the last 24), each with the inputs applied since; they are what the overlay's time-scrub restores, what the crash path starts a bundle from, and what shadow verification replays. (b) *Automatic bug bundle:* the last-resort tick guard and the divergence detector write a redacted `.pgbundle` (latest keyframe plus the inputs since, content refs, note) to `crash/`; the next launch offers to open it. (c) *Shadow verification:* in dev and soak runs a worker re-simulates the span between two keyframes with a different worker count and compares per-table hashes at day boundaries; a mismatch writes a bundle and flags the last system that ran.
+**Safety nets.** (a) *Panic guard:* every tick runs under `catch_unwind` with a process-wide hook that captures the message, location and backtrace on the panicking thread; a panic freezes the world (`Crashed`), writes a redacted crash report and an automatic `.pgbundle` to `crash/`, and keeps the UI alive; the next launch offers the bundle (§14.3). (b) *Keyframes (S-029):* a memory-bounded ring of full snapshots (default one per simulated hour, the last 24), each with its state hash and the input-log position; they are what the overlay's time scrub restores, what the crash path starts a bundle from, and what shadow verification replays. (c) *Shadow verification (S-030):* optionally (developer and soak runs) a worker re-simulates each span between keyframes in a fresh sim with a different executor thread count and a freshly built pipeline (so every script VM is rebuilt) and compares state hashes; a mismatch names the differing tables, pauses the world and writes a bundle. (d) *Rewind:* the newest keyframe at or before a target tick is restored and the logged inputs replayed forward; the future is discarded.
 
 ### 6.5 Jobs and the worker pool
 
-The runtime runs non-urgent work on a worker pool: path computation, day planning, autosave encode and compress, generation, content and pack validation, AI requests. Each job has a priority, a time budget and is cancellable. **Pure parallel work inside a tick** (for example a batch of path requests) uses a scoped parallel map and merges results in ascending id order before the tick proceeds. **Asynchronous work** (autosave, AI, generation) returns a result that is applied as a `SimInput` at the next tick boundary, so determinism holds even though jobs finish at different real times (the **tick of application is recorded**).
+`WorkerPool` is a fixed set of threads running **owned** jobs (`'static` closures). `submit` returns a `JobHandle` (`join`, `try_join`); `map_ordered` applies a function to a list and returns the results **in input order**, so using the pool can never reorder anything the simulation sees; a job that panics yields a `JobPanic` to its caller and the worker keeps running. Used today for save encoding, shadow re-simulation and connection tests; conversation, AI and generation jobs follow.
+
+**Pure parallel work inside a tick** (a batch of path requests) borrows the maps, which a persistent thread cannot hold without `unsafe`, so it goes through the core's `BatchExecutor` trait: a serial implementation in the core and a scoped-thread implementation in the runtime. Because each path request is a pure function of its inputs, results are identical for any executor and thread count (checked in unit tests, by `pg map bench-paths` and in CI). **Asynchronous work** returns a result that the sim thread applies at a tick boundary, and anything that changes the world is a recorded input, so determinism holds even though jobs finish at different real times.
 
 ## 7. Spatial systems
 
@@ -539,7 +567,7 @@ Script hooks and script-requested reservations enter planning only as weights an
 
 **Replanning triggers:** day start; need becomes critical; commitment accepted / cancelled; possession ends \[S4\]; map edit invalidating a destination; interruption (event, injury). `replan_from(slot)` re-runs steps 2–5 for remaining slots only, never touching completed slots.
 
-**Implementation notes (0.5):** (a) Planning runs in strict priority order, so a full `plan_day` never has a lower-priority reservation to displace; "may displace a priority 4-5 reservation" is therefore implemented by `insert_urgent`, the mid-day path used when a need becomes critical (displaced reservations return unchanged if their slots are still free, otherwise move to the first later free run, otherwise are dropped with `no_free_slot`). (b) Replans are requested by setting `Pawn.replan` and carried out at the next slot boundary (inside ReservationActivator, before activation), starting at that boundary, so a slot already under way is never rewritten; a task failure therefore replans from the following slot. (c) A started reservation is never displaced, including by a commitment. (d) Reservation ids are per-schedule counters and survive being lifted out and put back. (e) A change of slot length makes every schedule stale (it is replanned at the next boundary) and cancels live commitments, because both are expressed in slots.
+**As built:** (a) Planning runs in strict priority order, so a full `plan_day` never has a lower-priority reservation to displace; "may displace a priority 4-5 reservation" is therefore implemented by `insert_urgent`, the mid-day path used when a need becomes critical (displaced reservations return unchanged if their slots are still free, otherwise move to the first later free run, otherwise are dropped with `no_free_slot`). (b) Replans are requested by setting `Pawn.replan` and carried out at the next slot boundary (inside ReservationActivator, before activation), starting at that boundary, so a slot already under way is never rewritten; a task failure therefore replans from the following slot. (c) A started reservation is never displaced, including by a commitment. (d) Reservation ids are per-schedule counters and survive being lifted out and put back. (e) A change of slot length makes every schedule stale (it is replanned at the next boundary) and cancels live commitments, because both are expressed in slots.
 
 **Activation:** at each slot boundary ReservationActivator sets the pawn's intent to the reservation covering that slot. Unreserved slots set intent `Free`; the TaskPlanner may then pick small self-directed behavior from a data table (wander, sit), keeping unreserved time genuinely open.
 
@@ -589,7 +617,7 @@ enum Effect {                            // closed set: scripts can only produce
 
 **TaskPlanner** takes the pawn's current intent (a reservation or `Free`), selects the `ActionDef`, resolves params, checks preconditions, and instantiates a `Task` with steps. **ActivitySystem** executes the current step each tick: `MoveTo` delegates to MovementSystem; `PerformFor` counts ticks and applies per-minute effects; `Apply` runs effects atomically through the core's validation (preconditions re-checked, ranges clamped, containment enforced).
 
-**Skeleton status (0.5):** the registry, `ActionDef` (typed params, steps, `interruptible`, `ai_proposable`), `TaskPlanner` and `ActivitySystem` exist with the built-ins `move_to`, `idle_at` and `meet_at` and the step kinds `MoveTo { within }` and `PerformUntilSlotEnd`. Preconditions, permissions, costs and the `Effect` set are added with the systems that need them (Needs, Stage 1). A pack registers actions only while the registry is open; namespaced `<pack>.<name>`; a built-in may not contain a dot.
+**Skeleton status:** the registry, `ActionDef` (typed params, steps, `interruptible`, `ai_proposable`), `TaskPlanner` and `ActivitySystem` exist with the built-ins `move_to`, `idle_at` and `meet_at` and the step kinds `MoveTo { within }` and `PerformUntilSlotEnd`. Preconditions, permissions, costs and the `Effect` set are added with the systems that need them (Needs, Stage 1). A pack registers actions only while the registry is open; namespaced `<pack>.<name>`; a built-in may not contain a dot.
 
 **Failure handling:** any step failure ends the Task with a `ReasonCode` (`BlockedDestination`, `PathBlocked`, `PreconditionFailed`, `Interrupted`, `Unaffordable`, `Unauthorized`, `ScriptError`), writes an event, and triggers `replan_from(current_slot)`.
 
@@ -653,9 +681,9 @@ trait ProviderAdapter {
 
 Adapters are pure request builders and parsers, testable with recorded fixtures and no network.
 
-**Implementation notes (0.7).** (a) Adapters are pure and fixture-tested; provider replies are untrusted: size-capped (1 MiB), parsed with serde_json (real providers send floats, which the core's strict parser would refuse; this is the only place outside persistence edges that uses it), reduced to one text field, stripped of control and direction-override characters and length-capped; error messages are redacted and capped. (b) `ProviderAdapter` also has an optional `connection_check` (a free account request) with `parse_connection_check -> ConnectionInfo { credits, tier }`; providers without one test with a tiny generation. (c) The client adds a bounded response cache, a per-minute request cap, one retry on transient failures and a circuit breaker that counts only provider-health failures (timeouts, offline, 5xx, unusable replies), not bad keys, quota, rate limits or cancels. (d) `Provider::chooses_own_model()` providers send no model id and reject a custom model in settings.
+**As built.** (a) Adapters are pure and fixture-tested; provider replies are untrusted: size-capped (1 MiB), parsed with serde_json (real providers send floats, which the core's strict parser would refuse; this is the only place outside persistence edges that uses it), reduced to one text field, stripped of control and direction-override characters and length-capped; error messages are redacted and capped. (b) `ProviderAdapter` also has an optional `connection_check` (a free account request) with `parse_connection_check -> ConnectionInfo { credits, tier }`; providers without one test with a tiny generation. (c) The client adds a bounded response cache, a per-minute request cap, one retry on transient failures and a circuit breaker that counts only provider-health failures (timeouts, offline, 5xx, unusable replies), not bad keys, quota, rate limits or cancels. (d) `Provider::chooses_own_model()` providers send no model id and reject a custom model in settings.
 
-**Player2 (added in 0.7 groundwork).** Taken from Player2's published OpenAPI document (`https://api.player2.game/v1/openapi.json`): base `https://api.player2.game/v1`; `POST /chat/completions` is OpenAI-style (`messages`, `max_tokens`, `temperature`, `stream`; no `model` field) with `Authorization: Bearer <p2Key>`; `GET /account/joules` returns `{ joules, patron_tier, user_id }` and is the free connection check; `GET /health` is a liveness probe; 401, 402 (insufficient credits), 429 are used for auth, quota and rate limiting. Keys come from the **device-code flow** (`POST /login/device/new { client_id }` returns `deviceCode`, `userCode`, `verificationUri[Complete]`, `expiresIn`, `interval`; `POST /login/device/token { client_id, device_code, grant_type: "urn:ietf:params:oauth:grant-type:device_code" }` returns `{ p2Key }`), or a pasted key. `pg_ai::login` implements the protocol as pure request builders, parsers and a polling schedule (`DeviceLoginSession`) driven by a caller-supplied clock, so it never sleeps; the verification link must be https on `player2.game` or a subdomain, the user code is cleaned and capped, timings are clamped, and the device code is a `Secret`. The Player2 NPC (`/npcs/*`), game-data, text-to-speech and speech-to-text endpoints are **not used**: dialogue stays rule-driven with optional generated lines through `/chat/completions` (suggestion S-033 records the possible later uses). The `client_id` is an open decision (Roadmap §12 item 8).
+**Player2.** Taken from Player2's published OpenAPI document (`https://api.player2.game/v1/openapi.json`): base `https://api.player2.game/v1`; `POST /chat/completions` is OpenAI-style (`messages`, `max_tokens`, `temperature`, `stream`; no `model` field) with `Authorization: Bearer <p2Key>`; `GET /account/joules` returns `{ joules, patron_tier, user_id }` and is the free connection check; `GET /health` is a liveness probe; 401, 402 (insufficient credits), 429 are used for auth, quota and rate limiting. Keys come from the **device-code flow** (`POST /login/device/new { client_id }` returns `deviceCode`, `userCode`, `verificationUri[Complete]`, `expiresIn`, `interval`; `POST /login/device/token { client_id, device_code, grant_type: "urn:ietf:params:oauth:grant-type:device_code" }` returns `{ p2Key }`), or a pasted key. `pg_ai::login` implements the protocol as pure request builders, parsers and a polling schedule (`DeviceLoginSession`) driven by a caller-supplied clock, so it never sleeps; the verification link must be https on `player2.game` or a subdomain, the user code is cleaned and capped, timings are clamped, and the device code is a `Secret`. The Player2 NPC (`/npcs/*`), game-data, text-to-speech and speech-to-text endpoints are **not used**: dialogue stays rule-driven with optional generated lines through `/chat/completions` (suggestion S-033 records the possible later uses). The `client_id` is an open decision (Roadmap §12 item 8).
 
 ### 10.2 Key handling
 
@@ -664,7 +692,7 @@ Adapters are pure request builders and parsers, testable with recorded fixtures 
 3. A single `redact()` utility scrubs keys from any string before logging. A CI test runs the game with a sentinel key and greps logs, saves, exports and crash reports for it.
 4. **Packs never reach the network or the key.** Scripts have no I/O (§23.4). Pack-supplied strings that reach prompts are length-capped, sanitized, treated as untrusted data in the *user* payload, and never placed in the system instruction.
 
-**Implementation notes (0.7).** `Secret` wraps every key: no `Display`, `Debug` prints `Secret(***)`, best-effort wipe on drop. `HttpRequest`'s `Debug` hides credential headers and query values. `redact()` removes secrets it is told about and anything shaped like a credential (`sk-…`, `AIza…`, `Bearer …`, `x-api-key: …`, `key=…`, `"api_key":"…"`); every log path goes through `RedactingLog`. `AllowListNet` refuses anything but plain `https` to an allow-listed host; the real network layer never follows redirects. Where no OS credential service exists the store is session-only and says so (`is_persistent`). The sentinel-key test scans errors, logs, `Debug` output, storage, saves, exports, replay logs, bug bundles and crash reports, raw and decompressed; `pg ai selfcheck` runs the AI-side scan and `pg check` runs everything.
+**As built.** `Secret` wraps every key: no `Display`, `Debug` prints `Secret(***)`, best-effort wipe on drop. `HttpRequest`'s `Debug` hides credential headers and query values. `redact()` removes secrets it is told about and anything shaped like a credential (`sk-…`, `AIza…`, `Bearer …`, `x-api-key: …`, `key=…`, `"api_key":"…"`); every log path goes through `RedactingLog`. `AllowListNet` refuses anything but plain `https` to an allow-listed host; the real network layer never follows redirects. Where no OS credential service exists the store is session-only and says so (`is_persistent`). The sentinel-key test scans errors, logs, `Debug` output, storage, saves, exports, replay logs, bug bundles and crash reports, raw and decompressed; `pg ai selfcheck` runs the AI-side scan and `pg check` runs everything.
 
 ### 10.3 Reliability
 
@@ -750,9 +778,13 @@ On world creation the core stores `starting_snapshot_hash` (hash of the initial 
 ### 13.1 Storage layout (through `Storage`, under the OS user-data directory)
 
 ```
-worlds/<world_id>/manifest.json        small: name, seed, schema, saved_iso, play_ticks, day, content_refs, state_hash, thumbnail ref
+worlds/<world_id>/manifest.json        small: name, seed, schema, content_refs, both retained generations (state hash,
+                                       play ticks, day, saved time) and a summary (population, maps, objects, thumbnail)
 worlds/<world_id>/state.<gen>.pgsave   one file per generation: header (magic, schema, uncompressed length, blake3)
                                        + zstd-compressed canonical JSON of WorldState
+worlds/<world_id>/thumb.<gen>.png      a small picture of the town, written with the generation
+exports/<world>-<time>.pgworld.json    exports (import reads imports/*.json and consumes them)
+crash/<time>.pgbundle                  automatic bug bundles; crash/dismissed/ marks the ones already shown
 designs/<design_id>.json               saved custom TownDesigns
 roster/<pawn_id>.json                  reusable custom pawns [S5]
 settings/device.json                   device settings (filter level, audio, window, provider + model; NO keys)
@@ -760,9 +792,9 @@ settings/pack_approvals.json           per-pack capability grants keyed by pack 
 mods/<pack_id>/ or mods/<pack_id>.pgpack   installed content packs (the shipped base pack lives beside the executable, read-only)
 ```
 
-User-data directory: `%APPDATA%\Playground` (Windows), `~/Library/Application Support/Playground` (macOS), `$XDG_DATA_HOME/playground` (Linux), resolved through a directories crate. `<gen>` is a monotonically increasing generation number. The manifest names the current generation; the previous generation is kept as a fallback. A single file per generation replaces v1.0's multi-part snapshots, since a desktop has the memory and disk to write it whole.
+User-data directory: `%APPDATA%\Playground` (Windows), `~/Library/Application Support/Playground` (macOS), `$XDG_DATA_HOME/Playground` or `~/.local/share/Playground` (Linux), resolved from the environment; `--data-dir` overrides it. `<gen>` is a monotonically increasing generation number. The manifest names the current generation; the previous generation is kept as a fallback. A single file per generation replaces v1.0's multi-part snapshots, since a desktop has the memory and disk to write it whole.
 
-**Save summaries (S-024, milestone 0.8).** The manifest gains additive summary fields (world name, day, population, play ticks, content packs, last-saved time and, from the app, an optional small thumbnail blob `thumb.<gen>.png` referenced by name) so the Saved Worlds screen lists worlds without loading them, and damaged slots still list. **Settings registry (S-025, milestone 0.8):** device settings are described by a typed registry built on `ParamSchema` (id, type and range, default, label key, scope device or world, restart-required); it validates `settings/device.json`, migrates it (same rules as §13.5), drives `pg settings get/set/list` and, in 0.10, generates the Options screen. Secrets are never settings.
+**Summaries and settings.** The manifest carries an additive summary (`population`, `maps`, `objects` and the thumbnail blob's name) beside the generation list, so the Saved Worlds screen lists worlds without loading them; older manifests without it still load, and damaged slots still list. A thumbnail is a PNG (stored deflate blocks, no dependency) drawn with the in-game palette and removed with its generation. `SlotStore::delete_world` removes every file under a world. **Settings registry (S-025):** device settings are described by a typed registry built on `ParamSchema` (id, type and range, default, label key `settings.<id>`, scope device or world, restart-required) with cross-setting rules; it validates `settings/device.json` leniently (a bad entry keeps its default and is reported, unknown sections written by a newer build are preserved), drives `pg settings get/set/list` and generates the Options screen (§14.3). Secrets are never settings.
 
 ### 13.2 Save procedure (atomic, never destroys the last good save)
 
@@ -774,7 +806,7 @@ User-data directory: `%APPDATA%\Playground` (Windows), `~/Library/Application Su
 
 A failure at any step leaves the previous manifest and generation intact.
 
-**Implementation notes (0.6):** (a) The manifest lists **both** retained generations, newest first, each with its own state hash, tick, day and time, so a fallback load can report how much play was lost and can verify the older file against its own hash. (b) Each `.pgsave` is `magic "PGSAVE\0\1"` + schema (u32) + uncompressed length (u64) + BLAKE3 (32 bytes) + one zstd frame; `.pglog` and `.pgbundle` use the same layout with their own magic, so one kind can never be opened as another. Decoding checks the header, caps the declared length, stops decompressing at that length and verifies the checksum last. (c) Compression uses `ruzstd` (pure Rust, no C build); its encoder implements one level ("fastest", roughly zstd level 1), which is enough for a town save; any standard zstd decoder reads the result. (d) A save is the world state at a tick boundary. Inputs queued for **future** ticks are not part of it: the runtime applies player commands at the next tick, so the queue is empty at a save. (e) Crash safety is tested by failing the storage at every operation of a save and requiring that a load afterwards returns the old or the new world, never a third state and never "damaged".
+**As built:** (a) The manifest lists **both** retained generations, newest first, each with its own state hash, tick, day and time, so a fallback load can report how much play was lost and can verify the older file against its own hash. (b) Each `.pgsave` is `magic "PGSAVE\0\1"` + schema (u32) + uncompressed length (u64) + BLAKE3 (32 bytes) + one zstd frame; `.pglog` and `.pgbundle` use the same layout with their own magic, so one kind can never be opened as another. Decoding checks the header, caps the declared length, stops decompressing at that length and verifies the checksum last. (c) Compression uses `ruzstd` (pure Rust, no C build); its encoder implements one level ("fastest", roughly zstd level 1), which is enough for a town save; any standard zstd decoder reads the result. (d) A save is the world state at a tick boundary. Inputs queued for **future** ticks are not part of it: the runtime applies player commands at the next tick, so the queue is empty at a save. (e) Crash safety is tested by failing the storage at every operation of a save and requiring that a load afterwards returns the old or the new world, never a third state and never "damaged".
 
 ### 13.3 Save triggers
 
@@ -812,70 +844,95 @@ struct ExportBundle { format: String /* "playground-export" */, kind: BundleKind
 ```
 
 - Export builds the bundle from validated data and strips anything not in the schema. Secrets are impossible to include because they are never in the stored model.
-- Import pipeline: size check → parse → schema detect → migrate → validate (structure, references, containment, town rules) → id remap → produce a `ValidationReport` → player confirms → write as a new slot. Failure leaves existing data untouched.
+- Import pipeline: size check → parse → schema detect → migrate → validate (structure, references, containment, town rules) → produce a `ValidationReport` and a plan → write as a new slot. Failure leaves existing data untouched. Entity ids keep their values on import (ids only have meaning inside one world), so no remap is needed; the id of the new slot is made unique from the world's name. The app reads export files from the `imports/` folder and deletes each one after a successful import; it writes exports to `exports/`.
 - Worlds import as new slots; they do not overwrite unless the player explicitly chooses.
 - **Pack archives (`.pgpack`, zip)** are extracted by a hardened reader: reject path traversal (`..`, absolute paths, drive letters, symlinks), cap entry count, per-file and total decompressed size, and compression ratio. Packs are installed only after the manifest validates and the player approves capabilities (§23.2).
 
-## 14. Presentation layer \[S1\]
+## 14. Presentation layer \[S0 shell and menus, S1 world view\]
 
-### 14.1 Contract
+### 14.1 Three layers
 
-The presentation layer consumes `RenderSnapshot` from the runtime and emits `Command`s. It owns no simulation state.
+```
+ pg-app (thin shell)        window, GPU surface, egui frame, map painting, OS glue
+   │  UiEvent in / widget Tree out                  AppEffect out / answers in
+ pg-ui-model (pure)         screens as state machines; widget tree; overlay model     <── no I/O, no window
+   │  AppEffect                                     UiEvent
+ pg-runtime::app (controller)   performs effects against the host traits and the running world
+   │  Control / events / RenderSnapshot
+ sim thread (pg-sim)        the world
+```
+
+- **`pg-ui-model`** contains every decision about what is on screen and what a click, key or window event does. It never draws, reads a file or starts a thread, so every flow is a unit test.
+- **`AppController`** (`pg-runtime::app`) turns the model's effects into actions on the real services (storage, credential store, network, clock) and the running world, and answers with events. Because it sits behind the host traits it is tested end to end over in-memory services: create, play, save, quit, relaunch, continue; settings; keys; sign-in; export and import; damaged saves; crash prompt; overlay data.
+- **`pg-app`** owns the window and GPU and nothing else: winit for the window and events, `egui-wgpu`'s winit `Painter` for the surface, `egui-winit` for input. It draws the model's widget tree and the map.
+
+The world view consumes `RenderSnapshot`s and the UI owns no simulation state (principle 7).
+
+### 14.2 Events, effects and the controller
 
 ```rust
-struct RenderSnapshot {
-    tick: u64, day: i64, minute_of_day: u32, speed: u8, run_state: RunState,
-    map: MapView { id: EntityId, w: i32, h: i32, dirty_chunks: Vec<ChunkId> },
-    pawns: Vec<PawnView { id, name, x, y, prev_x, prev_y, facing, sprite: SpriteRef, state_tag, mood_icon }>,
-    objects: Vec<ObjectView { id, sprite: SpriteRef, x, y }>,          // visible area only
-    bubbles: Vec<Bubble { id, pawn_id, text, expires_tick, style }>,   // audible to focus only
-    focus: Focus { pawn_id: Option<EntityId>, inspector: Option<InspectorModel> },
-    notices: Vec<UiNotice>,                                            // AI status, save status, errors, pack errors
+enum UiEvent {                       // into the model
+    Key(Key), Click(WidgetId), Text(WidgetId, String), Toggle(..), Choose(..), Slide(..),   // input
+    CloseRequested, FocusLost, FocusGained,                                                  // window
+    Booted(BootInfo), WorldsListed(..), WorldOpened { name }, Failed(String), Hud(HudInfo),  // answers
+    SettingsLoaded(..), AiLoaded(..), LoginPrompt { code, url }, LoginFinished(..),
+    ConnectionResult(..), Notice(String), Imported(..), Exported(..),
+}
+enum AppEffect {                     // out of the model
+    ListWorlds, CreateWorld { name, seed, size, residents }, LoadWorld(id), DeleteWorld(id),
+    ExportWorld(id), ImportWorld, SaveNow, SetRunning(bool), SetSpeed(String), LeaveWorld,
+    WindowFocus(bool), Rewind { tick }, CutBundle,
+    SetSetting { id, value }, SelectProvider(id), SetModel { .. }, SetKey { provider, key: Secret },
+    ClearKey(id), TestConnection(id), StartLogin(id), CancelLogin,
+    OpenUrl(url), RevealPath(name), DismissCrash, Quit,
 }
 ```
 
-The runtime builds the snapshot once per sim step (or per presented frame when interpolating) from the last two ticks, and only for the **camera viewport plus margin**. Snapshots are published through the triple buffer so the UI thread never blocks the sim thread.
+Both print redacted: a typed key shows only as a length in `UiEvent` and as `<redacted>` in `AppEffect::SetKey`, whose payload is a `Secret`. Gameplay `Command`s (possess, move, edit, and so on) stay with the core (§5.3); the UI model's effects are application-level requests, and the controller turns the ones that change the world (`SetRunning`, `SetSpeed`, window focus, rewind, save) into run-state events and loop controls for the sim thread.
 
-### 14.2 Commands (UI to core)
+`AppController::new(AppServices, Option<Arc<ContentSet>>)`. `AppServices` bundles the storage, clock, secret store, the (allow-listed) network, the log, the link opener and file revealer, an injectable sleep for the sign-in worker, the data directory, the app version and the Player2 client id. The controller's surface: `boot()`, `perform(effect) -> Vec<UiEvent>`, `poll() -> Vec<UiEvent>` (background results, the running world's events, and the HUD when it changed), `snapshot()`, `overlay_data()`, `text(key, args)` (the string table in the active locale), `thumbnail_image(name)`, `shutdown()` and developer options such as shadow verification. What it does:
 
-```rust
-enum Command {
-    SetSpeed(u8 /* 0|1|2|4|8 */), Pause, Resume,
-    FocusPawn(Option<EntityId>),                                       // UI-only, not logged in sim
-    Possess(EntityId), Release,                                        // [S4]
-    Move { to: Tile }, StartConversation { with: EntityId, tone: ToneId },   // [S4]
-    EditWorld(EditCommand),                                            // [S3]
-    CreatePawn(PawnDef), PlacePawn { id: EntityId, at: Tile },         // [S5]
-    Save, DevTool { tool: DevToolId, args: serde_json::Value },        // [S11]
-}
-```
+- **Worlds.** Lists worlds from manifests (name, day, residents, play time, packs, thumbnail, damaged flag, newest first). Creates a world (dev town of the chosen size with N residents, saved immediately with a thumbnail), loads one (with the content compatibility check and a notice when a fallback generation was used), opens it as a `Session` on the sim thread paused, closes it with a final save, deletes it, exports it and imports from the `imports/` folder.
+- **Settings.** Builds the Options items from the device settings registry, validates and saves each change, and applies the ones that matter live (autosave interval, pause on focus loss).
+- **AI.** Provider list with key status (`KeyManager`), model choice (refused for providers that choose their own), key save and clear, a connection test on a worker (credits shown for Player2), and the **Player2 sign-in**: a worker thread starts the device flow, reports the code and link, polls on the provider's schedule until approval, stores the key and reports the result; cancelling stops it at the next poll. Links are opened only if they pass the sign-in code's safety check (https, the provider's domain).
+- **Safety.** A bug bundle left by a crash is offered once at launch and then marked dismissed; keys never reach the log, storage (apart from the credential store), snapshots or the model's state.
 
-Commands that change simulation state become `SimInput`s; view-only commands (focus, camera) stay in the UI model and are not part of replay.
+### 14.3 The model, the widget tree and the screens
 
-### 14.3 UI structure
+**Screens** (`pg-ui-model::app`): `Boot`, `CrashPrompt`, `MainMenu`, `NewWorld`, `SavedWorlds`, `Options`, `AiOptions`, `InGame`, `Pause`; later screens (inspector, town creation, mods, editor) extend the same machine. The model keeps a stack, so Options opened from the main menu or from the pause menu both return where they came from.
 
-Screens are state machines in `pg-ui-model`; `pg-app` draws them with egui (menus, inspector, editor panels, dev tools) while the world view is drawn by `pg-render`.
+- **Main menu:** Continue (the newest world that is not damaged; disabled when there is none), New world, Saved worlds, Options, Quit.
+- **New world:** name, seed (empty means random), map size (small 48x36, medium 64x48, large 96x72) and residents (0 to 50) with validation.
+- **Saved worlds:** one row per world (name, day, residents, a damaged marker); the selected row shows its picture and details; Load, Export, Delete (with a confirmation that Escape cancels) and Import.
+- **Options:** **generated** from the settings registry, grouped by the first part of the setting id: a toggle for a boolean, a slider for a range, a choice for an enumeration, a text field for text, a note on restart-required settings. AI settings have their own screen.
+- **AI options:** provider choice; for pasted-key providers a secret field with save and remove; for Player2 the sign-in flow (explanation, code and link, open in browser, waiting, cancel, failure with retry, signed in with sign out); the model field or a note that the provider chooses; a connection test with its result. The game states that it plays fully without AI.
+- **In game:** a bar with world name, day and time, speed or paused, residents, and pause or play, 1x, 3x, 9x, 27x, save and menu; a banner with a Resume button when the world suspended itself. Space pauses and resumes; Escape opens the **pause menu** (Resume, Save now, Options, Save and go to main menu, Save and quit), which pauses a running world and resumes it when closed.
+- **Window events.** Closing saves first. Losing focus (if "pause and save when the window loses focus" is on) suspends the world and saves; regaining it changes nothing until the player resumes.
+- **Notices** (failures, confirmations) appear above the current screen until the next input and never change the screen.
 
-`Boot → MainMenu → {Continue | NewWorld | SavedWorlds | TownCreation | PawnCreation | Mods | Options} → InGame → {PauseMenu | Inspector | Editor}`
+**The widget tree** (`pg-ui-model::widget`): `Heading`, `Label`, `Note`, `Spacer`, `Button`, `TextField` (with a secret flag), `Toggle`, `Choice`, `Slider`, `Progress`, `Thumbnail`, `Row` and `Group`. Every interactive widget has a stable id (`main.new`, `ai.key`, `setting.ui.scale_percent`) that is never translated. A `Tree` can list its **focus order** and render a **text snapshot** (secrets as dots), which is what snapshot tests compare and what a screen-reader layer will map (S-038).
 
-**Stage 0 scope (milestone 0.10).** The first graphical build ships `Boot`, `MainMenu` (Continue, New world, Saved worlds, Options, Quit), a dev-only `NewWorld` (generates the dev town from a seed and size), `SavedWorlds` (list from the slot store with load, export, import, delete and a damaged-slot indicator), `Options` (device settings and the AI provider flow from §10), `InGame` (map and pawns, day and time, pause and speed, save, menu button) and `PauseMenu` (resume, save, options, back to main menu, quit). Every screen is a pure state machine in `pg-ui-model`: it consumes `UiEvent`s and returns the next state plus `AppEffect` requests (load slot, save, spawn world, quit) that `pg-app` carries out through the runtime and host services, so the whole menu flow is unit- and scenario-tested without a window. `pg-app` accepts `--smoke` (create the window or a headless surface, run the boot sequence and a few frames, exit 0) for CI. The Stage 1 screens (inspector, town creation, mods and so on) extend the same state machines.
+**Keyboard-first navigation** lives in the model, not the view: Tab, Shift+Tab, Up and Down move focus through the focus order (wrapping), Left and Right change the focused choice or slider, Enter or Space activate the focused widget, Escape goes back (and in the world opens the pause menu), F3 toggles the overlay. Focus always lands on a real widget. A test explores **every reachable screen state** (activating each widget in turn, answering effects as the app would) and asserts that each has focusable widgets with unique ids, that Tab visits every one, and that the keyboard alone leads back to the main menu.
 
-- **InGame HUD:** time and day, speed control, pause, focus name, notices, menu button.
-- **Inspector panel:** activity, mood, needs bars, top relevant memories with reasons, relationship labels, pack-contributed sections (view-model data only; §23.7).
-- **Options:** General, Graphics (window mode, resolution, vsync, UI scale), Audio, Controls (rebindable), LLM Configuration (provider, model, key entry, test, status); others as their features arrive.
-- **Mods:** installed packs, enable / disable, load order, capability approvals, errors and quarantine status, safe-mode launch.
+**String tables (S-026).** All player-visible text is a key into `strings/<locale>.json` in the base pack (pack strings are namespaced `<pack>.<key>`); screens receive a translator and never contain literal text, setting labels are `settings.<id>` and enumeration options `settings.<id>.<value>`. The reason-code sentences live in the same table. Lints and tests report missing and unused keys, a virtual `pseudo` locale (accented, 40 percent longer) is always available (Options, language), and a test visits every screen asserting that each key it asks for exists.
 
-**String tables (S-026, milestone 0.8 core, 0.10 menus).** All player-visible text is a key into `strings/<locale>.json` tables in the base pack (pack strings are namespaced `<pack>.<key>`); the reason-code sentence table moves into them and `ReasonCode::explain` renders from the active table. A lint reports missing and unused keys and a pseudo-locale (accented, 40 percent longer) is available in dev builds. **Headless UI snapshots (S-027, milestone 0.10):** each screen model can emit a UI-agnostic widget tree (labels, buttons, fields, focus order); tests snapshot it as text and assert that every action is reachable by keyboard; the egui layer maps the same tree to its accessibility output.
+### 14.4 The in-game view
 
-### 14.4 Camera, focus and bubbles
+The view paints the first map of the latest snapshot into the central area through egui's painter. `pg-render` provides the geometry as plain, tested arithmetic: a `Camera` (centre in tiles and pixels per tile; fit, pan, zoom around the cursor, clamp) and `tile_rects`, which turns the visible tiles into rectangles and **merges runs of equal colour along a row** so open grass costs a handful of shapes. Colours come from `pg_ui_model::palette` (terrain, surface, blocked tiles, a colour per pawn id), the same palette the save thumbnails use. Pawns are circles with names when zoomed in and a tooltip with the current activity on hover. Drag pans, the wheel zooms, and until the player moves the camera it re-fits the map as the window changes. The wgpu surface is managed by `egui-wgpu`; the dedicated tile and sprite renderer with atlases, chunk caches, interpolation between ticks and integer-scaled pixel art is **Stage 1** work, as are bubbles, focus selection and the inspector.
 
-- Camera: pan, zoom steps, follow-focus; clamped to map bounds; chunked tile rendering with a cache (dirty chunks redrawn). Pixel-art rendering uses integer scale factors, nearest sampling and a fixed internal resolution option, with correct handling of high-DPI displays and multiple monitors.
-- Focus selects one pawn. Bubbles display only for conversations where the focused or possessed pawn is within `hear_range` of a speaker.
-- Text is pixel-font bitmap with fixed wrapping rules; bubble stacking resolves overlaps deterministically by pawn id.
+### 14.5 The developer overlay (F3)
 
-### 14.5 Input mapping
+A floating window over any screen with tabs: **Time** (tick, day, run state, the latest keyframe's state hash, shadow-verification status, the keyframe ring as buttons that **rewind** the world, a **bug bundle** button), **Systems** (per-system calls, average microseconds and share, from the profiler probe), **Events** (the recent events with the S-009 kind-prefix filter), **Reasons** (each pawn's latest planning failure explained from the string table), **Packs** (loaded packs and whether they run scripts) and **Scripts** (calls, fuel and errors per pack and handler: the script cost view, S-036). The model owns the tab and filter; the controller fills the data from the snapshot, the profiler and the script meter once per frame while it is visible. Developer aids on the binary: `--smoke`, `--demo <screen>` and `--shadow <n>` (§20).
 
-Raw mouse and keyboard events become semantic intents (click-select, drag or middle-button pan, wheel zoom, click-to-move, hotkeys) in `pg-app`'s mapper, then Commands. All bindings are rebindable and every action is reachable by keyboard. UI scale, text size and colorblind-safe palettes are settings; screen-reader support through AccessKit is a Stage 11 target.
+### 14.6 The window shell
+
+`pg-app` creates a 1280x800 window (minimum 800x560), a wgpu surface through `egui-wgpu`'s `Painter` (vsync on unless `--no-vsync`) and an `egui_winit::State`. Each redraw: take egui input, run the app's frame, tessellate and paint. The app's frame polls the controller, turns key presses into model keys (arrows, Space and Enter are left to a focused text field), asks the model for the current tree, draws it, and sends back the events the player produced. UI scale (a setting) sets egui's zoom factor and the window mode (windowed, borderless, fullscreen) is applied live. Closing the window dispatches `CloseRequested`, waits for the save, and exits.
+
+A **secret text field** keeps the real text only in egui's temporary memory and reports it to the model, which holds it as a `Secret`; the tree the model produces contains dots. The same code is exercised headless: `pg-app --smoke` runs a scripted session (launch, options, new world, play at 27x, overlay, pause menu, save, back to the menu, continue, close) on real files and a real clock under a headless egui context, tessellating every frame; unit tests click buttons and type into fields through egui's input events. CI runs the smoke test on all three systems; the window itself is not opened there.
+
+### 14.7 Input mapping and accessibility
+
+Raw events become model events in two places: key presses in `pg-app::ui::collect_keys` and pointer interaction through the widgets; all bindings for the menus are fixed in 0.10, and rebindable controls, high-DPI handling and the world-view hotkeys are Stage 1 work. Every action in the menus is reachable by keyboard (tested). UI scale and window mode are settings. **Screen-reader output** (egui's AccessKit integration, which the widget tree already supports with names, roles and focus order) is scheduled for Stage 1 enabling and testing (S-038), with the full pass in Stage 11.
 
 ## 15. Possession and control \[S4\]
 
@@ -972,7 +1029,7 @@ Tooling: `cargo nextest`, `proptest` (property tests), `insta` (snapshot tests),
 14. **Independent canonicalization check \[S0, milestone 0.6\]:** a property test that `Canon::to_canonical_string` equals RFC 8785 (JCS) output, from a third-party implementation used as a dev-dependency, for integer-only documents, so a bug in our own escaping or ordering cannot hide behind our own vectors.
 15. **Scenario files \[S0, format at 0.6\]:** each gate's 'Done when' (and the 30+ day soak with its invariants: bounded memories, events, caches, VM memory) is a JSON scenario (seed, packs, scripted inputs, steps such as save and reload, assertions) run by `pg scenario run`, so acceptance tests read like the roadmap.
 
-**Added in v2.7.** Sentinel-key leak test across every output surface (milestone 0.7, in `tools/pg-cli/tests`); crash-at-every-storage-operation fault injection for saves (0.6); shadow determinism verification in soak runs (0.8, 0.11); menu-flow scenarios against in-memory storage and the scripted AI client (0.10, 0.11); headless UI snapshot and keyboard-reachability tests (0.10).
+**Suites as built (through 0.10).** Unit and property tests in every crate; pinned determinism vectors (`pg selftest`); golden replays across the OS matrix and with different thread counts; mid-run snapshot and resume equivalence; save fault injection at every storage operation; the AI contract suite and a **sentinel-key leak test** across logs, saves, exports, crash reports, UI snapshots and Debug output (`pg ai selfcheck`, `tools/pg-cli/tests`, the controller flow tests); the **hostile-pack corpus** and the capability-surface checks (`pg-script/src/tests.rs`); the cookbook end-to-end tests with the VM-reload variant and safe mode (`pg-script/tests`, `pg-runtime/tests/scripts.rs`, `pg pack test`); UI model flow, snapshot and keyboard-reachability tests (`pg-ui-model`); whole-session app flows over in-memory services (`pg-runtime/tests/app_flows.rs`); the egui interaction tests and `pg-app --smoke`; and `pg check`, which runs the developer checks in one report. `cargo-fuzz` targets are deferred to Stage 11 hardening (proptest covers the parsers meanwhile; D-011).
 
 ## 19. Performance plan
 
@@ -982,28 +1039,30 @@ Tooling: `cargo nextest`, `proptest` (property tests), `insta` (snapshot tests),
 - **Rendering:** wgpu instanced sprite batches and cached tile-chunk textures; a sprite atlas; only the viewport plus margin is submitted; the renderer runs from the latest snapshot and never waits on the sim.
 - **Scripts:** one VM per pack, interpreter-only (no Luau native code generation until it is proven bit-identical under golden replays); per-system queries are batched so the Rust↔Luau boundary is crossed per system or per batch rather than per field access; compiled bytecode is cached by source hash in memory (never loaded from a pack).
 - **Memory:** bounded memories, events (ring buffer + daily summary archive) and caches; per-pack VM memory caps.
-- **Path search scratch buffers \[S0, 0.8 profiling pass\]:** search currently keeps scores in a sparse `BTreeMap` (simple and allocation-light for small searches, about 4 µs per node expanded). If profiling shows paths matter, replace it with a reusable dense array stamped with a search generation, one per worker thread. Results must stay bit-identical (the Dijkstra property test and the threaded-vs-serial checks guard this).
+- **Path search scratch buffers (conditional):** search keeps scores in a sparse `BTreeMap` (about 4 µs per node expanded). The 0.8 profiling pass showed paths are not a cost at 200 pawns, so this stays as is; if a later profile shows paths matter, replace it with a reusable dense array stamped with a search generation, one per worker thread. Results must stay bit-identical (the Dijkstra property test and the threaded-vs-serial checks guard this).
 - **Optional unfocused fast-path:** for pawns far from the camera, per-tick stepping may be replaced by computing arrival ticks from path length, applied only if golden replays prove identical outcomes (including occupancy conflicts); otherwise keep full stepping and lower the resident cap.
-- **Profiling:** `tracing` spans with a Tracy or puffin integration (dev builds) record per-system and per-pack time; `pg bench` benchmarks systems headless with `criterion`. Acceptance thresholds are set from measurements on representative machines (including a low-end integrated-GPU laptop).
+- **Profiling:** the core stays clockless, so timing lives outside it: a `SystemProbe` trait in the pipeline is implemented by the runtime's `Profiler` (per-system calls, total and maximum time), and a `ScriptMeter` records calls, fuel and errors per pack and handler. `pg profile` prints the table headless, `pg pack bench` measures script cost, and the overlay shows both live. Measured in 0.8: 200 pawns on a 96x72 town cost about 0.10 ms per tick (movement 70 percent); scripts with the three cookbook packs add about 1.6 ms per tick at 200 pawns and 12 µs per handler call (0.9). Acceptance thresholds are set from measurements on representative machines (including a low-end integrated-GPU laptop).
 
-## 20. Developer tools \[S11, with hooks earlier\]
+## 20. Developer tools \[S0 from 0.4, completed S11\]
 
-A `DevToolRegistry` exposes tools as Commands marked developer-only, requiring a developer-mode toggle, confirmation for destructive actions, and logging as `SimInput`s (so replays remain faithful).
+Developer tools are registered once in `pg-runtime::devtools` (id, title, category, command-line form, whether the overlay has a panel), so a tool cannot exist in the overlay without a command-line twin; `pg tools` prints the registry and the overlay (§14.5) is built on it. Destructive tools require developer mode and confirmation, and anything that changes the world is a logged input so replays stay faithful.
 
-| Group | Tools |
-| --- | --- |
-| World | Spawn object, destroy object, spawn pawn, show pathfinding overlay (view-only), time jump |
-| Pawn | Full heal, resurrect (dev only), injure random / by part, add / remove item, view / add / remove memory, reset occupation |
-| Inspection | Schedule viewer with reason codes, route inspector, state hash viewer, proposal inspector with secrets redacted \[S10\], event log |
-| Content | Template resolver viewer, pack validator, save inspector |
-| Scripting | Pack inspector (registered components, systems, hooks, actions; per-system fuel and time; errors and quarantine status), script console (runs in the sandbox with the `dev` capability, logged as a `SimInput`), hot reload of a pack at a tick boundary (recorded as `ScriptReload`), `print` / log viewer per pack |
-| Reproducibility | Replay **diff** (`pg replay --diff a b`: first differing day and table, from per-table hashes stored in replay logs) and **bisect** (`--bisect`: first differing tick) \[S0, 0.4\]; **bug bundle** (`pg bugbundle`, overlay button): snapshot + input log + content refs + tick-hash trail, replayable headlessly \[S0, 0.6\]; **scenario runner** (`pg scenario run`); replay logs compress to `.pgreplay` (zstd) and `pg replay --trim <tick>` cuts a log to its first N ticks, keeping bug bundles small \[S0, 0.6\] |
+| Group | Tools | Where |
+| --- | --- | --- |
+| Reproducibility | Replay verify, **diff** (first differing day and table) and **bisect** (first differing tick, naming the differing rows); **bug bundles** (snapshot, input log, content refs, hash trail; replayable headlessly; written automatically on a crash or divergence and on demand); **scenario runner**; trimmable, compressed replay logs; the **VM-reload** and **shadow verification** variants | `pg replay`, `pg bugbundle`, `pg scenario`, `pg run --shadow`, overlay Time |
+| Time | Keyframe ring and **time scrub**; run, scrub and autosave from a headless session | `pg run [--scrub]`, overlay Time |
+| Explainability | Event viewer with kind-prefix and tick-range filters; the typed **event catalog**; **reason-code explorer** ("why did pawn_1a skip lunch?") | `pg sim --events`, `pg events`, `pg schedule explain`, overlay Events and Reasons |
+| Performance | Per-system tick profiler; script cost per pack and handler; path benchmarks | `pg profile`, `pg pack bench`, `pg map bench-paths`, overlay Systems and Scripts |
+| Persistence | Save inspector, verify, load, export, import; compatibility report | `pg save ...`, `pg content diff` |
+| Configuration | The settings registry (list, get, set, reset), string tables (lint, show, pseudo) | `pg settings`, `pg strings` |
+| Content and packs | Content lint, list, resolve, components, hash, JSON Schema export; pack lint (API names, capabilities, order-sensitive loops, module-level state), pack test under golden hashes, generated API reference and `pg.d.luau`, scaffolding; "did you mean" hints everywhere | `pg content ...`, `pg pack lint\|test\|docs\|new\|bench` |
+| AI | Provider list, key status, settings, a dry run that prints the exact request (with the credential hidden), a leak self-check | `pg ai ...` |
+| One report | The checks above that need no setup, in one table; CI runs the same | `pg check` |
+| App | Scripted headless session; open on a screen; shadow verification | `pg-app --smoke`, `--demo <screen>`, `--shadow <n>` |
 
-**Implementation notes (0.6):** a replay log may carry an optional `start` state (the world as of tick *T* plus the inputs still queued then); `ReplayLog::trim(T)` produces one, replaying it reaches the same hashes as the full log, and untrimmed logs are byte-identical to before. A bug bundle (`.pgbundle`) is a trimmed log plus a note, version and time in the compressed container; `pg bugbundle run` replays it anywhere. Scenario files (`playground-scenario`, version 1) drive build/run/save/reload/damage/recover/assert steps; `pg scenario run` executes them and CI runs `scenarios/persistence.json`.
-| Explainability | Event viewer with kind-prefix and tick-range filters (`pg sim --events <prefix> --since --until`) \[S0, 0.4\]; **reason-code explorer**: filterable timeline of decisions with their origin ("why did pawn_1a skip lunch?"): `pg schedule explain` at 0.5, overlay panel at 0.10 |
-| Content authoring | `pg content tree` (inheritance forest) \[Stage 1\]; `pg content diff` and the load-time compatibility report \[0.6\]; `pg content schema` (JSON Schema export) \[0.9\]; "did you mean…?" hints in every validation message \[0.4, extended 0.9\] |
+Later (Stage 11): spawn and destroy, pawn editing, schedule viewer, route inspector, proposal inspector with secrets redacted \[S10\], a script console under the `dev` capability, and hot reload of a pack at a tick boundary (recorded as a `ScriptReload` input).
 
-`pg-cli` mirrors the content and scripting tools for headless use (reproducibility and authoring aids are listed in the table above): `pg pack lint | test | docs | pack | new`, `pg sim`, `pg replay`, `pg bench`, `pg save inspect`.
+**Formats.** A replay log (`playground-replay`, version 4) holds every applied input, per-table and per-row day hashes and the content refs, and may carry a **start state** (the world as of tick *T* plus the inputs still queued then): `ReplayLog::trim(T)` makes one, replaying it reaches the same hashes as the full log, and untrimmed logs are unchanged. A bug bundle (`.pgbundle`) is a trimmed log plus a note, the app version and the time in the compressed container; `pg bugbundle run` replays it anywhere. Scenario files (`playground-scenario`, version 1) drive build, run, save, reload, damage, recover and assert steps; CI runs `scenarios/persistence.json`.
 
 ## 21. Security and privacy
 
@@ -1149,7 +1208,7 @@ Rules every pack must satisfy and the host enforces or tests:
 - **Memory:** `script_memory_bytes_per_pack` via the allocator limit. Exhaustion aborts the call the same way.
 - **C-function caps:** built-in functions that run to completion without safepoints are length-capped (see §23.4) so they cannot stall the sim thread.
 - **Watchdog (backstop only):** a wall-clock watchdog protects the sim thread against a pathological hang the fuel counter cannot see. If it fires, the runtime stops the pack, records `PackQuarantined` as a `SimInput` with its tick (so replay reproduces the quarantine rather than diverging), and surfaces a notice. Normal limits are always the deterministic ones.
-- **As built (0.9):** failures that fuel and memory limits produce are deterministic, so they are counted and quarantined in `WorldState.ext` (per-pack error ticks and quarantine tick), which survives snapshots, keyframes, rewind and saves, and is hashed. Recording quarantine as a `SimInput` is needed only for the wall-clock watchdog and is deferred with it to Stage 1 (D-031).
+- **Quarantine is world state.** Failures that fuel and memory limits produce are deterministic, so they are counted per pack (error ticks, and the quarantine tick) in `WorldState.ext`, which survives snapshots, keyframes, rewind and saves, and is hashed; a pack that fails to load is quarantined at once. Recording quarantine as a `SimInput` is needed only for the wall-clock watchdog, which is deferred to Stage 1 (D-031). The defaults are 3 errors within one game day, 50,000 fuel per call, 1,000,000 per tick, 2,000,000 for loading and 8 MiB per pack (`docs/spikes/scriptvm.md`).
 - **Quarantine policy:** after `script_max_errors` failures within a window, or on any load-phase failure, a pack is quarantined for the session and flagged in the world's metadata. Its components remain in the save as inert **orphan data** (§23.10) so re-enabling the pack restores them.
 - **Reporting:** errors carry pack id, script path, line, extension point, entity id and reason code, and appear in the Mods screen, the inspector and the developer log.
 
@@ -1246,7 +1305,7 @@ pg.actions.register({
 - **Flush points:** after each system invocation batch, each hook call that returns effects, and each action `effects` call, the host validates and queues the buffered commands; the core applies them at the next defined flush point in the pipeline. Validation uses the same checks as built-in commands (preconditions, ranges, permissions, containment) and rejects with a reason code; one rejected command does not discard the rest of a batch unless the batch is declared atomic.
 - **Order:** systems and handlers run in the order defined in §6.2 and §23.5(7). Commands from different packs apply in that same order, so conflicts resolve deterministically.
 - **Queries:** `pg.world.find` returns ids in ascending order; `query` declarations on systems let the host iterate matching entities and call `run` per entity (or per batch), minimizing boundary crossings.
-- **Hooks:** a hook receives a small, typed context and returns a bounded integer or small struct; multiple packs' hooks combine by the hook's declared combiner (sum, product-permille, min, max, or first-wins) before the engine's clamp.
+- **Hooks:** a hook receives a small, typed context and returns a bounded integer; multiple packs' hooks combine by the hook's declared combiner (sum, product-permille, min, max, or first-wins) before the engine's clamp. The core asks through its `HookHost` trait (`ask(point, world, subject) -> answers in pack load order`); the hook points, combiners and clamps are defined once in `pg-api`. The first hook point is `movement.speed_modifier` (product of permille factors, clamped to 500..1500), asked only for pawns that are walking.
 
 ### 23.10 Data model integration
 
@@ -1284,51 +1343,41 @@ pg.actions.register({
 - **Out of scope:** native-code plugins, scripted drawing and shaders, network or file access, direct cross-pack function calls (initially), scripted UI screens, and any marketplace or auto-download of packs.
 - **Decisions to confirm:** the Luau binding (initial choice `mlua`, with explicit spike criteria and upgrade triggers in §23.15); the cost and exact semantics of the deterministic `pairs` replacement; interpreter-only versus later native codegen; whether to isolate the script host in a separate process at Stage 11; whether to offer a workshop-style distribution later.
 
-### 23.15 ScriptVm boundary and binding decision \[S0 spike\]
+### 23.15 ScriptVm boundary and binding decision \[S0, decided in 0.9\]
 
-**Boundary.** `pg-script` talks to Luau only through one narrow, crate-private trait. Nothing else in the workspace, including the rest of `pg-script`, names the binding crate's types. The trait speaks in the project's own value and command types, so replacing the implementation changes one module.
+**Boundary.** `pg-script` talks to Luau only through one trait, and only the private `luau` module names the binding crate. The trait speaks in the project's own value, registration and error types, so replacing the implementation changes one module.
 
 ```rust
-trait ScriptVm {
-    fn new(cfg: VmConfig) -> Result<Self, VmError> where Self: Sized;   // sandboxed state: libs, globals, limits
-    fn load(&mut self, chunk: SourceChunk) -> Result<(), VmError>;      // compile from source; bytecode is rejected
-    fn run_load_phase(&mut self, entry: &str, fuel: Fuel) -> Result<Registrations, VmError>; // closes registries, freezes globals
+trait ScriptVm: Send {
+    fn load(&mut self, chunk: SourceChunk) -> Result<(), VmError>;                      // compile from source; bytecode is refused
+    fn run_load_phase(&mut self, entry: &str, fuel: Fuel) -> Result<Registrations, VmError>; // registration on; then registries close, globals freeze
     fn call(&mut self, handler: HandlerId, args: &Val, fuel: Fuel) -> Result<CallResult, VmError>;
-        // `args` carries the context as plain data; the result carries the return value and the buffered commands
     fn call_batch(&mut self, handler: HandlerId, args: &[Val], fuel: Fuel) -> Vec<Result<CallResult, VmError>>;
-    fn fuel_used(&self) -> u64;                                         // deterministic units (§23.5)
+    fn fuel_used(&self) -> u64;           // deterministic units (§23.5)
     fn memory_used(&self) -> usize;
-    fn set_limits(&mut self, memory_bytes: usize);
-    fn freeze_globals(&mut self);
+    fn set_memory_limit(&mut self, bytes: usize);
 }
 ```
 
-- **As built (0.9, D-031):** `Val` (nil, bool, integer, bounded text, list, string-keyed map) replaces `ScriptArgs`/`ScriptRet`. The context is data in the arguments and commands come back in the result, instead of a `&mut CallCtx` and a `Registrar` callback: the VM keeps no reference to the host between calls, calls are pure functions of their input (testable, batchable, replayable) and the VM is `Send`. Integer values are limited to ±2^53 and every conversion is range-checked in one place.
-- `ScriptArgs` and `ScriptRet` are plain Rust enums and structs (integers, bounded strings, ids, small tables of the same). Conversion to and from Luau values lives entirely behind the trait, so the boundary rule "integers only into the core" (§23.5) is enforced in one place.
-- Batched calls (`call_batch` over a slice of entity views) are part of the trait from the start, so a faster marshalling path can be added without touching callers.
-- A second implementation (a test double and later possibly an in-house binding) must pass the same sandbox conformance, determinism and fuel-accounting tests (§18 items 11–12).
+- `Val` (nil, bool, integer, bounded text, list, string-keyed map) crosses the boundary. Integers are limited to ±2^53 and every conversion is range-checked in one place; floats, `NaN`, cycles, functions, deep or huge tables and invalid UTF-8 are errors.
+- A call's **context is data in its arguments** and the **buffered commands come back in the result** (rather than a `&mut CallCtx` and a registrar callback): the VM keeps no reference to the host between calls, calls are pure functions of their input (testable, batchable, replayable) and the VM is `Send`.
+- `Registrations` (components, systems, hooks) are returned as plain data and cross-validated by the host before anything is declared.
+- `call_batch` is part of the trait from the start; today it loops over `call` (S-034 covers a real batch entry point if profiling ever asks for one).
+- A second implementation (a test double, later possibly an in-house binding) must pass the same sandbox conformance, determinism and fuel tests (§18 items 11 and 12).
 
-**Initial implementation: `mlua` with its Luau backend.** It is chosen to reach a working, tested sandbox fast, not because the choice is final. Rationale: years of use around the unsafe parts (stack discipline, error and exception crossing, value rooting, userdata lifetimes); ready-made sandbox mode, memory limit, interrupt callback, compiler options and library selection; and a raw FFI escape hatch for hot paths.
+**Decision.** `mlua` with its Luau backend stays; none of the upgrade triggers was hit. Why it was chosen: years of use around the unsafe parts (stack discipline, error crossing, value rooting), a ready-made sandbox mode, memory limit, interrupt callback and compiler options. The vendored Luau (0.740) builds on all three Tier 1 targets and passes `cargo deny`.
 
-**Spike questions (Stage 0 must answer all with measurements, recorded in the repo):**
+**Spike outcome** (the full report with measurements is `docs/spikes/scriptvm.md`):
 
-1. **Fuel determinism:** is the interrupt-based fuel count identical across Windows, Linux and macOS (and at any worker-thread count) for the same script and inputs, and is it fine-grained enough to stop a runaway loop quickly?
-2. **Numeric build control:** can Luau be built with floating-point contraction disabled and without native code generation, and can CI verify those flags on every Tier 1 target?
-3. **Memory limit:** does exceeding the per-pack limit abort the call cleanly, leave the VM usable or safely discardable, and never corrupt other packs' VMs?
-4. **Boundary cost:** is a per-minute system over 200 pawns, a per-tick hook and a query-driven batch within the script share of the tick budget? Benchmark with `criterion` against the rewritten-in-Rust equivalent to see the overhead, and compare per-entity calls against `call_batch`.
-5. **Sandbox profile:** can the deterministic `pairs`, `tostring`, restricted `math` / `string`, removed libraries, frozen globals and rejected `__gc` / `__mode` be installed and enforced cleanly after VM creation, and does the whole hostile-pack corpus (§18 item 11) pass?
-6. **Source-only loading:** is it impossible to feed precompiled bytecode through any exposed path?
-7. **Build and licensing:** does the vendored build work reliably on all Tier 1 targets and pass `cargo deny`?
+1. *Fuel determinism:* interrupt-based fuel is identical across Windows, Linux and macOS and any thread count (pinned figures run in CI) and stops a runaway loop within about ten units of its budget. Luau's pattern matcher also calls the interrupt, so catastrophic patterns are stopped by fuel and no string caps are needed.
+2. *Numeric build control:* no native code generation (`luau-jit` is never built; CI fails if it appears) and floating-point contraction off through per-target flags in `.cargo/config.toml`, verified at run time by a fused-multiply-add probe on every target.
+3. *Memory limit:* exceeding it aborts the call cleanly, the VM stays usable and other packs' VMs are untouched.
+4. *Boundary cost:* about 12 µs per handler call; scripts add about 1.6 percent of a 100 ms tick at 200 pawns (§19).
+5. *Sandbox:* the profile of §23.4 installs and holds, including the compiler configuration that stops builtin fast-calls and the `pairs` lowering from bypassing removed or replaced functions; the hostile-pack corpus passes. Known gap: bare `for k, v in t do` and `next(t)` cannot be intercepted (`pg pack lint` reports them; the VM-reload test is the backstop).
+6. *Source-only loading:* no path accepts bytecode.
+7. *Build and licensing:* the vendored build is about 35 s on Windows and needs only a C++ compiler.
 
-**Upgrade triggers (move to a hybrid or an in-house binding if any hold):**
-
-- Fuel counting is not bit-identical across targets, or is too coarse to bound a hostile loop.
-- The required numeric build flags cannot be applied through the binding's build, and forking the helper crate is not enough.
-- Boundary overhead blocks the resident target even after batching.
-- Deterministic behavior (for example `pairs`) is too slow or too fragile when patched from the host and needs to be fixed inside Luau.
-- The binding's bundled Luau version lags a needed fix, or an unfixed soundness issue appears in the code we depend on.
-
-**Fallbacks, in order of cost:** (1) fork the helper build crate to pin the Luau version and flags; (2) keep `mlua` but write the hot paths against its raw FFI inside the same private module; (3) replace the implementation behind `ScriptVm` with an in-house binding over Luau's C API, which gives exact version and patch control and marshalling shaped to our queries, at the price of owning the unsafe code, its fuzzing and every Luau upgrade. Because the rest of the engine only sees `ScriptVm`, each step is bounded in blast radius.
+**Upgrade triggers** (move to a hybrid or an in-house binding if any hold): fuel not bit-identical across targets or too coarse; required numeric flags cannot be applied through the binding's build; boundary overhead blocking the resident target even after batching; deterministic behaviour fixable only inside Luau; the bundled Luau lagging a needed fix. **Fallbacks, in order of cost:** (1) fork the helper build crate to pin the Luau version and flags; (2) keep `mlua` but write hot paths against its raw FFI inside the same private module; (3) replace the implementation behind `ScriptVm` with an in-house binding over Luau's C API, at the price of owning the unsafe code, its fuzzing and every Luau upgrade.
 
 ## 24. Native build, packaging and distribution \[S0 CI, S11 release\]
 
@@ -1342,11 +1391,12 @@ trait ScriptVm {
 | 1 | macOS, arm64 (Metal) | Built and tested in CI from Stage 0 |
 | 2 | macOS x86-64, Linux arm64, Windows arm64 | Built where CI capacity allows; same golden hashes required |
 
-- **Determinism across targets:** the golden replay suite runs on every Tier 1 target in CI and must produce identical hashes (§18). Compiler flags that could change numeric results (fast-math, FMA contraction in the Luau build) are explicitly disabled.
+- **Determinism across targets:** the golden replay suite runs on every Tier 1 target in CI and must produce identical hashes (§18). Compiler flags that could change numeric results are explicitly controlled: `.cargo/config.toml` sets per-target `CXXFLAGS` (`-ffp-contract=off` for GCC and Clang targets, `/fp:precise` for MSVC) for the vendored Luau, a run-time probe checks the result on every target, and `scripts/check_deps.py` rejects `luau-jit`.
+- **Continuous integration:** on Windows, Linux and macOS: `cargo fmt --check`, the dependency and feature rules, `clippy -D warnings`, all tests, the determinism vectors, content and string lints, the golden replay with snapshot resume, scenarios, save and bug-bundle round trips, the AI self-check, the cookbook pack tests, `pg-app --smoke`, `pg check` and the parallel pathfinding check; plus a `cargo deny` job. The window itself is not opened in CI.
 - **Release profile:** LTO, `codegen-units = 1`, `panic = "unwind"` (needed for the tick-level safety net), `overflow-checks = true` for `pg-core`, symbols stripped from the shipped binary with separate debug symbols kept.
 - **Packaging:** a portable zip is the baseline; an installer (MSI or NSIS on Windows, a notarized disk image on macOS, a tarball or AppImage on Linux) follows at Stage 11. The base pack and the API definitions ship beside the executable. No store distribution is planned.
 - **Updates:** no auto-updater at first. An opt-in, manual "check for updates" against a release feed may follow; nothing is downloaded or installed without the player's action, and no telemetry is sent.
-- **User data and mods:** see §13.1. Mods are installed by dropping a folder or `.pgpack` into the mods directory or through the in-game Mods screen.
+- **User data and mods:** see §13.1. Mods are installed by dropping a folder or `.pgpack` into the mods directory or through the in-game Mods screen (Stage 1); until capability approval exists, packs with scripts load only when named on the command line (`pg-app --pack <dir>`).
 - **Crash handling:** a panic hook and last-resort tick guard (§17) write a local crash report (redacted) and offer recovery from the latest autosave.
 - **Licensing hygiene:** `cargo deny` enforces allowed licenses for all dependencies, including Luau and the chosen binding.
 
@@ -1372,16 +1422,17 @@ trait ScriptVm {
 
 The original design document's enum table (`0 | move_to_room | room_id | current_room`) maps onto this registry: ENUM = `ActionId`, FUNC = the action's effect handler, TARGET = `params`, OUTPUT = the field(s) written by `effects`. Pack actions use ids of the form `<pack_id>.<name>` and appear in this registry once loaded.
 
-## Appendix B. Event types (initial)
+## Appendix B. Event types
 
-`conversation_closed`, `commitment_{proposed|accepted|declined|failed|completed}`, `task_failed`, `need_critical`, `mood_changed`, `memory_created`, `memory_expired`, `relationship_label_changed`, `world_edited` \[S3\], `possessed` / `released` \[S4\], `pack_quarantined` (diagnostic), later `transaction`, `birth`, `death`, `offense`, `injury`, `election_result`, `construction_started`. Packs register additional types as `<pack_id>.<type>` with all required filter variants.
+The **catalog** (`pg events list`, as built through 0.10, 28 kinds): `input_rejected`, `setting_changed`; world: `map.created`, `pawn.spawned`, `object.spawned`, `object.contained`, `world_edited`; movement: `move.requested`, `move.arrived`, `move.failed`, `move.sidestep`; schedule: `schedule.planned`, `schedule.replanned`; tasks: `task.started`, `task.done`, `task.failed`; commitments: `commitment.proposed`, `.accepted`, `.declined`, `.expired`, `.cancelled`, `.failed`, `.active`, `.completed`; pack diagnostics: `script.error`, `script.quarantined`; developer scaffolding: `dev.nudged`, `dev.day_started`. Each kind has a category, a field schema and a default visibility; debug builds validate every emitted event against the catalog.
+
+Planned: `conversation_closed`, `need_critical`, `mood_changed`, `memory_created`, `memory_expired`, `relationship_label_changed`, `possessed` / `released` \[S4\], later `transaction`, `birth`, `death`, `offense`, `injury`, `election_result`, `construction_started`. Packs register additional types as `<pack_id>.<type>` with all required filter variants.
 
 ## Appendix C. Key settings (data-driven, tunable)
 
 | Key | Default | Scope |
 | --- | --- | --- |
-| `day_real_seconds` | 1500 | device / world |
-| `speed_steps` | 1, 2, 4, 8 | device |
+| speeds | 1x, 3x, 9x, 27x (10, 30, 90, 270 ticks per second) | fixed |
 | `slot_minutes` | 30 | world |
 | `move_ticks_per_tile` | tuned | world |
 | `talk_range`, `hear_range` | 2, 8 tiles | world |
@@ -1391,12 +1442,12 @@ The original design document's enum table (`0 | move_to_room | room_id | current
 | `aging_multiplier` | 1 | world \[S7\] |
 | `births_enabled`, `move_ins_enabled`, `population_cap` | off, off, tuned | world \[S7\] |
 | `ai_timeout_ms`, `ai_rpm_cap`, `ai_cooldowns` | 8000, tuned, tuned | device |
-| `autosave_minutes` | tuned | device |
-| `pause_on_focus_loss` | on | device |
-| `window_mode`, `ui_scale`, `vsync` | windowed, auto, on | device |
+| `time.autosave_minutes` | 5 (1 to 60) | device |
+| `time.pause_on_focus_loss` | on | device |
+| `ui.window_mode`, `ui.scale_percent`, `ui.vsync`, `ui.language` | windowed, 100, on, en | device |
 | `sim_worker_threads` | auto (cores − 2, min 1) | device |
-| `script_fuel_per_call`, `script_fuel_per_tick` | tuned (S0 spike) | device / world |
-| `script_memory_bytes_per_pack` | tuned | device |
-| `script_max_errors`, `script_error_window_ticks` | tuned | device |
+| `script_fuel_per_call`, `script_fuel_per_tick`, load fuel | 50,000, 1,000,000, 2,000,000 | device / world |
+| `script_memory_bytes_per_pack` | 8 MiB | device |
+| `script_max_errors`, `script_error_window_ticks` | 3, 14,400 | device |
 | `script_watchdog_ms` | tuned (backstop only) | device |
 | `scripts_enabled` (safe mode off / on) | on | world (override at load) |
