@@ -9,7 +9,7 @@
 use crate::canon::Canon;
 use crate::hash::{hash_canon, hash_raw};
 use crate::id::{EntityId, Kind};
-use crate::rng::{fnv1a64, hash_bytes, rand, Key, Seed, SplitMix64};
+use crate::rng::{fnv1a64, hash_bytes, rand, Key, Seed, SplitMix64, Stream};
 
 /// Where a vector comes from.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -132,7 +132,7 @@ pub fn run() -> Vec<VectorResult> {
         "rand(playground, worldgen.terrain, [], 0)",
         k,
         "744eb490",
-        format!("{:08x}", rand(seed, "worldgen.terrain", &[], 0)),
+        format!("{:08x}", rand(seed, Stream::WorldgenTerrain, &[], 0)),
     ));
     out.push(v(
         "rand(playground, sched.variation, [pawn_1a, 7], 3)",
@@ -142,7 +142,7 @@ pub fn run() -> Vec<VectorResult> {
             "{:08x}",
             rand(
                 seed,
-                "sched.variation",
+                Stream::SchedVariation,
                 &[Key::Id(EntityId::new(Kind::Pawn, 46)), Key::Int(7)],
                 3
             )
@@ -154,7 +154,15 @@ pub fn run() -> Vec<VectorResult> {
         "039124ef",
         format!(
             "{:08x}",
-            rand(seed, "mod.coffee.roll", &[Key::Str("k")], 99)
+            rand(
+                seed,
+                Stream::Pack {
+                    pack: "coffee",
+                    name: "roll"
+                },
+                &[Key::Str("k")],
+                99
+            )
         ),
     ));
 

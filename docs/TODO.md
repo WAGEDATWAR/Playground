@@ -4,9 +4,10 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Phase 0 / Milestone 0.4 — World state and spatial: implemented, awaiting CI + user acceptance.** Accepted and tagged so far: `m0.0`..`m0.3`. The dev probe/wander scaffolding (D-009) is still temporary; the real movement system, maps, objects and containment are now in place.
+**Phase 0 / Milestone 0.5 — Scheduler and actions skeleton: in progress.** Accepted and tagged: `m0.0`..`m0.4`. Dev probe/wander scaffolding (D-009) is still temporary and gets replaced by a schedule-driven dev plan source in 0.5.
 
-0.4 delivered: `map` (flat tile arrays, chunks, edit versions, move costs), `object`/`containment` (containers, validate_containment, spawn/move/delete with cascade|evict|forbid), `pawn` + `occupancy`, `path` (A* with fixed tie-breaks, destinations, deterministic LRU cache, `BatchExecutor`), `movement` (MovementSystem), dev `commands`, replay v2 (per-table hashes, content refs, `diff_logs`, `bisect`), "did you mean" hints (S-012), `pg-runtime::exec::ScopedThreads`. CLI: `pg map show|path|bench-paths`, `pg replay --diff|--bisect`, `pg sim --dev-map --dev-pawns --object --put --events [prefix] --since --until --threads --content`. Golden replay is now `golden/dev-town-3days.json` (map, 10 pawns, objects, content refs) and CI also checks threaded == serial pathfinding on every OS.
+0.5 done so far: S-005 typed `Stream` enum, S-006 `Rng::weighted_pick`, pg-content schema fields `Tile`/`EntityId`/`Optional`, `ActionId`, `reason.rs` (S-010 reason codes with origin + sentences).
+0.5 to do: `action.rs` (closed ActionRegistry: `move_to`, `idle_at`), `schedule.rs` (Blueprint 8.5 planner), `commitment.rs`, activity systems, Pawn/WorldState changes, dev plan source replacing DevWander, `pg schedule explain` / `pg actions`, property tests, golden replay + CI update, docs, tag `m0.5`.
 
 ## Blocked / waiting on user
 

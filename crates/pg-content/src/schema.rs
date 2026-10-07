@@ -29,6 +29,14 @@ pub enum FieldSchema {
     Tag,
     /// A valid [`TemplateId`].
     TemplateRef,
+    /// A tile coordinate `[x, y]` of 32-bit integers.
+    Tile,
+    /// An entity id of the given kind prefix, for example `pawn_1a` (`kind` is `"pawn"`).
+    EntityId {
+        kind: String,
+    },
+    /// `null` (or absent) or a value of the inner shape.
+    Optional(Box<FieldSchema>),
     List {
         item: Box<FieldSchema>,
         max_len: usize,
@@ -92,6 +100,11 @@ impl Field {
         Field::required(FieldSchema::Enum(
             values.iter().map(|s| (*s).to_owned()).collect(),
         ))
+    }
+
+    /// An optional field that is `null` when absent.
+    pub fn maybe(schema: FieldSchema) -> Field {
+        Field::optional(FieldSchema::Optional(Box::new(schema)), Canon::Null)
     }
 
     /// An optional list that defaults to empty.
@@ -246,6 +259,40 @@ impl FieldSchema {
                 }
                 None => mismatch(report, path, "a template id", value),
             },
+            FieldSchema::Tile => match value.as_list() {
+                Some([x, y])
+                    if [x, y]
+                        .iter()
+                        .all(|v| v.as_i64().is_some_and(|n| i32::try_from(n).is_ok())) =>
+                {
+                    value.clone()
+                }
+                Some(_) => {
+                    report.error(
+                        "bad_tile",
+                        path,
+                        "a tile is [x, y] with two 32-bit integers",
+                    );
+                    value.clone()
+                }
+                None => mismatch(report, path, "a tile [x, y]", value),
+            },
+            FieldSchema::EntityId { kind } => match value.as_str() {
+                Some(s) if is_entity_id(s, kind) => value.clone(),
+                Some(s) => {
+                    report.error(
+                        "bad_id",
+                        path,
+                        format!("'{s}' is not a {kind} id (like {kind}_1a)"),
+                    );
+                    value.clone()
+                }
+                None => mismatch(report, path, "an entity id", value),
+            },
+            FieldSchema::Optional(inner) => match value {
+                Canon::Null => Canon::Null,
+                other => inner.check(other, path, report),
+            },
             FieldSchema::List { item, max_len } => match value.as_list() {
                 Some(items) => {
                     if items.len() > *max_len {
@@ -268,6 +315,17 @@ impl FieldSchema {
             FieldSchema::Object(schema) => schema.check(value, path, report),
         }
     }
+}
+
+/// Whether `s` is `<kind>_<lowercase base36>` (the canonical form of an entity id).
+fn is_entity_id(s: &str, kind: &str) -> bool {
+    s.strip_prefix(kind)
+        .and_then(|rest| rest.strip_prefix('_'))
+        .is_some_and(|n| {
+            !n.is_empty()
+                && n.bytes()
+                    .all(|b| b.is_ascii_digit() || b.is_ascii_lowercase())
+        })
 }
 
 fn kind_name(v: &Canon) -> &'static str {
@@ -380,6 +438,52 @@ mod tests {
             assert!(
                 r.errors().any(|i| i.code == code && i.path == path),
                 "{json}: wanted {code} at {path}, got:\n{r}"
+            );
+        }
+    }
+
+    #[test]
+    fn tile_entity_id_and_optional_fields() {
+        let schema = ParamSchema::new()
+            .field("at", Field::required(FieldSchema::Tile))
+            .field(
+                "who",
+                Field::maybe(FieldSchema::EntityId {
+                    kind: "pawn".into(),
+                }),
+            )
+            .field("spot", Field::maybe(FieldSchema::Tile));
+        let run = |json: &str| {
+            let mut r = ValidationReport::new();
+            let out = schema.check(&parse(json).unwrap(), "p", &mut r);
+            (out, r)
+        };
+        let (out, r) = run(r#"{"at":[3,-4]}"#);
+        assert!(r.is_ok(), "{r}");
+        assert_eq!(
+            out.to_canonical_string(),
+            r#"{"at":[3,-4],"spot":null,"who":null}"#
+        );
+        let (_, r) = run(r#"{"at":[1,2],"who":"pawn_1a","spot":[0,0]}"#);
+        assert!(r.is_ok(), "{r}");
+        let (_, r) = run(r#"{"at":[1,2],"who":null}"#);
+        assert!(r.is_ok(), "an explicit null is the same as absent: {r}");
+        for (bad, code, path) in [
+            (r#"{"at":[1]}"#, "bad_tile", "p.at"),
+            (r#"{"at":[1,2,3]}"#, "bad_tile", "p.at"),
+            (r#"{"at":[1,99999999999]}"#, "bad_tile", "p.at"),
+            (r#"{"at":"1,2"}"#, "type_mismatch", "p.at"),
+            (r#"{"at":[1,2],"who":"obj_1"}"#, "bad_id", "p.who"),
+            (r#"{"at":[1,2],"who":"pawn_"}"#, "bad_id", "p.who"),
+            (r#"{"at":[1,2],"who":"pawn_1A"}"#, "bad_id", "p.who"),
+            (r#"{"at":[1,2],"who":5}"#, "type_mismatch", "p.who"),
+            (r#"{"at":[1,2],"spot":[1]}"#, "bad_tile", "p.spot"),
+            (r#"{}"#, "missing_field", "p.at"),
+        ] {
+            let (_, r) = run(bad);
+            assert!(
+                r.errors().any(|i| i.code == code && i.path == path),
+                "{bad}: wanted {code} at {path}, got:\n{r}"
             );
         }
     }

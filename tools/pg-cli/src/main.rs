@@ -6,7 +6,7 @@
 
 use pg_core::hash::hash_canon;
 use pg_core::id::{EntityId, Kind};
-use pg_core::rng::{Key, Rng, Seed};
+use pg_core::rng::{Key, Rng, Seed, Stream};
 use pg_core::vectors;
 use std::process::ExitCode;
 
@@ -203,7 +203,7 @@ fn rand_cmd(args: &[String]) -> Result<ExitCode, String> {
         })
         .collect();
     let seed = Seed::from_text(seed_text);
-    let rng = Rng::new(seed, stream, &borrowed);
+    let rng = Rng::new(seed, Stream::parse(stream), &borrowed);
     println!(
         "seed {seed_text:?} -> {:016x}   stream {stream:?}   keys {keys:?}",
         seed.0

@@ -10,7 +10,7 @@ use crate::map::{Tile, ROAD, SAND, SIDEWALK, WATER};
 use crate::num::Permille;
 use crate::pawn::Route;
 use crate::pipeline::{Cadence, Pipeline, Placement, System, SystemSlot, TickCtx};
-use crate::rng::{Key, Rng};
+use crate::rng::{Key, Rng, Stream};
 use crate::world::WorldState;
 
 /// Minute cadence (installed in the Needs slot): a seeded random walk on `probe.value`.
@@ -23,7 +23,7 @@ impl System for DevProbeSystem {
 
     fn run(&mut self, ctx: &mut TickCtx<'_>) {
         let index = i64::try_from(ctx.world.probe.minutes).unwrap_or(i64::MAX);
-        let rng = Rng::new(ctx.world.seed(), "dev.probe", &[Key::Int(index)]);
+        let rng = Rng::new(ctx.world.seed(), Stream::DevProbe, &[Key::Int(index)]);
         let step = rng.int_in(0, 0, 999).unwrap_or(500) - 500;
         ctx.world.probe.value = ctx.world.probe.value.saturating_add(i64::from(step));
         ctx.world.probe.minutes = ctx.world.probe.minutes.saturating_add(1);
@@ -66,7 +66,7 @@ impl System for DevWanderSystem {
             .map(|(id, p)| (id, p.position.map, p.position.tile))
             .collect();
         for (pawn, map, here) in idle {
-            let rng = Rng::new(seed, "dev.wander", &[Key::Id(pawn), Key::Int(minute)]);
+            let rng = Rng::new(seed, Stream::DevWander, &[Key::Id(pawn), Key::Int(minute)]);
             if !rng.chance(0, chance) {
                 continue;
             }
@@ -138,7 +138,7 @@ pub fn generate_dev_map(world: &mut WorldState, id: EntityId, style: u8) {
         for bx in 0..(w / BLOCK) {
             let rng = Rng::new(
                 seed,
-                "dev.map",
+                Stream::DevMap,
                 &[
                     Key::Id(id),
                     Key::Int(i64::from(bx)),
@@ -168,7 +168,7 @@ pub fn random_free_tile(world: &WorldState, map: EntityId) -> Option<Tile> {
     let m = world.maps.get(map)?;
     let rng = Rng::new(
         world.seed(),
-        "dev.spawn",
+        Stream::DevSpawn,
         &[
             Key::Id(map),
             Key::Int(i64::try_from(world.pawns.len()).unwrap_or(0)),

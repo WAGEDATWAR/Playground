@@ -211,6 +211,9 @@ fn describe(field: &FieldSchema) -> String {
         FieldSchema::Enum(v) => format!("one of [{}]", v.join("|")),
         FieldSchema::Tag => "tag".into(),
         FieldSchema::TemplateRef => "template-id".into(),
+        FieldSchema::Tile => "tile [x, y]".into(),
+        FieldSchema::EntityId { kind } => format!("{kind} id"),
+        FieldSchema::Optional(inner) => format!("optional {}", describe(inner)),
         FieldSchema::List { item, max_len } => format!("list(<= {max_len}) of {}", describe(item)),
         FieldSchema::Object(s) => format!("object {{{}}}", fields_summary(s)),
     }

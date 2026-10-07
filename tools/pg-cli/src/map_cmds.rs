@@ -9,7 +9,7 @@ use pg_core::map::{
 use pg_core::path::{
     find_path, BatchExecutor, PathJob, PathOutcome, SerialExecutor, DEFAULT_EXPANSION_CAP,
 };
-use pg_core::rng::{Key, Rng, Seed};
+use pg_core::rng::{Key, Rng, Seed, Stream};
 use pg_core::world::WorldState;
 use pg_runtime::exec::ScopedThreads;
 use std::collections::BTreeMap;
@@ -265,7 +265,11 @@ fn bench(args: &[String]) -> Result<ExitCode, String> {
     let costs = MoveCosts::default();
 
     // Random requests between passable tiles.
-    let rng = Rng::new(Seed::from_text(seed), "bench.requests", &[Key::Int(0)]);
+    let rng = Rng::new(
+        Seed::from_text(seed),
+        Stream::Raw("bench.requests"),
+        &[Key::Int(0)],
+    );
     let mut jobs = Vec::new();
     let mut counter = 0u32;
     let pick = |counter: &mut u32| -> Option<Tile> {

@@ -136,6 +136,12 @@ slug_type!(
     ComponentName, "component name", 1, 4, 64
 );
 
+slug_type!(
+    /// An action id: one or two segments. Built-ins are single segment (`move_to`); pack actions are
+    /// `<pack>.<name>`.
+    ActionId, "action id", 1, 2, 64
+);
+
 impl TemplateId {
     /// The root every inheritance chain must end at.
     pub const ROOT: &'static str = "base.object";

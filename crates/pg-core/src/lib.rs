@@ -23,6 +23,7 @@ pub mod occupancy;
 pub mod path;
 pub mod pawn;
 pub mod pipeline;
+pub mod reason;
 pub mod replay;
 pub mod rng;
 pub mod sim;
