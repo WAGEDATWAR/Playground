@@ -1,7 +1,8 @@
 //! `pg`: headless developer tooling (Blueprint §20). Developer-only; never part of the shipped game.
 //!
 //! Commands so far: `selftest`, `rand`, `hash`, `id` (0.1); `sim`, `replay`, `time`, `pipeline` (0.2);
-//! `content` (0.3). Later milestones add `schedule`, `save`, `pack`, `bench`.
+//! `content` (0.3); `map`, plus replay `--diff` / `--bisect` and event filters (0.4). Later milestones add
+//! `schedule`, `save`, `pack`, `bench`.
 
 use pg_core::hash::hash_canon;
 use pg_core::id::{EntityId, Kind};
@@ -9,7 +10,10 @@ use pg_core::rng::{Key, Rng, Seed};
 use pg_core::vectors;
 use std::process::ExitCode;
 
+mod args;
 mod content_cmds;
+mod map_cmds;
+mod shared;
 mod sim_cmds;
 
 const USAGE: &str = "\
@@ -23,13 +27,29 @@ USAGE:
         prefix with int: / id: / str: to force a type.
     pg hash <file.json> [--show]
         Parse JSON (integers only), print its canonical form (--show) and its BLAKE3 state hash.
-    pg sim --seed <text> [--days <n> | --ticks <n>] [--name <text>] [--nudge <tick>:<amount>]...
-           [--slot <tick>:<minutes>]... [--log <file>] [--pretty] [--events]
+    pg sim --seed <text> [--days <n> | --ticks <n>] [--name <text>] [--dev-map WxH[:style]]
+           [--dev-pawns <n>] [--content <pack-dir>]... [--threads <n>] [--nudge <tick>:<amount>]...
+           [--object <template>@x,y]... [--put <child>:<owner>:<container>]...
+           [--slot <tick>:<minutes>]... [--events [kind-prefix]] [--since <tick>] [--until <tick>]
+           [--log <file>] [--pretty]
         Run the dev simulation headless; print the state hash at every day boundary (with per-table
-        hashes) and optionally write a replay log.
-    pg replay <log.json> [--snapshot-at <tick>]
-        Re-run a replay log and verify every recorded hash. With --snapshot-at, also verify that
-        snapshotting at that tick and resuming gives an identical result. Exit 1 on any mismatch.
+        hashes) and optionally write a replay log. --dev-map creates a generated town (style 1) or open
+        grass (style 0) with --dev-pawns wandering pawns. --events prints events, filtered by kind prefix
+        and tick range.
+    pg replay <log.json> [--content <pack-dir>]... [--snapshot-at <tick>]
+        Re-run a replay log and verify every recorded hash (combined and per table). With --snapshot-at,
+        also verify that snapshotting at that tick and resuming gives an identical result. Exit 1 on any
+        mismatch.
+    pg replay --diff <a.json> <b.json>
+        Compare two logs from their recorded data: first differing input, day and table.
+    pg replay --bisect <a.json> <b.json>
+        Re-run both logs in lockstep and report the exact tick (and table) where they first differ.
+    pg map show [--seed <text>] [--dev-map WxH[:style]] [--dev-pawns <n>] [--ticks <n>] [--no-routes]
+        Draw a demo map after N ticks: terrain, objects, pawns and their routes, plus a pawn table.
+    pg map path --from x,y --to x,y [--size WxH[:style]] [--seed <text>] [--cap <n>]
+        Run one path request on a demo map and draw the route.
+    pg map bench-paths [--size WxH[:style]] [--requests <n>] [--threads 1,2,4,8] [--seed <text>]
+        Solve the same batch of requests serially and on several thread counts; verifies identical results.
     pg time <tick> [--slot-minutes <m>]    Show day / clock time / slot / boundary flags for a tick.
     pg pipeline               Show the tick pipeline: systems in execution order and their cadence.
     pg content lint [pack-dir...]         Load and validate packs (default: data/base). Exit 1 on errors.
@@ -50,6 +70,7 @@ fn main() -> ExitCode {
         Some("hash") => hash_cmd(&args[1..]),
         Some("id") => id_cmd(&args[1..]),
         Some("content") => content_cmds::content_cmd(&args[1..]),
+        Some("map") => map_cmds::map_cmd(&args[1..]),
         Some("sim") => sim_cmds::sim_cmd(&args[1..]),
         Some("replay") => sim_cmds::replay_cmd(&args[1..]),
         Some("time") => sim_cmds::time_cmd(&args[1..]),

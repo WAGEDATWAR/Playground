@@ -33,7 +33,9 @@ jobs:
       - run: cargo run -q -p pg-cli -- content lint
       # Golden replay: the recorded day hashes must reproduce on every OS, and a mid-run
       # snapshot/resume must match the uninterrupted run (Blueprint §18.3).
-      - run: cargo run -q -p pg-cli -- replay golden/dev-3days.json --snapshot-at 12345
+      - run: cargo run -q -p pg-cli -- replay golden/dev-town-3days.json --snapshot-at 12345
+      # Parallel pathfinding must give results identical to serial on every OS (Blueprint §7.3, §19).
+      - run: cargo run -q -p pg-cli -- map bench-paths --size 96x72 --requests 300 --threads 1,2,4
 
   deny:
     name: cargo-deny

@@ -4,24 +4,19 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Phase 0 / Milestone 0.4 — World state and spatial (in progress).** Accepted and tagged: `m0.0`..`m0.3`. Suggestions are scheduled (docs/SUGGESTIONS.md table; specs bumped to Blueprint v2.2 / Roadmap v4.1 / Design Document v3.1).
+**Phase 0 / Milestone 0.4 — World state and spatial: implemented, awaiting CI + user acceptance.** Accepted and tagged so far: `m0.0`..`m0.3`. The dev probe/wander scaffolding (D-009) is still temporary; the real movement system, maps, objects and containment are now in place.
 
-0.4 design (decided before coding):
-- `map` (MapData: flat tile arrays, chunks, edit_version; MoveCosts), `object` + `containment` (ObjectInstance, Location, ContainerState, validate_containment, spawn/move/delete with cascade|evict|forbid), `pawn` (spatial fields + Route), `occupancy` (derived, never hashed), `path` (A* sparse g-scores, (f,h,index) heap, N/E/S/W, cap 20,000, destination resolution, deterministic LRU cache, `BatchExecutor` trait: serial in core, scoped threads in pg-runtime), `movement` (MovementSystem: id order, wait -> sidestep -> repath -> fail).
-- WorldState gains `maps`, `objects`, `pawns` (+ movement settings). Derived occupancy and path cache are not hashed.
-- Dev commands (logged inputs): create map, spawn pawn/object, move, set tile blocked, put in container. Temporary `DevWander` system keeps pawns walking. D-009 scaffolding stays until real systems arrive.
-- Replay format v2: per-table hashes + content refs; `pg replay --diff / --bisect` (S-002/S-007/S-008); `pg sim --events <prefix>` (S-009); "did you mean" hints in content validation (S-012).
-- Dev tools: `pg map show | path | bench-paths`.
+0.4 delivered: `map` (flat tile arrays, chunks, edit versions, move costs), `object`/`containment` (containers, validate_containment, spawn/move/delete with cascade|evict|forbid), `pawn` + `occupancy`, `path` (A* with fixed tie-breaks, destinations, deterministic LRU cache, `BatchExecutor`), `movement` (MovementSystem), dev `commands`, replay v2 (per-table hashes, content refs, `diff_logs`, `bisect`), "did you mean" hints (S-012), `pg-runtime::exec::ScopedThreads`. CLI: `pg map show|path|bench-paths`, `pg replay --diff|--bisect`, `pg sim --dev-map --dev-pawns --object --put --events [prefix] --since --until --threads --content`. Golden replay is now `golden/dev-town-3days.json` (map, 10 pawns, objects, content refs) and CI also checks threaded == serial pathfinding on every OS.
 
 ## Blocked / waiting on user
 
-- [ ] Confirm CI for the 0.3 commit and accept 0.3 (no mandatory checkpoint here; next checkpoint is after 0.6 saves).
+- [ ] Confirm CI for the 0.4 commit (all three OSes: golden replay with pawns and objects, threaded path check) and accept 0.4. No mandatory checkpoint here; next is after 0.6 (saves).
 
 ## Next up
 
-1. After acceptance: tag `m0.3`; start 0.4 world state and spatial (`WorldState` tables, `MapData`, occupancy, containment + `validate_containment`, A* with fixed tie-breaks, parallel batched pathing with deterministic merge, movement step; `pg map show`).
-2. Use `ContentSet` (resolved templates) when objects are instantiated in 0.4; record `ContentSet::refs()` in `WorldState.content_refs`.
-3. Remove the `dev` probe scaffolding when real systems arrive (D-009).
+1. After acceptance: tag `m0.4`; start 0.5 scheduler and actions skeleton (DaySchedule, reservations, five priorities, conflict/tie rules, plan_day skeleton, commitments protocol, ActionRegistry, ReasonCode with origin) plus S-005 (RNG stream registry), `pg schedule explain`.
+2. 0.5 will replace `DevWander` with a real TaskPlanner path (actions `move_to` etc.); remove dev scaffolding as each piece is superseded (D-009).
+3. Performance follow-ups logged as S-017 (A* scratch buffers) and S-018 (pawn-aware routing).
 
 ## Shell note
 
@@ -48,3 +43,4 @@ Python is available for scripts (`scripts/check_deps.py`). Avoid bash heredocs c
 - 2026-10-06: **0.2 time, tick pipeline, input log, replay**: `time` (SlotMinutes, Clock, TimeFlags), `world` (minimal WorldState + per-table hashes), `input` (SimInput, ordered InputQueue, Canon round-trip), `pipeline` (13 slots, cadence, anchored extensions, trace), `sim` (step, snapshot/restore, per-day hashes with per-table hashes), `replay` (integer-only log, verify, tamper detection), `dev` scaffolding. 90 core tests incl. property tests (split run anywhere == whole run). Dev tools `pg sim|replay|time|pipeline`. Golden replay in CI.
 - 2026-10-06: **0.3 content system**: new `pg-canon` crate (Canon + strict integer-only JSON parser, 19 tests incl. property tests); `pg-content` (ids, report, schema, component registry, templates, resolver, manifest, pack loader, content set; 68 unit tests + 5 base-pack integration tests); `data/base` pack (15 templates incl. the Blueprint example chains); `pg content lint|list|resolve|components`. Blueprint bumped to v2.1 (pg-canon, pack/namespace rules). Decisions D-010..D-012.
 - 2026-10-06: Accepted 0.3 (`m0.3`). Scheduled all suggestions across milestones/stages and folded them into Blueprint v2.2, Roadmap v4.1 (principle 16, [DX] items), Design Document v3.1 (D-013).
+- 2026-10-06: **0.4 world state and spatial**: maps, objects + containment, pawns + occupancy, A* + cache + batch executor, MovementSystem, dev commands, replay v2 with diff/bisect, hints, ScopedThreads, `pg map` tools, golden replay v2. 160+ tests; decisions D-014..D-017; suggestions S-017..S-019.

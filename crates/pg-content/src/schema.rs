@@ -143,10 +143,11 @@ impl ParamSchema {
         for key in map.keys() {
             if !self.fields.contains_key(key) {
                 let known = self.fields.keys().cloned().collect::<Vec<_>>().join(", ");
+                let hint = crate::hints::hint(key, self.fields.keys().map(String::as_str));
                 report.error(
                     "unknown_field",
                     join(path, key),
-                    format!("unknown field (known fields: {known})"),
+                    format!("unknown field{hint} (known fields: {known})"),
                 );
             }
         }
@@ -217,10 +218,11 @@ impl FieldSchema {
             FieldSchema::Enum(allowed) => match value.as_str() {
                 Some(s) if allowed.iter().any(|a| a == s) => value.clone(),
                 Some(s) => {
+                    let hint = crate::hints::hint(s, allowed.iter().map(String::as_str));
                     report.error(
                         "bad_enum",
                         path,
-                        format!("'{s}' is not one of: {}", allowed.join(", ")),
+                        format!("'{s}' is not one of: {}{hint}", allowed.join(", ")),
                     );
                     value.clone()
                 }

@@ -51,11 +51,12 @@ impl ObjectTemplate {
 
         for key in map.keys() {
             if !TEMPLATE_KEYS.contains(&key.as_str()) {
+                let hint = crate::hints::hint(key, TEMPLATE_KEYS.iter().copied());
                 report.error(
                     "unknown_field",
                     format!("{path}.{key}"),
                     format!(
-                        "unknown template field (allowed: {})",
+                        "unknown template field{hint} (allowed: {})",
                         TEMPLATE_KEYS.join(", ")
                     ),
                 );

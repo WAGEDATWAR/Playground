@@ -110,7 +110,11 @@ impl ContentSet {
                     None => report.error(
                         "missing_dependency",
                         m.id.to_string(),
-                        format!("depends on pack '{}', which is not installed", dep.id),
+                        format!(
+                            "depends on pack '{}', which is not installed{}",
+                            dep.id,
+                            crate::hints::hint(dep.id.as_str(), by_id.keys().map(PackId::as_str))
+                        ),
                     ),
                     Some(d) if !dep.version.matches(&d.manifest.version) => report.error(
                         "dependency_version",

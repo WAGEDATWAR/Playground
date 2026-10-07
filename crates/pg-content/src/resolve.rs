@@ -129,8 +129,12 @@ pub fn inheritance_chain(
                 "missing_parent",
                 format!("{}.extends", current.id),
                 format!(
-                    "'{}' extends '{parent_id}', which does not exist",
-                    current.id
+                    "'{}' extends '{parent_id}', which does not exist{}",
+                    current.id,
+                    crate::hints::hint(
+                        parent_id.as_str(),
+                        templates.keys().map(TemplateId::as_str)
+                    )
                 ),
             );
             return None;
@@ -171,7 +175,14 @@ pub fn resolve_template(
     report: &mut ValidationReport,
 ) -> Option<ResolvedTemplate> {
     if !templates.contains_key(id) {
-        report.error("unknown_template", id.to_string(), "no such template");
+        report.error(
+            "unknown_template",
+            id.to_string(),
+            format!(
+                "no such template{}",
+                crate::hints::hint(id.as_str(), templates.keys().map(TemplateId::as_str))
+            ),
+        );
         return None;
     }
     let before = report.error_count();
@@ -213,7 +224,10 @@ pub fn resolve_template(
             None => report.error(
                 "unknown_component",
                 path,
-                format!("no component named '{name}' is registered"),
+                format!(
+                    "no component named '{name}' is registered{}",
+                    crate::hints::hint(name.as_str(), registry.iter().map(|d| d.name.as_str()))
+                ),
             ),
             Some(def) => {
                 let normalized = def.schema.check(params, &path, report);

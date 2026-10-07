@@ -273,11 +273,12 @@ impl PackManifest {
         let before = report.error_count();
         for key in map.keys() {
             if !MANIFEST_KEYS.contains(&key.as_str()) {
+                let hint = crate::hints::hint(key, MANIFEST_KEYS.iter().copied());
                 report.error(
                     "unknown_field",
                     format!("{path}.{key}"),
                     format!(
-                        "unknown manifest field (allowed: {})",
+                        "unknown manifest field{hint} (allowed: {})",
                         MANIFEST_KEYS.join(", ")
                     ),
                 );
@@ -422,7 +423,8 @@ impl PackManifest {
                             "unknown_capability",
                             format!("{}[{i}]", p("capabilities")),
                             format!(
-                                "'{s}' is not a capability (known: {})",
+                                "'{s}' is not a capability{} (known: {})",
+                                crate::hints::hint(s, Capability::ALL.iter().map(|c| c.name())),
                                 Capability::ALL
                                     .iter()
                                     .map(|c| c.name())
@@ -543,10 +545,11 @@ fn parse_setting(item: &Canon, path: &str, report: &mut ValidationReport) -> Opt
     };
     for key in m.keys() {
         if !["id", "type", "min", "max", "default"].contains(&key.as_str()) {
+            let hint = crate::hints::hint(key, ["id", "type", "min", "max", "default"]);
             report.error(
                 "unknown_field",
                 format!("{path}.{key}"),
-                "unknown setting field",
+                format!("unknown setting field{hint}"),
             );
         }
     }
