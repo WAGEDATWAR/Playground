@@ -13,6 +13,7 @@
 
 use crate::canon::{Canon, ToCanon};
 use crate::id::EntityId;
+use crate::read::{ReadError, Reader};
 use crate::reason::ReasonCode;
 use crate::schedule::CommitmentReq;
 use pg_content::ActionId;
@@ -197,6 +198,47 @@ pub fn cancel_live(world: &mut crate::world::WorldState, why: &str) -> Vec<Entit
         }
     }
     cancelled
+}
+
+impl Commitment {
+    pub fn from_reader(r: Reader<'_>) -> Result<Commitment, ReadError> {
+        r.only(&[
+            "id",
+            "proposer",
+            "invitee",
+            "day",
+            "start",
+            "len",
+            "action",
+            "params",
+            "state",
+            "created_tick",
+            "expires_tick",
+            "reschedulable",
+            "reason",
+        ])?;
+        let state_child = r.child("state")?;
+        let state = CommitState::from_name(state_child.reader().str()?)
+            .ok_or_else(|| state_child.reader().err("unknown commitment state"))?;
+        Ok(Commitment {
+            id: r.child("id")?.reader().parse()?,
+            proposer: r.child("proposer")?.reader().parse()?,
+            invitee: r.child("invitee")?.reader().parse()?,
+            day: r.child("day")?.reader().u64()?,
+            start: r.child("start")?.reader().u32()?,
+            len: r.child("len")?.reader().u32()?,
+            action: r.child("action")?.reader().parse()?,
+            params: r.child("params")?.reader().value().clone(),
+            state,
+            created_tick: r.child("created_tick")?.reader().u64()?,
+            expires_tick: r.child("expires_tick")?.reader().u64()?,
+            reschedulable: r.child("reschedulable")?.reader().bool()?,
+            reason: match r.maybe("reason")? {
+                Some(c) => Some(ReasonCode::from_reader(c.reader())?),
+                None => None,
+            },
+        })
+    }
 }
 
 #[cfg(test)]

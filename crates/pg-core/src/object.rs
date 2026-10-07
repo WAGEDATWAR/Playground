@@ -7,6 +7,7 @@
 use crate::canon::{Canon, ToCanon};
 use crate::id::EntityId;
 use crate::map::Tile;
+use crate::read::{ReadError, Reader};
 use pg_content::TemplateId;
 use std::collections::BTreeMap;
 
@@ -78,6 +79,48 @@ impl ToCanon for ObjectInstance {
                 ),
             ),
         ])
+    }
+}
+
+impl ObjectInstance {
+    pub fn from_reader(r: Reader<'_>) -> Result<ObjectInstance, ReadError> {
+        r.only(&["id", "template", "location", "containers"])?;
+        let loc = r.child("location")?;
+        let l = loc.reader();
+        let kind = l.child("kind")?;
+        let location = match kind.reader().str()? {
+            "map" => {
+                l.only(&["kind", "map", "tile"])?;
+                Location::OnMap {
+                    map: l.child("map")?.reader().parse()?,
+                    tile: Tile::from_reader(l.child("tile")?.reader())?,
+                }
+            }
+            "container" => {
+                l.only(&["kind", "owner", "container"])?;
+                Location::InContainer(Parent {
+                    owner: l.child("owner")?.reader().parse()?,
+                    container: l.child("container")?.reader().str()?.to_owned(),
+                })
+            }
+            other => return Err(kind.reader().err(format!("unknown location kind '{other}'"))),
+        };
+        let mut containers = BTreeMap::new();
+        for (name, child) in r.child("containers")?.reader().entries()? {
+            let slots = child
+                .reader()
+                .list()?
+                .iter()
+                .map(|i| i.reader().parse())
+                .collect::<Result<Vec<EntityId>, _>>()?;
+            containers.insert(name, ContainerState { slots });
+        }
+        Ok(ObjectInstance {
+            id: r.child("id")?.reader().parse()?,
+            template: r.child("template")?.reader().parse()?,
+            location,
+            containers,
+        })
     }
 }
 

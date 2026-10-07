@@ -12,6 +12,7 @@ use crate::map::{MapData, MapError, MapKind, MoveCosts, Tile};
 use crate::object::ObjectInstance;
 use crate::occupancy::{Occupancy, OccupancyError};
 use crate::pawn::{Pawn, Position};
+use crate::read::{ReadError, Reader};
 use crate::rng::Seed;
 use crate::table::Table;
 use crate::time::{Clock, SlotMinutes};
@@ -316,6 +317,146 @@ impl ToCanon for WorldState {
             ("commitments", self.commitments.to_canon()),
             ("probe", self.probe.to_canon()),
         ])
+    }
+}
+
+/// Why a saved world could not be restored.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RestoreError {
+    /// The save was written by a different schema than this build reads (migrate it first).
+    Schema { found: u32, expected: u32 },
+    Read(ReadError),
+    /// A table key does not match the id inside the row.
+    KeyMismatch { table: &'static str, key: String },
+}
+
+impl fmt::Display for RestoreError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RestoreError::Schema { found, expected } => write!(
+                f,
+                "save schema {found} cannot be read directly (this build reads {expected})"
+            ),
+            RestoreError::Read(e) => write!(f, "{e}"),
+            RestoreError::KeyMismatch { table, key } => {
+                write!(f, "{table}: key '{key}' does not match the row's id")
+            }
+        }
+    }
+}
+
+impl std::error::Error for RestoreError {}
+
+impl From<ReadError> for RestoreError {
+    fn from(e: ReadError) -> Self {
+        RestoreError::Read(e)
+    }
+}
+
+fn read_table<T>(
+    r: &Reader<'_>,
+    name: &'static str,
+    decode: impl Fn(Reader<'_>) -> Result<T, ReadError>,
+    id_of: impl Fn(&T) -> EntityId,
+) -> Result<Table<T>, RestoreError> {
+    let mut table = Table::new();
+    for (key, child) in r.child(name)?.reader().entries()? {
+        let row = decode(child.reader())?;
+        if id_of(&row).to_string() != key {
+            return Err(RestoreError::KeyMismatch { table: name, key });
+        }
+        // Keys are unique in an object, so the row ids are too.
+        let _ = table.insert(id_of(&row), row);
+    }
+    Ok(table)
+}
+
+impl WorldState {
+    /// Decodes a world from its canonical form and rebuilds derived state. Unknown fields, bad ranges,
+    /// inconsistent tables and wrong schemas are refused with a path to the problem; the caller (the
+    /// persistence layer) runs migrations first and `validate_containment` afterwards.
+    pub fn from_canon(c: &Canon) -> Result<WorldState, RestoreError> {
+        let r = Reader::new(c, "");
+        r.only(&[
+            "schema",
+            "meta",
+            "settings",
+            "clock",
+            "id_counters",
+            "rng_counters",
+            "maps",
+            "objects",
+            "pawns",
+            "commitments",
+            "probe",
+        ])?;
+        let found = r.child("schema")?.reader().u32()?;
+        if found != SCHEMA_VERSION {
+            return Err(RestoreError::Schema {
+                found,
+                expected: SCHEMA_VERSION,
+            });
+        }
+        let meta_c = r.child("meta")?;
+        let meta_r = meta_c.reader();
+        meta_r.only(&["name", "seed_text"])?;
+        let meta = WorldMeta {
+            name: meta_r.child("name")?.reader().str()?.to_owned(),
+            seed_text: meta_r.child("seed_text")?.reader().str()?.to_owned(),
+        };
+        let settings_c = r.child("settings")?;
+        let s = settings_c.reader();
+        s.only(&["movement", "slot_minutes"])?;
+        let m_c = s.child("movement")?;
+        let m = m_c.reader();
+        m.only(&[
+            "max_repaths",
+            "max_wait_ticks",
+            "move_ticks_per_tile",
+            "path_expansion_cap",
+        ])?;
+        let slot_c = s.child("slot_minutes")?;
+        let settings = WorldSettings {
+            slot_minutes: SlotMinutes::new(slot_c.reader().u32()?)
+                .map_err(|e| slot_c.reader().err(e.to_string()))?,
+            movement: MovementSettings {
+                max_repaths: m.child("max_repaths")?.reader().u32()?,
+                max_wait_ticks: m.child("max_wait_ticks")?.reader().u32()?,
+                move_ticks_per_tile: m.child("move_ticks_per_tile")?.reader().u32()?,
+                path_expansion_cap: m.child("path_expansion_cap")?.reader().u32()?,
+            },
+        };
+        let clock_c = r.child("clock")?;
+        clock_c.reader().only(&["tick"])?;
+        let clock = Clock::from_tick(clock_c.reader().child("tick")?.reader().u64()?);
+        let mut rng_counters = BTreeMap::new();
+        for (name, child) in r.child("rng_counters")?.reader().entries()? {
+            rng_counters.insert(name, child.reader().u32()?);
+        }
+        let probe_c = r.child("probe")?;
+        let p = probe_c.reader();
+        p.only(&["days", "minutes", "value"])?;
+        let probe = Probe {
+            days: p.child("days")?.reader().u64()?,
+            minutes: p.child("minutes")?.reader().u64()?,
+            value: p.child("value")?.reader().i64()?,
+        };
+        let mut world = WorldState {
+            schema: found,
+            meta,
+            settings,
+            clock,
+            id_counters: IdCounters::from_reader(r.child("id_counters")?.reader())?,
+            rng_counters,
+            maps: read_table(&r, "maps", MapData::from_reader, |m| m.id)?,
+            objects: read_table(&r, "objects", ObjectInstance::from_reader, |o| o.id)?,
+            pawns: read_table(&r, "pawns", Pawn::from_reader, |p| p.id)?,
+            commitments: read_table(&r, "commitments", Commitment::from_reader, |c| c.id)?,
+            probe,
+            occupancy: Occupancy::new(),
+        };
+        world.rebuild_derived();
+        Ok(world)
     }
 }
 

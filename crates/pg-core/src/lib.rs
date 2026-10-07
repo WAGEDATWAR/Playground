@@ -26,8 +26,11 @@ pub mod occupancy;
 pub mod path;
 pub mod pawn;
 pub mod pipeline;
+pub mod read;
 pub mod reason;
 pub mod replay;
+#[cfg(test)]
+mod restore_tests;
 pub mod rng;
 pub mod schedule;
 pub mod sim;

@@ -5,6 +5,7 @@
 //! of the authoritative (hashed) state: they are derived bookkeeping.
 
 use crate::canon::{Canon, ToCanon};
+use crate::read::{ReadError, Reader};
 use crate::id::EntityId;
 use std::collections::BTreeSet;
 use std::fmt;
@@ -58,6 +59,10 @@ impl ToCanon for Tile {
 }
 
 impl Tile {
+    pub fn from_reader(r: Reader<'_>) -> Result<Tile, ReadError> {
+        Tile::from_canon(r.value()).ok_or_else(|| r.err("expected a tile [x, y] of 32-bit integers"))
+    }
+
     pub fn from_canon(c: &Canon) -> Option<Tile> {
         let l = c.as_list()?;
         match l {
@@ -80,6 +85,11 @@ pub enum Dir4 {
 }
 
 impl Dir4 {
+    /// Inverse of [`Dir4::name`].
+    pub fn from_name(name: &str) -> Option<Dir4> {
+        Dir4::ALL.into_iter().find(|d| d.name() == name)
+    }
+
     pub const ALL: [Dir4; 4] = [Dir4::N, Dir4::E, Dir4::S, Dir4::W];
 
     pub const fn delta(self) -> (i32, i32) {
@@ -398,6 +408,73 @@ impl MoveCosts {
             .filter(|c| *c > 0)
             .min()
             .map_or(1, u32::from)
+    }
+}
+
+fn unhex(r: Reader<'_>, bytes: usize) -> Result<Vec<u8>, ReadError> {
+    let text = r.str()?;
+    if text.len() != bytes * 2 {
+        return Err(r.err(format!(
+            "expected {} hex characters, found {}",
+            bytes * 2,
+            text.len()
+        )));
+    }
+    text.as_bytes()
+        .chunks(2)
+        .map(|pair| match pair {
+            [a, b] => {
+                let hi = char::from(*a).to_digit(16);
+                let lo = char::from(*b).to_digit(16);
+                match (hi, lo) {
+                    (Some(hi), Some(lo)) => Ok((hi * 16 + lo) as u8),
+                    _ => Err(r.err("not a hex string")),
+                }
+            }
+            _ => Err(r.err("odd hex length")),
+        })
+        .collect()
+}
+
+impl MapData {
+    /// Decodes the canonical form. Sizes are checked before any tile array is allocated, so a hostile
+    /// save cannot ask for a huge map.
+    pub fn from_reader(r: Reader<'_>) -> Result<MapData, ReadError> {
+        r.only(&[
+            "id", "kind", "w", "h", "terrain", "surface", "blocked", "zone_id", "portals",
+        ])?;
+        let id: EntityId = r.child("id")?.reader().parse()?;
+        let kind_child = r.child("kind")?;
+        let kind = match kind_child.reader().str()? {
+            "overworld" => MapKind::Overworld,
+            "interior" => MapKind::Interior,
+            other => return Err(kind_child.reader().err(format!("unknown map kind '{other}'"))),
+        };
+        let (w, h) = (r.child("w")?.reader().i32()?, r.child("h")?.reader().i32()?);
+        let mut m = MapData::new(id, kind, w, h).map_err(|e| r.err(e.to_string()))?;
+        let n = m.terrain.len();
+        m.terrain = unhex(r.child("terrain")?.reader(), n)?;
+        m.surface = unhex(r.child("surface")?.reader(), n)?;
+        m.blocked = unhex(r.child("blocked")?.reader(), n)?;
+        let zones = unhex(r.child("zone_id")?.reader(), n * 2)?;
+        m.zone_id = zones
+            .chunks(2)
+            .map(|c| match c {
+                [a, b] => u16::from_le_bytes([*a, *b]),
+                _ => 0,
+            })
+            .collect();
+        for item in r.child("portals")?.reader().list()? {
+            let p = item.reader();
+            p.only(&["id", "tile", "to_map", "to_tile"])?;
+            m.portals.push(Portal {
+                id: p.child("id")?.reader().str()?.to_owned(),
+                tile: Tile::from_reader(p.child("tile")?.reader())?,
+                to_map: p.child("to_map")?.reader().parse()?,
+                to_tile: Tile::from_reader(p.child("to_tile")?.reader())?,
+            });
+        }
+        Ok(m)
     }
 }
 

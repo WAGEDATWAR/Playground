@@ -8,6 +8,7 @@
 //! the lexicographic order of the textual form.
 
 use crate::canon::{Canon, ToCanon};
+use crate::read::{ReadError, Reader};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
@@ -224,6 +225,23 @@ impl ToCanon for IdCounters {
                 .map(|(kind, n)| (kind.prefix().to_owned(), n.to_canon()))
                 .collect(),
         )
+    }
+}
+
+impl IdCounters {
+    /// Decodes the canonical form: `{ "<kind prefix>": <next counter>, ... }`.
+    pub fn from_reader(r: Reader<'_>) -> Result<IdCounters, ReadError> {
+        let mut c = IdCounters::new();
+        for (prefix, child) in r.entries()? {
+            let kind = Kind::from_prefix(&prefix)
+                .ok_or_else(|| child.reader().err(format!("unknown id kind '{prefix}'")))?;
+            let next = child.reader().u32()?;
+            if next == 0 {
+                return Err(child.reader().err("an id counter starts at 1"));
+            }
+            c.next.insert(kind, next);
+        }
+        Ok(c)
     }
 }
 

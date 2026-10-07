@@ -11,6 +11,7 @@
 
 use crate::canon::{Canon, ToCanon};
 use crate::id::EntityId;
+use crate::read::{ReadError, Reader};
 use crate::reason::ReasonCode;
 use crate::rng::{Key, Rng, Seed, Stream};
 use pg_content::ActionId;
@@ -863,6 +864,101 @@ pub fn insert_urgent(s: &mut DaySchedule, from: u32, u: &UrgentNeed) -> Option<u
     }
     reflow(s, displaced);
     placed
+}
+
+impl Priority {
+    pub fn from_number(n: u8) -> Option<Priority> {
+        [
+            Priority::Duty,
+            Priority::UrgentNeed,
+            Priority::Commitment,
+            Priority::Chore,
+            Priority::Leisure,
+        ]
+        .into_iter()
+        .find(|p| p.number() == n)
+    }
+}
+
+impl Reservation {
+    pub fn from_reader(r: Reader<'_>) -> Result<Reservation, ReadError> {
+        r.only(&[
+            "id",
+            "priority",
+            "action",
+            "params",
+            "start",
+            "len",
+            "urgency",
+            "created_tick",
+            "reschedulable",
+            "commitment",
+            "reason",
+        ])?;
+        let pr = r.child("priority")?;
+        let priority = Priority::from_number(pr.reader().u8()?)
+            .ok_or_else(|| pr.reader().err("priority must be 1..=5"))?;
+        Ok(Reservation {
+            id: r.child("id")?.reader().u32()?,
+            priority,
+            action: r.child("action")?.reader().parse()?,
+            params: r.child("params")?.reader().value().clone(),
+            start: r.child("start")?.reader().u32()?,
+            len: r.child("len")?.reader().u32()?,
+            urgency: r.child("urgency")?.reader().u32()?,
+            created_tick: r.child("created_tick")?.reader().u64()?,
+            reschedulable: r.child("reschedulable")?.reader().bool()?,
+            commitment: match r.maybe("commitment")? {
+                Some(c) => Some(c.reader().parse()?),
+                None => None,
+            },
+            reason: ReasonCode::from_reader(r.child("reason")?.reader())?,
+        })
+    }
+}
+
+impl Dropped {
+    pub fn from_reader(r: Reader<'_>) -> Result<Dropped, ReadError> {
+        r.only(&["what", "reason"])?;
+        Ok(Dropped {
+            what: r.child("what")?.reader().str()?.to_owned(),
+            reason: ReasonCode::from_reader(r.child("reason")?.reader())?,
+        })
+    }
+}
+
+/// The most slots a day can have (one-minute slots).
+const MAX_SLOTS: u32 = 1_440;
+
+impl DaySchedule {
+    /// Decodes and re-validates a schedule: ranges, overlaps and ids are all checked, so a corrupt save is
+    /// refused rather than loaded into an inconsistent state.
+    pub fn from_reader(r: Reader<'_>) -> Result<DaySchedule, ReadError> {
+        r.only(&["day", "slots", "reservations", "next_id", "notes", "dropped"])?;
+        let day = r.child("day")?.reader().u64()?;
+        let slots = r.child("slots")?.reader().u32()?;
+        if slots == 0 || slots > MAX_SLOTS {
+            return Err(r.err(format!("a day has 1..={MAX_SLOTS} slots, found {slots}")));
+        }
+        let mut s = DaySchedule::new(day, slots);
+        s.next_id = r.child("next_id")?.reader().u32()?;
+        for item in r.child("reservations")?.reader().list()? {
+            let res = Reservation::from_reader(item.reader())?;
+            let id = res.id;
+            s.place(res).map_err(|e| {
+                item.reader()
+                    .err(format!("reservation {id} cannot be placed: {e:?}"))
+            })?;
+        }
+        for item in r.child("notes")?.reader().list()? {
+            s.notes.push(ReasonCode::from_reader(item.reader())?);
+        }
+        for item in r.child("dropped")?.reader().list()? {
+            s.dropped.push(Dropped::from_reader(item.reader())?);
+        }
+        s.check_invariants().map_err(|e| r.err(e))?;
+        Ok(s)
+    }
 }
 
 #[cfg(test)]

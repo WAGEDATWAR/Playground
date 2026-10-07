@@ -4,6 +4,7 @@
 use crate::canon::{Canon, ToCanon};
 use crate::id::EntityId;
 use crate::map::{Dir4, Tile};
+use crate::read::{ReadError, Reader};
 use crate::reason::ReasonCode;
 use crate::schedule::DaySchedule;
 use pg_content::ActionId;
@@ -249,6 +250,170 @@ impl ToCanon for Pawn {
                     .map_or(Canon::Null, ToCanon::to_canon),
             ),
         ])
+    }
+}
+
+impl Position {
+    pub fn from_reader(r: Reader<'_>) -> Result<Position, ReadError> {
+        r.only(&["map", "tile"])?;
+        Ok(Position {
+            map: r.child("map")?.reader().parse()?,
+            tile: Tile::from_reader(r.child("tile")?.reader())?,
+        })
+    }
+}
+
+impl Route {
+    pub fn from_reader(r: Reader<'_>) -> Result<Route, ReadError> {
+        r.only(&[
+            "goal",
+            "path",
+            "next",
+            "since_step",
+            "waited",
+            "repaths",
+            "needs_repath",
+        ])?;
+        let path = r
+            .child("path")?
+            .reader()
+            .list()?
+            .iter()
+            .map(|t| Tile::from_reader(t.reader()))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Route {
+            goal: Tile::from_reader(r.child("goal")?.reader())?,
+            path,
+            next: r.child("next")?.reader().usize()?,
+            since_step: r.child("since_step")?.reader().u32()?,
+            waited: r.child("waited")?.reader().u32()?,
+            repaths: r.child("repaths")?.reader().u32()?,
+            needs_repath: r.child("needs_repath")?.reader().bool()?,
+        })
+    }
+}
+
+impl Intent {
+    pub fn from_reader(r: Reader<'_>) -> Result<Intent, ReadError> {
+        match r.value() {
+            Canon::Str(s) if s == "free" => Ok(Intent::Free),
+            Canon::Map(_) => {
+                r.only(&["reservation"])?;
+                Ok(Intent::Reservation(r.child("reservation")?.reader().u32()?))
+            }
+            _ => Err(r.err("expected \"free\" or {\"reservation\": id}")),
+        }
+    }
+}
+
+impl Step {
+    pub fn from_reader(r: Reader<'_>) -> Result<Step, ReadError> {
+        if let Some(m) = r.maybe("move_to")? {
+            let m = m.reader();
+            m.only(&["goal", "within"])?;
+            return Ok(Step::MoveTo {
+                goal: Tile::from_reader(m.child("goal")?.reader())?,
+                within: m.child("within")?.reader().u32()?,
+            });
+        }
+        if let Some(t) = r.maybe("perform_until")? {
+            return Ok(Step::PerformUntil(t.reader().u64()?));
+        }
+        Err(r.err("expected a step: move_to or perform_until"))
+    }
+}
+
+impl Task {
+    pub fn from_reader(r: Reader<'_>) -> Result<Task, ReadError> {
+        r.only(&[
+            "reservation",
+            "action",
+            "steps",
+            "current",
+            "moving",
+            "interruptible",
+        ])?;
+        let steps = r
+            .child("steps")?
+            .reader()
+            .list()?
+            .iter()
+            .map(|s| Step::from_reader(s.reader()))
+            .collect::<Result<Vec<_>, _>>()?;
+        let current = r.child("current")?.reader().usize()?;
+        if current > steps.len() {
+            return Err(r.err("current step is past the end"));
+        }
+        Ok(Task {
+            reservation: r.child("reservation")?.reader().u32()?,
+            action: r.child("action")?.reader().parse()?,
+            steps,
+            current,
+            moving: r.child("moving")?.reader().bool()?,
+            interruptible: r.child("interruptible")?.reader().bool()?,
+        })
+    }
+}
+
+impl Replan {
+    pub fn from_reader(r: Reader<'_>) -> Result<Replan, ReadError> {
+        r.only(&["from", "why"])?;
+        Ok(Replan {
+            from: r.child("from")?.reader().u32()?,
+            why: r.child("why")?.reader().str()?.to_owned(),
+        })
+    }
+}
+
+impl Pawn {
+    pub fn from_reader(r: Reader<'_>) -> Result<Pawn, ReadError> {
+        r.only(&[
+            "id",
+            "name",
+            "position",
+            "facing",
+            "route",
+            "schedule",
+            "intent",
+            "task",
+            "replan",
+            "move_failure",
+            "last_failure",
+        ])?;
+        let facing_child = r.child("facing")?;
+        let facing = Dir4::from_name(facing_child.reader().str()?)
+            .ok_or_else(|| facing_child.reader().err("expected N, E, S or W"))?;
+        Ok(Pawn {
+            id: r.child("id")?.reader().parse()?,
+            name: r.child("name")?.reader().str()?.to_owned(),
+            position: Position::from_reader(r.child("position")?.reader())?,
+            facing,
+            route: match r.maybe("route")? {
+                Some(c) => Some(Route::from_reader(c.reader())?),
+                None => None,
+            },
+            schedule: match r.maybe("schedule")? {
+                Some(c) => Some(DaySchedule::from_reader(c.reader())?),
+                None => None,
+            },
+            intent: Intent::from_reader(r.child("intent")?.reader())?,
+            task: match r.maybe("task")? {
+                Some(c) => Some(Task::from_reader(c.reader())?),
+                None => None,
+            },
+            replan: match r.maybe("replan")? {
+                Some(c) => Some(Replan::from_reader(c.reader())?),
+                None => None,
+            },
+            move_failure: match r.maybe("move_failure")? {
+                Some(c) => Some(c.reader().str()?.to_owned()),
+                None => None,
+            },
+            last_failure: match r.maybe("last_failure")? {
+                Some(c) => Some(ReasonCode::from_reader(c.reader())?),
+                None => None,
+            },
+        })
     }
 }
 

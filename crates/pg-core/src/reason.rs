@@ -6,6 +6,7 @@
 //! and dropped at day rollover, except those attached to memories or events.
 
 use crate::canon::{Canon, ToCanon};
+use crate::read::{ReadError, Reader};
 use std::collections::BTreeMap;
 
 /// Who produced a decision.
@@ -156,6 +157,33 @@ impl ToCanon for ReasonCode {
             ),
             ("params", Canon::Map(self.params.clone())),
         ])
+    }
+}
+
+impl ReasonCode {
+    /// Decodes the canonical form written by [`ToCanon`].
+    pub fn from_reader(r: Reader<'_>) -> Result<ReasonCode, ReadError> {
+        r.only(&["code", "source", "params"])?;
+        let code = r.child("code")?.reader().str()?.to_owned();
+        let source_child = r.child("source")?;
+        let text = source_child.reader().str()?;
+        let source = if text == "builtin" {
+            Source::Builtin
+        } else if let Some(pack) = text.strip_prefix("pack:") {
+            Source::Pack(pack.to_owned())
+        } else {
+            return Err(source_child.reader().err("expected 'builtin' or 'pack:<id>'"));
+        };
+        let params_child = r.child("params")?;
+        let params = match params_child.reader().value() {
+            Canon::Map(m) => m.clone(),
+            _ => return Err(params_child.reader().err("expected an object")),
+        };
+        Ok(ReasonCode {
+            code,
+            source,
+            params,
+        })
     }
 }
 
