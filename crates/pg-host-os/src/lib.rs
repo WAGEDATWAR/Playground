@@ -1,6 +1,11 @@
 //! Real implementations of the `pg-host` traits for desktop operating systems. Blueprint §3.
 //!
-//! 0.6 provides [`FsStorage`]; the credential store, HTTPS, dialogs and audio follow in 0.7.
+//! 0.6 provided [`FsStorage`]; 0.7 adds the credential store, HTTPS and the clock. Native dialogs arrive with
+//! the app shell (0.10), where they are first needed; audio is a Stage 11 item.
+
+pub mod os_services;
+
+pub use os_services::{KeyringSecretStore, SystemClock, UreqNet};
 
 use pg_host::{check_name, BlobInfo, Storage};
 use std::fs;

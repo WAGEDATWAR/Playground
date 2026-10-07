@@ -6,4 +6,6 @@ license.workspace = true
 publish = false
 
 [dependencies]
+keyring = "4.2.0"
 pg-host = { path = "../../crates/pg-host" }
+ureq = "3.4.2"
