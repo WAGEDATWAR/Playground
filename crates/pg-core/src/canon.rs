@@ -31,6 +31,49 @@ impl Canon {
         Canon::Map(pairs.into_iter().map(|(k, v)| (k.into(), v)).collect())
     }
 
+    /// The value under `key`, if this is a map that has it.
+    pub fn get(&self, key: &str) -> Option<&Canon> {
+        match self {
+            Canon::Map(m) => m.get(key),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Canon::Str(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Canon::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    pub fn as_i64(&self) -> Option<i64> {
+        match self {
+            Canon::Int(v) => i64::try_from(*v).ok(),
+            _ => None,
+        }
+    }
+
+    pub fn as_u64(&self) -> Option<u64> {
+        match self {
+            Canon::Int(v) => u64::try_from(*v).ok(),
+            _ => None,
+        }
+    }
+
+    pub fn as_list(&self) -> Option<&[Canon]> {
+        match self {
+            Canon::List(l) => Some(l),
+            _ => None,
+        }
+    }
+
     /// The canonical text.
     pub fn to_canonical_string(&self) -> String {
         let mut out = String::new();
@@ -93,6 +136,32 @@ fn write_string(s: &str, out: &mut String) {
         }
     }
     out.push('"');
+}
+
+/// A canonical value did not have the expected shape when decoding.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CanonError(pub String);
+
+impl CanonError {
+    pub fn new(msg: impl Into<String>) -> CanonError {
+        CanonError(msg.into())
+    }
+}
+
+impl std::fmt::Display for CanonError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for CanonError {}
+
+impl Canon {
+    /// `map[key]` or an error naming the missing key.
+    pub fn field(&self, key: &str) -> Result<&Canon, CanonError> {
+        self.get(key)
+            .ok_or_else(|| CanonError(format!("missing field '{key}'")))
+    }
 }
 
 /// Types that have a canonical form.

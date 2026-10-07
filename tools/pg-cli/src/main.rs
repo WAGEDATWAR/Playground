@@ -1,7 +1,7 @@
 //! `pg`: headless developer tooling (Blueprint §20). Developer-only; never part of the shipped game.
 //!
-//! Milestone 0.1 commands: `selftest`, `rand`, `hash`, `id`. Later milestones add `sim`, `replay`,
-//! `content`, `schedule`, `save`, `pack`, `bench`.
+//! Commands so far: `selftest`, `rand`, `hash`, `id` (0.1); `sim`, `replay`, `time`, `pipeline` (0.2).
+//! Later milestones add `content`, `schedule`, `save`, `pack`, `bench`.
 
 use pg_core::canon::Canon;
 use pg_core::hash::hash_canon;
@@ -9,6 +9,8 @@ use pg_core::id::{EntityId, Kind};
 use pg_core::rng::{Key, Rng, Seed};
 use pg_core::vectors;
 use std::process::ExitCode;
+
+mod sim_cmds;
 
 const USAGE: &str = "\
 pg - Playground developer tool
@@ -21,6 +23,15 @@ USAGE:
         prefix with int: / id: / str: to force a type.
     pg hash <file.json> [--show]
         Parse JSON (integers only), print its canonical form (--show) and its BLAKE3 state hash.
+    pg sim --seed <text> [--days <n> | --ticks <n>] [--name <text>] [--nudge <tick>:<amount>]...
+           [--slot <tick>:<minutes>]... [--log <file>] [--pretty] [--events]
+        Run the dev simulation headless; print the state hash at every day boundary (with per-table
+        hashes) and optionally write a replay log.
+    pg replay <log.json> [--snapshot-at <tick>]
+        Re-run a replay log and verify every recorded hash. With --snapshot-at, also verify that
+        snapshotting at that tick and resuming gives an identical result. Exit 1 on any mismatch.
+    pg time <tick> [--slot-minutes <m>]    Show day / clock time / slot / boundary flags for a tick.
+    pg pipeline               Show the tick pipeline: systems in execution order and their cadence.
     pg id <text>              Parse an id such as pawn_1a and show its parts.
     pg id <kind> <counter>    Format an id from a kind and a decimal counter.
     pg version
@@ -33,6 +44,10 @@ fn main() -> ExitCode {
         Some("rand") => rand_cmd(&args[1..]),
         Some("hash") => hash_cmd(&args[1..]),
         Some("id") => id_cmd(&args[1..]),
+        Some("sim") => sim_cmds::sim_cmd(&args[1..]),
+        Some("replay") => sim_cmds::replay_cmd(&args[1..]),
+        Some("time") => sim_cmds::time_cmd(&args[1..]),
+        Some("pipeline") => Ok(sim_cmds::pipeline_cmd()),
         Some("version" | "--version" | "-V") => {
             println!("pg {}", env!("CARGO_PKG_VERSION"));
             Ok(ExitCode::SUCCESS)
@@ -186,7 +201,7 @@ fn rand_cmd(args: &[String]) -> Result<ExitCode, String> {
 }
 
 /// Converts parsed JSON to a canonical value, rejecting anything that is not integer-only.
-fn json_to_canon(v: &serde_json::Value) -> Result<Canon, String> {
+pub(crate) fn json_to_canon(v: &serde_json::Value) -> Result<Canon, String> {
     use serde_json::Value;
     Ok(match v {
         Value::Null => Canon::Null,

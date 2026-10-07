@@ -9,9 +9,16 @@
 )]
 
 pub mod canon;
+pub mod dev;
 pub mod hash;
 pub mod id;
+pub mod input;
 pub mod num;
+pub mod pipeline;
+pub mod replay;
 pub mod rng;
+pub mod sim;
 pub mod table;
+pub mod time;
 pub mod vectors;
+pub mod world;

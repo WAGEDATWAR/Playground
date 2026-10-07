@@ -1,0 +1,65 @@
+{
+  "day_hashes": [
+    {
+      "day": 1,
+      "hash": "4add9b147dc8f8f535d836f91c6ab73f21c1ee0590d49d7efef3bc8742760136",
+      "tick": 14400
+    },
+    {
+      "day": 2,
+      "hash": "9b4cfc4ab7b45534ca1c8fb87e84d1df311067eb6e98d8e8c217714d6d0d54ba",
+      "tick": 28800
+    },
+    {
+      "day": 3,
+      "hash": "1da2496781f08e03592066d7bdee8d4f407bf4a1326826f3c3284efbebfd5473",
+      "tick": 43200
+    }
+  ],
+  "final_hash": "1da2496781f08e03592066d7bdee8d4f407bf4a1326826f3c3284efbebfd5473",
+  "format": "playground-replay",
+  "inputs": [
+    {
+      "input": {
+        "actor": null,
+        "cmd": {
+          "amount": 123,
+          "type": "dev_nudge"
+        },
+        "kind": "command"
+      },
+      "seq": 0,
+      "tick": 50
+    },
+    {
+      "input": {
+        "change": {
+          "key": "slot_minutes",
+          "value": 60
+        },
+        "kind": "setting"
+      },
+      "seq": 2,
+      "tick": 9000
+    },
+    {
+      "input": {
+        "actor": null,
+        "cmd": {
+          "amount": -77,
+          "type": "dev_nudge"
+        },
+        "kind": "command"
+      },
+      "seq": 1,
+      "tick": 20000
+    }
+  ],
+  "profile": "dev",
+  "ticks": 43200,
+  "version": 1,
+  "world": {
+    "name": "Golden Town",
+    "seed_text": "playground"
+  }
+}
