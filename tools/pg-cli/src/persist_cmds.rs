@@ -158,8 +158,12 @@ fn list(args: &[String]) -> Result<ExitCode, String> {
                         g.generation, g.day, g.play_ticks, g.saved_iso
                     )
                 });
+                let pop = m
+                    .summary
+                    .as_ref()
+                    .map_or(String::new(), |s| format!("  {} pawn(s)", s.population));
                 println!(
-                    "  {id:<20} {:?} seed {:?}  {g}{}",
+                    "  {id:<20} {:?} seed {:?}{pop}  {g}{}",
                     m.name,
                     m.seed_text,
                     if store.is_marked_damaged(&id) {

@@ -6,3 +6,5 @@ license.workspace = true
 publish = false
 
 [dependencies]
+wgpu = "30.0.1"
+winit = "0.30.13"

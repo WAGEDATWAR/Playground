@@ -38,7 +38,7 @@ Go back to the latest work with `git checkout main`.
 cargo test --workspace
 ```
 
-The first run compiles everything (a few minutes); later runs are fast. You should see `test result: ok.` lines and no `FAILED`. At milestone 0.7 that is about 506 tests. To run only one crate or a few tests:
+The first run compiles everything (a few minutes); later runs are fast. You should see `test result: ok.` lines and no `FAILED`. At milestone 0.8 that is about 585 tests. `cargo run -p pg-cli -- check` runs every developer check in one go (18 of them). To run only one crate or a few tests:
 
 ```bash
 cargo test -p pg-core                  # just the simulation core

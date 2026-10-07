@@ -28,6 +28,7 @@ pub struct SimFactory {
     pipeline: Arc<PipelineFn>,
     content: Option<Arc<ContentSet>>,
     threads: usize,
+    profiler: Option<crate::profile::Profiler>,
 }
 
 impl SimFactory {
@@ -53,7 +54,24 @@ impl SimFactory {
             pipeline,
             content,
             threads: threads.max(1),
+            profiler: None,
         }
+    }
+
+    /// The same factory with every pipeline it builds timed by `profiler`.
+    pub fn with_profiler(&self, profiler: Option<crate::profile::Profiler>) -> SimFactory {
+        SimFactory {
+            profiler,
+            ..self.clone()
+        }
+    }
+
+    fn build_pipeline(&self) -> Pipeline {
+        let mut p = (self.pipeline)();
+        if let Some(prof) = &self.profiler {
+            p.set_probe(Some(prof.probe()));
+        }
+        p
     }
 
     pub fn threads(&self) -> usize {
@@ -77,11 +95,11 @@ impl SimFactory {
     }
 
     pub fn new_sim(&self, world: WorldState) -> Sim {
-        self.configure(Sim::new(world, (self.pipeline)()))
+        self.configure(Sim::new(world, self.build_pipeline()))
     }
 
     pub fn restore(&self, snapshot: SimSnapshot) -> Sim {
-        self.configure(Sim::restore(snapshot, (self.pipeline)()))
+        self.configure(Sim::restore(snapshot, self.build_pipeline()))
     }
 }
 

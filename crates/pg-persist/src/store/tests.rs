@@ -426,6 +426,12 @@ fn manifests_round_trip() {
         seed_text: "s".into(),
         schema: 3,
         content_refs: refs(),
+        summary: Some(WorldSummary {
+            population: 12,
+            maps: 1,
+            objects: 3,
+            thumbnail: Some("worlds/x/thumb.5.png".into()),
+        }),
         generations: vec![GenerationInfo {
             generation: 5,
             state_hash: "ab".into(),
@@ -440,4 +446,79 @@ fn manifests_round_trip() {
     let mut bad = m.clone();
     bad.generations = Vec::new();
     assert!(Manifest::from_reader(Root::new(bad.to_canon()).reader()).is_err());
+}
+
+#[test]
+fn saves_record_a_summary_for_the_saved_worlds_list() {
+    let mem = MemStorage::new();
+    let store = SlotStore::new(&mem);
+    let w = world_at(2_000);
+    store.save("town", &w, &refs(), "t").unwrap();
+    let m = store.manifest("town").unwrap();
+    let s = m.summary.clone().unwrap();
+    assert_eq!(
+        (s.population, s.maps, s.objects, s.thumbnail),
+        (4, 1, 0, None)
+    );
+    assert_eq!(
+        (m.name.as_str(), m.current().unwrap().day),
+        ("Slot Town", 0)
+    );
+}
+
+#[test]
+fn manifests_written_before_summaries_still_load() {
+    let mem = MemStorage::new();
+    let store = SlotStore::new(&mem);
+    store.save("town", &world_at(500), &[], "t").unwrap();
+    // Strip the summary from the stored manifest, as an older build would have written it.
+    let text = String::from_utf8(mem.get_raw("worlds/town/manifest.json").unwrap()).unwrap();
+    let mut doc = json::parse(&text).unwrap();
+    if let Canon::Map(m) = &mut doc {
+        assert!(m.remove("summary").is_some());
+    }
+    mem.put_raw(
+        "worlds/town/manifest.json",
+        doc.to_canonical_string().into_bytes(),
+    );
+    let m = store.manifest("town").unwrap();
+    assert!(m.summary.is_none());
+    assert_eq!(load(&store, "town").unwrap().recovery, Recovery::Clean);
+}
+
+#[test]
+fn thumbnails_are_stored_named_in_the_summary_and_cleaned_up_with_old_generations() {
+    let mem = MemStorage::new();
+    let store = SlotStore::new(&mem);
+    for (i, ticks) in [100u64, 200, 300, 400].into_iter().enumerate() {
+        let png = vec![0x89, b'P', b'N', b'G', i as u8];
+        store
+            .save_with("town", &world_at(ticks), &[], "t", Some(&png))
+            .unwrap();
+    }
+    let m = store.manifest("town").unwrap();
+    assert_eq!(
+        m.summary.unwrap().thumbnail.as_deref(),
+        Some("worlds/town/thumb.4.png")
+    );
+    let thumbs: Vec<String> = mem
+        .names()
+        .into_iter()
+        .filter(|n| n.contains("thumb."))
+        .collect();
+    assert_eq!(
+        thumbs,
+        ["worlds/town/thumb.3.png", "worlds/town/thumb.4.png"],
+        "only the kept generations keep thumbnails"
+    );
+    assert_eq!(mem.get_raw("worlds/town/thumb.4.png").unwrap()[4], 3);
+    // A save without a thumbnail does not claim one.
+    store.save("town", &world_at(500), &[], "t").unwrap();
+    assert!(store
+        .manifest("town")
+        .unwrap()
+        .summary
+        .unwrap()
+        .thumbnail
+        .is_none());
 }

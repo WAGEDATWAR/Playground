@@ -256,11 +256,19 @@ struct Entry {
     system: Box<dyn System>,
 }
 
+/// Observes each system run, so a profiler outside the core can time them (the core itself never reads a
+/// clock). Called immediately before and after every system that runs.
+pub trait SystemProbe: Send {
+    fn begin(&mut self, system: &str);
+    fn end(&mut self, system: &str);
+}
+
 /// The ordered set of systems that make up one tick.
 pub struct Pipeline {
     entries: Vec<Entry>,
     order: Vec<usize>,
     next_seq: u64,
+    probe: Option<Box<dyn SystemProbe>>,
 }
 
 impl Default for Pipeline {
@@ -312,6 +320,7 @@ impl Pipeline {
             entries,
             order: Vec::new(),
             next_seq: 1,
+            probe: None,
         };
         p.rebuild_order();
         p
@@ -400,6 +409,11 @@ impl Pipeline {
             .collect()
     }
 
+    /// Installs (or removes) the system probe.
+    pub fn set_probe(&mut self, probe: Option<Box<dyn SystemProbe>>) {
+        self.probe = probe;
+    }
+
     pub(crate) fn run(
         &mut self,
         world: &mut WorldState,
@@ -418,7 +432,13 @@ impl Pipeline {
                     report.ran.push(entry.system.id().to_owned());
                 }
                 let mut ctx = TickCtx::new(world, flags, report, services);
+                if let Some(p) = self.probe.as_mut() {
+                    p.begin(entry.system.id());
+                }
                 entry.system.run(&mut ctx);
+                if let Some(p) = self.probe.as_mut() {
+                    p.end(entry.system.id());
+                }
             }
         }
     }

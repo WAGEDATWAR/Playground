@@ -49,6 +49,10 @@ fn state_name(id: &str, generation: u64) -> String {
     format!("worlds/{id}/state.{generation}.pgsave")
 }
 
+fn thumb_name(id: &str, generation: u64) -> String {
+    format!("worlds/{id}/thumb.{generation}.png")
+}
+
 fn damaged_name(id: &str) -> String {
     format!("worlds/{id}/damaged.json")
 }
@@ -63,6 +67,29 @@ pub struct GenerationInfo {
     pub saved_iso: String,
 }
 
+/// What the Saved Worlds screen shows without loading the world (suggestion S-024). Additive: manifests
+/// written before it simply have none.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorldSummary {
+    pub population: u32,
+    pub maps: u32,
+    pub objects: u32,
+    /// Blob name of a small thumbnail image written by the app next to the generation, if any.
+    pub thumbnail: Option<String>,
+}
+
+impl WorldSummary {
+    pub fn of(world: &WorldState) -> WorldSummary {
+        let n = |len: usize| u32::try_from(len).unwrap_or(u32::MAX);
+        WorldSummary {
+            population: n(world.pawns.len()),
+            maps: n(world.maps.len()),
+            objects: n(world.objects.len()),
+            thumbnail: None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Manifest {
     pub name: String,
@@ -71,6 +98,8 @@ pub struct Manifest {
     pub content_refs: Vec<ContentRefRecord>,
     /// Newest first; at most two.
     pub generations: Vec<GenerationInfo>,
+    /// Summary of the newest generation, for listing.
+    pub summary: Option<WorldSummary>,
 }
 
 impl Manifest {
@@ -81,7 +110,7 @@ impl Manifest {
 
 impl ToCanon for Manifest {
     fn to_canon(&self) -> Canon {
-        Canon::map([
+        let mut doc = Canon::map([
             ("format", Canon::str(MANIFEST_FORMAT)),
             ("name", Canon::str(self.name.clone())),
             ("seed_text", Canon::str(self.seed_text.clone())),
@@ -104,7 +133,22 @@ impl ToCanon for Manifest {
                         .collect(),
                 ),
             ),
-        ])
+        ]);
+        if let (Some(sum), Canon::Map(m)) = (&self.summary, &mut doc) {
+            m.insert(
+                "summary".to_owned(),
+                Canon::map([
+                    ("population", sum.population.to_canon()),
+                    ("maps", sum.maps.to_canon()),
+                    ("objects", sum.objects.to_canon()),
+                    (
+                        "thumbnail",
+                        sum.thumbnail.clone().map_or(Canon::Null, Canon::Str),
+                    ),
+                ]),
+            );
+        }
+        doc
     }
 }
 
@@ -117,6 +161,7 @@ impl Manifest {
             "schema",
             "content_refs",
             "generations",
+            "summary",
         ])?;
         if r.child("format")?.reader().str()? != MANIFEST_FORMAT {
             return Err(r.err("not a world manifest"));
@@ -141,7 +186,24 @@ impl Manifest {
         if generations.is_empty() || generations.len() > 2 {
             return Err(r.err("a manifest lists one or two generations"));
         }
+        let summary = match r.maybe("summary")? {
+            None => None,
+            Some(c) => {
+                let sr = c.reader();
+                sr.only(&["population", "maps", "objects", "thumbnail"])?;
+                Some(WorldSummary {
+                    population: sr.child("population")?.reader().u32()?,
+                    maps: sr.child("maps")?.reader().u32()?,
+                    objects: sr.child("objects")?.reader().u32()?,
+                    thumbnail: match sr.maybe("thumbnail")? {
+                        Some(t) => Some(t.reader().str()?.to_owned()),
+                        None => None,
+                    },
+                })
+            }
+        };
         Ok(Manifest {
+            summary,
             name: r.child("name")?.reader().str()?.to_owned(),
             seed_text: r.child("seed_text")?.reader().str()?.to_owned(),
             schema: r.child("schema")?.reader().u32()?,
@@ -306,6 +368,19 @@ impl<'a> SlotStore<'a> {
         content_refs: &[ContentRefRecord],
         saved_iso: &str,
     ) -> Result<SaveReport, SaveError> {
+        self.save_with(world_id, world, content_refs, saved_iso, None)
+    }
+
+    /// Like [`SlotStore::save`], also storing a thumbnail image (PNG bytes made by the app) next to the
+    /// generation; the manifest summary names it.
+    pub fn save_with(
+        &self,
+        world_id: &str,
+        world: &WorldState,
+        content_refs: &[ContentRefRecord],
+        saved_iso: &str,
+        thumbnail: Option<&[u8]>,
+    ) -> Result<SaveReport, SaveError> {
         if !valid_world_id(world_id) {
             return Err(SaveError::BadWorldId(world_id.to_owned()));
         }
@@ -326,6 +401,12 @@ impl<'a> SlotStore<'a> {
         io(self
             .storage
             .write_atomic(&state_name(world_id, generation), &blob))?;
+        let mut summary = WorldSummary::of(world);
+        if let Some(png) = thumbnail {
+            let name = thumb_name(world_id, generation);
+            io(self.storage.write_atomic(&name, png))?;
+            summary.thumbnail = Some(name);
+        }
         // 2. The manifest: the commit point. It keeps the previous generation as the fallback.
         let info = GenerationInfo {
             generation,
@@ -353,6 +434,7 @@ impl<'a> SlotStore<'a> {
             schema: world.schema,
             content_refs: content_refs.to_vec(),
             generations,
+            summary: Some(summary),
         };
         io(self.storage.write_atomic(
             &manifest_name(world_id),
@@ -365,6 +447,15 @@ impl<'a> SlotStore<'a> {
             let name = state_name(world_id, g);
             if self.storage.delete(&name).is_err() {
                 leftovers.push(name);
+            }
+        }
+        // Thumbnails of generations that were removed (or never kept) go too.
+        if let Ok(blobs) = self.storage.list(&format!("{}/thumb.", dir(world_id))) {
+            for b in blobs {
+                let kept = keep.iter().any(|g| b.name == thumb_name(world_id, *g));
+                if !kept {
+                    let _ = self.storage.delete(&b.name);
+                }
             }
         }
         let _ = self.storage.delete(&damaged_name(world_id));

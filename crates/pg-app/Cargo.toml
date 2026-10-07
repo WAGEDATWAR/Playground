@@ -10,3 +10,6 @@ pg-runtime = { path = "../../crates/pg-runtime" }
 pg-render = { path = "../../crates/pg-render" }
 pg-host-os = { path = "../../crates/pg-host-os" }
 pg-ui-model = { path = "../../crates/pg-ui-model" }
+egui = "0.36.2"
+egui-wgpu = "0.36.2"
+egui-winit = "0.36.2"

@@ -18,6 +18,7 @@ mod content_cmds;
 mod events_cmds;
 mod map_cmds;
 mod persist_cmds;
+mod runtime_cmds;
 mod sched_cmds;
 mod settings_cmds;
 mod shared;
@@ -88,6 +89,13 @@ USAGE:
     pg ai test [--provider P] [--model M] [--dry-run]
         Run the connection test, or with --dry-run print the exact request (credentials hidden) without sending it.
     pg ai selfcheck                         Run the AI client with a sentinel key and scan everything for leaks.
+    pg run [--dir D] [--world id] [--seed s --dev-map WxH --dev-pawns N] [--seconds S]
+           [--speed 1x|3x|9x|27x] [--shadow N] [--autosave-minutes M] [--scrub TICK] [--content dir]
+        Run a world on the simulation thread in real time with autosave, optional shadow
+        verification and a final save; creates the slot if absent, loads it if present.
+    pg profile [--dev-map WxH] [--dev-pawns N] [--days D | --ticks N] [--threads N]
+        Time every system over a headless run (default 200 pawns, one day); prints the table.
+    pg tools                  The developer-tool registry (command-line and overlay tools).
     pg events list [category] | show <kind> The typed event catalog: kinds, categories, fields, default visibility.
     pg settings list | get <id> | set <id> <value> | reset <id> [--dir D]
                                             The device settings registry: typed, ranged, validated (default dir ./pg-data).
@@ -126,6 +134,9 @@ fn main() -> ExitCode {
         Some("ai") => ai_cmds::ai_cmd(&args[1..]),
         Some("strings") => strings_cmds::strings_cmd(&args[1..]),
         Some("events") => events_cmds::events_cmd(&args[1..]),
+        Some("profile") => runtime_cmds::profile_cmd(&args[1..]),
+        Some("run") => runtime_cmds::run_cmd(&args[1..]),
+        Some("tools") => Ok(runtime_cmds::tools_cmd()),
         Some("settings") => settings_cmds::settings_cmd(&args[1..]),
         Some("check") => check_cmds::check_cmd(&args[1..]),
         Some("bugbundle") => persist_cmds::bugbundle_cmd(&args[1..]),

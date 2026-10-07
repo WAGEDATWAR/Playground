@@ -4,9 +4,9 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Phase 0 / Milestone 0.7 — accepted (`m0.7`), including the Player2 provider groundwork.** Accepted and tagged: `m0.0`..`m0.7`. Next: **0.8 Runtime, threading and debuggability groundwork**, which also carries the accepted suggestions S-022..S-030 (see `docs/PLAN.md` row 0.8).
+**Phase 0 / Milestone 0.8 — implemented, awaiting CI.** Accepted and tagged: `m0.0`..`m0.7`. 0.8 delivered: settings registry, string tables, event catalog, row-level hashes (replay v4), runtime (worker pool, run states, accumulator, autosave, keyframes/rewind, shadow verification, panic guard with automatic bundle, snapshot publisher, sim thread), manifest summaries, tick profiler, dev-tool registry, `pg run|profile|tools|events|settings|strings`, GUI stack compile-only. 585 tests; `pg check` 18/18. Decisions D-030. No mandatory checkpoint after 0.8; next checkpoint is after 0.9 (ScriptVm spike).
 
-Docs are current: Blueprint v2.7, Roadmap v4.4, Design Document v3.2, D-027 (Player2), D-028 (suggestions placed).
+Docs are current: Blueprint v2.7, Roadmap v4.5, Design Document v3.2.
 
 ## Blocked / waiting on user
 
@@ -14,7 +14,7 @@ Docs are current: Blueprint v2.7, Roadmap v4.4, Design Document v3.2, D-027 (Pla
 
 ## Next up
 
-1. 0.8 in this order: (a) settings registry and string-table core (they touch existing code, so do them before more code exists); (b) event catalog and row-level hashes; (c) runtime: sim thread, command queue, worker pool, `RenderSnapshot`, run states, autosave, panic guard; (d) keyframe ring, automatic bug bundle, shadow verification; (e) manifest summaries; (f) profiling pass and the GUI stack compile-only check.
+1. Push 0.8, check CI on all three OSes (the GUI stack is new there), then tag `m0.8` on acceptance.
 2. 0.9 script spike (checkpoint), 0.10 app shell and graphical main menu (checkpoint), 0.11 Stage 0 gate.
 3. Prune dev scaffolding as real systems land (D-009).
 
@@ -48,3 +48,4 @@ Python is available for scripts (`scripts/check_deps.py`). Avoid bash heredocs c
 - 2026-10-07: **0.6 persistence**: see Current focus. Findings: `Canon` key order vs RFC 8785 (D-022); only the fastest zstd level exists in the pure-Rust encoder; a replay log is tiny, so the useful compression and trimming target is the world snapshot in bundles.
 - 2026-10-07: **0.7 host services and AI client skeleton**: see Current focus. Findings: real providers return floats, so the AI boundary uses `serde_json` instead of the core parser; the keyring ecosystem changed shape (v4, per-platform store crates behind a `v1` feature); `webpki-roots` needs a data-license entry in `deny.toml`.
 - 2026-10-07: Accepted 0.7. Added Player2 as a provider (D-027): adapter, provider-chosen model, free credits check, device-code sign-in protocol (`pg_ai::login`), `pg ai login`; 506 tests. Accepted S-022..S-030 and placed them (D-028); specs bumped to Blueprint v2.7, Roadmap v4.4, Design Document v3.2.
+- 2026-10-07: **0.8 runtime and debuggability groundwork**: see Current focus. Findings: a persistent pool cannot host borrowed path jobs without `unsafe` (D-030); 200 pawns cost 0.10 ms per tick, so S-017 is not needed yet; the GUI stack needed three license/advisory entries in `deny.toml`.
