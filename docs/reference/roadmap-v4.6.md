@@ -1,9 +1,10 @@
 # Playground — Native Desktop Product & Build Roadmap
 
-**Version:** 4.5 · **Last updated:** 2026-10-07 **Basis:** Roadmap v4.4 (itself based on v4.0 and v3.0)
+**Version:** 4.6 · **Last updated:** 2026-10-08 **Basis:** Roadmap v4.5 (itself based on v4.0 and v3.0)
 
 ## 1. What changed from v3.0
 
+- **v4.6:** milestone 0.9 is accepted. Accepted suggestions S-034 to S-036 are scheduled: the script cost view joins the 0.10 dev overlay (S-036); real batch calls into scripts are built at Stage 1 if the first real system profile shows scripts above a few percent of the tick (S-034); Luau type checking in `pg pack lint` is evaluated with the Stage 11 editor support (S-035). No product decision or gate changed.
 - **v4.5:** accepted suggestion S-033 is scheduled as two evaluation items: optional Player2 voice and NPC extras at Stage 4 (possession dialogue) and Stage 11 (audio). No product decision or gate changed.
 - **v4.4:** **Player2 is a fifth AI provider** (OpenAI-style web API, sign-in by device code instead of a pasted key, model chosen by the provider; Options flow, Stage 0). Nine accepted suggestions (S-022 to S-030) are scheduled: most of the runtime-facing ones land in milestone 0.8, their UI halves in 0.10 and the soak use in 0.11. A new open decision records the Player2 client id. No product decision or gate changed.
 - **v4.3:** Stage 0 now ends with a **launchable desktop app and graphical main menu** (new item and a new clause in "Done when"; gate 1 gains the same clause). The Stage 1 presentation work builds on that shell instead of creating it. No other product decision or gate changed.
@@ -174,6 +175,7 @@ These replace the v3.0 neutrality rules.
 - [ ] Native renderer and UI: wgpu tile and sprite rendering, egui screens, keyboard and mouse input mapping, window modes, high-DPI handling.
 - [ ] **Base game shipped as a content pack** using the same format and API as player packs. **Modding API 0.1:** components, events (read), bounded hooks for needs, mood, memory and relationships.
 - [ ] Basic Mods screen: list, enable / disable, capability approval, errors, safe-mode launch.
+- [ ] **[DX] Script batching (S-034):** profile scripts with the first real systems (`pg pack bench`); if they use more than a few percent of the tick, add a batch entry point so a system's context is built once and Luau is entered once per batch (0.9 measured 12 µs per call and 1.6% of the tick for 200 pawns, so this is conditional).
 - [ ] **Pawn-aware routing:** idle pawns act as temporary obstacles (or a crowd cost) in path search, so pawns that stand still while working, sleeping or talking no longer block others; results stay deterministic and cacheable.
 - [ ] **\[DX\]** `pg content tree` (inheritance forest); evaluate template variants (data-only expansion of one template into several) against the content written so far; add a cookbook sample for hooks.
 
@@ -319,6 +321,7 @@ These replace the v3.0 neutrality rules.
 - [ ] Packaging: portable archive, installers per OS, update instructions, optional opt-in update check, crash reports kept local and redacted.
 - [ ] No cloud sync or multiplayer. Monetization stays undecided / free until the core loop is validated.
 
+- [ ] **[DX] Luau type checking (S-035):** evaluate running Luau's analyzer over pack scripts with the generated `pg.d.luau` in `pg pack lint`, alongside the editor-support work.
 - [ ] **[DX] Evaluate and, if worthwhile, build Player2 audio extras (S-033):** text-to-speech for dialogue lines through the Audio service, opt-in, with clear credit usage and an off switch.
 
 **Done when:** a representative town runs and saves reliably on the minimum-spec desktop; worlds and packs validate on import; mod fixtures pass on every Tier 1 OS; API 1.0 documentation and tooling let an outside author build and test a pack without the source tree; a build installs and updates without a store account.

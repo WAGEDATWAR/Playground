@@ -2,7 +2,7 @@
 
 Answers to the seven questions in Blueprint §23.15 and Roadmap §12 item 1, with measurements. Recorded
 2026-10-07 on Windows 11 (MSVC, Rust 1.99.0, `mlua` 0.12.2 with vendored Luau 0.740). **Linux and macOS
-figures come from CI** and are marked *(CI)* until the first green run is recorded here.
+figures come from CI** and are marked *(CI)* until a green run is recorded; CI was green on all three systems at m0.9, so the pinned fuel value (145) and the contraction probe agree on Windows, Linux and macOS.
 
 **Decision: `mlua` with the Luau backend stays behind the `ScriptVm` boundary.** None of the upgrade
 triggers in §23.15 has been hit. The hostile-pack corpus found four places where the profile in the

@@ -40,6 +40,9 @@ Ordering principle: do small, high-leverage tooling when the thing it observes i
 | S-030 | Shadow determinism verification | **0.8**, soak use **0.11** | Needs the worker pool; catches ordering bugs before gameplay systems multiply |
 | S-031 | Reason-code coverage lint | **done in 0.7** | Tiny guard test |
 | S-032 | `pg check` | **done in 0.7** | One-command verification report |
+| S-034 | Real batch calls into scripts | **Stage 1**, only if the first real system profile warrants it | 0.9 measured 12 µs per call, 1.6% of the tick at 200 pawns |
+| S-035 | Luau type check in `pg pack lint` | evaluate with **Stage 11** editor support | Needs Luau's analyzer built or bundled |
+| S-036 | Script cost view in the overlay | **0.10** | The numbers exist already (fuel per call, profiler probe) |
 | S-033 | Player2 extras (voice, NPC and game-data endpoints) | evaluate **Stage 4** (possession dialogue) and **Stage 11** (audio) | Not needed for text generation; recorded so the options are not forgotten |
 
 ## Process and tooling
@@ -101,7 +104,7 @@ Details:
 - **S-031 Reason-code coverage lint** · testing · done · Implemented in 0.7 (`pg-core` test scanning the source tree).
 - **S-032 `pg check`** · tooling · done (0.7) · One command: determinism vectors, content lint, golden replay with snapshot check, persistence scenario, a save/verify cycle and a bug-bundle round trip, with a final PASS/FAIL table. Exit code for CI; the same output is what you paste back at a checkpoint.
 - **S-033 — Player2 extras** · integration · accepted · Player2's API also offers NPC conversation endpoints with server-side memory (`/npcs/*`), a key-value game-data store (`/game-data/batch`), text-to-speech (`/tts/*`) and speech-to-text (`/stt/*`). None is needed for text generation, which uses `/chat/completions` like the other providers. Possible later uses: spoken dialogue lines for players who opt in (Stage 11 audio), voice input for possession dialogue (Stage 4), and nothing for the simulation itself (which must stay deterministic and local). Cost: medium per feature; **evaluate at Stage 4 and Stage 11**, and only behind the existing capability and filter settings.
-- **S-034 Real batch calls** · performance · proposed · `call_batch` currently loops over `call` (12.5 µs per entity). A batch entry point in the prelude could build the context once and enter Lua once per batch; worth doing only if a profile shows scripts above a few percent of the tick (0.9 spike measured 1.6% for 200 pawns).
-- **S-035 Luau type check in `pg pack lint`** · tooling · proposed · Run Luau's analyzer over scripts with the generated `pg.d.luau` so `--!strict` errors show up before load. Needs the analyzer built or bundled; evaluate with the Stage 11 editor-support work.
-- **S-036 Script cost view in the overlay** · tooling · proposed · Show fuel and time per pack, per system and per hook next to the tick profiler, so authors see which of their handlers is expensive (the numbers already exist: `fuel_used` and the profiler probe).
+- **S-034 Real batch calls** · performance · accepted · `call_batch` currently loops over `call` (12.5 µs per entity). A batch entry point in the prelude could build the context once and enter Lua once per batch; worth doing only if a profile shows scripts above a few percent of the tick (0.9 spike measured 1.6% for 200 pawns).
+- **S-035 Luau type check in `pg pack lint`** · tooling · accepted · Run Luau's analyzer over scripts with the generated `pg.d.luau` so `--!strict` errors show up before load. Needs the analyzer built or bundled; evaluate with the Stage 11 editor-support work.
+- **S-036 Script cost view in the overlay** · tooling · accepted · Show fuel and time per pack, per system and per hook next to the tick profiler, so authors see which of their handlers is expensive (the numbers already exist: `fuel_used` and the profiler probe).
 
