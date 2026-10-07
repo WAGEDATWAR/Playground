@@ -677,10 +677,7 @@ fn the_pseudo_locale_transforms_every_screen_and_keeps_the_arguments() {
     d.send(UiEvent::Key(Key::Escape));
     let menu = d.text();
     assert!(!menu.contains("Saved worlds"), "{menu}");
-    assert!(
-        menu.contains("Continue: [") || !menu.is_ascii(),
-        "{menu}"
-    );
+    assert!(menu.contains("Continue: [") || !menu.is_ascii(), "{menu}");
     assert!(
         menu.contains("New Town"),
         "the world's own name is never transformed:\n{menu}"
