@@ -1,17 +1,21 @@
 //! **Dev scaffolding systems and generators** for milestones 0.2–0.4.
 //!
 //! These give the tick pipeline something deterministic and RNG-dependent to do, so replay, hashing,
-//! snapshot and movement tests are meaningful before real simulation systems exist. They are removed (or
+//! snapshot and movement tests are meaningful before real simulation systems exist. The plan source
+//! feeds the real scheduler (0.5); everything else here is throwaway. They are removed (or
 //! moved under `#[cfg(test)]`) when the real systems land (D-009).
 
+use crate::activity::{DayPlannerSystem, PlanSource, ReservationActivatorSystem};
 use crate::canon::{Canon, ToCanon};
 use crate::id::EntityId;
 use crate::map::{Tile, ROAD, SAND, SIDEWALK, WATER};
 use crate::num::Permille;
-use crate::pawn::Route;
 use crate::pipeline::{Cadence, Pipeline, Placement, System, SystemSlot, TickCtx};
 use crate::rng::{Key, Rng, Stream};
+use crate::schedule::{DutyTemplate, LeisureOption, PlanInputs};
 use crate::world::WorldState;
+use pg_content::ActionId;
+use std::sync::Arc;
 
 /// Minute cadence (installed in the Needs slot): a seeded random walk on `probe.value`.
 pub struct DevProbeSystem;
@@ -45,57 +49,103 @@ impl System for DevDaySystem {
     }
 }
 
-/// Minute cadence (after the TaskPlanner slot): each idle pawn has a small chance per minute to pick a
-/// random reachable tile and walk there. Stands in for the task planner until the scheduler lands (0.5).
-pub struct DevWanderSystem;
+/// The scaffolding plan source (D-009): a work duty in the morning and afternoon at a seeded "workplace"
+/// tile, and leisure that strolls to a random tile or lingers. Stands in for occupation templates and
+/// needs until Stage 1; the schedule, tasks and movement it drives are the real systems.
+pub struct DevPlanSource;
 
-impl System for DevWanderSystem {
-    fn id(&self) -> &str {
-        "dev.wander"
-    }
-
-    fn run(&mut self, ctx: &mut TickCtx<'_>) {
-        let minute = i64::try_from(ctx.flags.tick / 10).unwrap_or(i64::MAX);
-        let seed = ctx.world.seed();
-        let chance = Permille::saturating(100);
-        let idle: Vec<(EntityId, EntityId, Tile)> = ctx
-            .world
-            .pawns
-            .iter()
-            .filter(|(_, p)| p.route.is_none())
-            .map(|(id, p)| (id, p.position.map, p.position.tile))
-            .collect();
-        for (pawn, map, here) in idle {
-            let rng = Rng::new(seed, Stream::DevWander, &[Key::Id(pawn), Key::Int(minute)]);
-            if !rng.chance(0, chance) {
-                continue;
-            }
-            let Some((w, h)) = ctx.world.maps.get(map).map(|m| (m.width(), m.height())) else {
-                continue;
-            };
-            let (Some(x), Some(y)) = (rng.int_in(1, 0, w - 1), rng.int_in(2, 0, h - 1)) else {
-                continue;
-            };
-            let goal = Tile::new(x, y);
-            if goal != here && ctx.world.is_passable(map, goal) {
-                if let Some(p) = ctx.world.pawns.get_mut(pawn) {
-                    p.route = Some(Route::to(goal));
-                }
-            }
-        }
+impl DevPlanSource {
+    /// A seeded passable tile on the pawn's map; `day` of -1 gives the pawn's fixed workplace.
+    fn tile(world: &WorldState, pawn: EntityId, day: i64, salt: i64) -> Option<Tile> {
+        let p = world.pawns.get(pawn)?;
+        let map = world.maps.get(p.position.map)?;
+        let rng = Rng::new(
+            world.seed(),
+            Stream::DevPlan,
+            &[Key::Id(pawn), Key::Int(day), Key::Int(salt)],
+        );
+        (0..200u32).find_map(|c| {
+            let x = rng.int_in(c.wrapping_mul(2), 0, map.width() - 1)?;
+            let y = rng.int_in(c.wrapping_mul(2).wrapping_add(1), 0, map.height() - 1)?;
+            let t = Tile::new(x, y);
+            world.is_passable(p.position.map, t).then_some(t)
+        })
     }
 }
 
-/// Installs the dev systems: probe (Needs), day counter (DayPlanner), wandering (after TaskPlanner).
+fn at(tile: Tile) -> Canon {
+    Canon::map([("at", tile.to_canon())])
+}
+
+impl PlanSource for DevPlanSource {
+    fn id(&self) -> &str {
+        "dev.plan"
+    }
+
+    fn inputs(&self, world: &WorldState, pawn: EntityId, day: u64) -> PlanInputs {
+        let slots = world.settings.slot_minutes.slots_per_day();
+        let hour = |h: u32| slots.saturating_mul(h) / 24;
+        let day = i64::try_from(day).unwrap_or(i64::MAX);
+        let (Ok(idle), Ok(walk)) = (ActionId::new("idle_at"), ActionId::new("move_to")) else {
+            return PlanInputs::default();
+        };
+        let mut inputs = PlanInputs {
+            open_weight: 15,
+            ..PlanInputs::default()
+        };
+        if let Some(work) = DevPlanSource::tile(world, pawn, -1, 0) {
+            for (start, end) in [(9, 12), (13, 17)] {
+                let len = hour(end) - hour(start);
+                inputs.duties.push(DutyTemplate {
+                    action: idle.clone(),
+                    params: at(work),
+                    start: hour(start),
+                    len,
+                    min_len: (len * 2 / 3).max(1),
+                    shift_earlier: hour(1) / 2,
+                    shift_later: hour(1) / 2,
+                });
+            }
+        }
+        if let Some(stroll) = DevPlanSource::tile(world, pawn, day, 1) {
+            inputs.leisure.push(LeisureOption {
+                action: walk,
+                params: Canon::map([("to", stroll.to_canon())]),
+                len: 1,
+                weight: 10,
+            });
+        }
+        if let Some(spot) = DevPlanSource::tile(world, pawn, day, 2) {
+            inputs.leisure.push(LeisureOption {
+                action: idle,
+                params: at(spot),
+                len: 2,
+                weight: 10,
+            });
+        }
+        inputs
+    }
+}
+
+/// Installs the dev systems: probe (Needs), the day counter (before the DayPlanner), and the dev plan
+/// source behind the real planner and activator.
 pub fn install(pipeline: &mut Pipeline) {
+    let plans: Arc<dyn PlanSource> = Arc::new(DevPlanSource);
     pipeline.set_builtin(SystemSlot::Needs, Box::new(DevProbeSystem));
-    pipeline.set_builtin(SystemSlot::DayPlanner, Box::new(DevDaySystem));
+    pipeline.set_builtin(
+        SystemSlot::DayPlanner,
+        Box::new(DayPlannerSystem::new(Arc::clone(&plans))),
+    );
+    pipeline.set_builtin(
+        SystemSlot::ReservationActivator,
+        Box::new(ReservationActivatorSystem::new(plans)),
+    );
     // The id is unique, so registration cannot fail.
     let _ = pipeline.add_extension(
-        SystemSlot::TaskPlanner,
-        Placement::After,
-        Cadence::Minute,
-        Box::new(DevWanderSystem),
+        SystemSlot::DayPlanner,
+        Placement::Before,
+        Cadence::Day,
+        Box::new(DevDaySystem),
     );
 }
 

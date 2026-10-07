@@ -49,7 +49,7 @@ impl Priority {
 }
 
 /// A block of consecutive slots committed to one action.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reservation {
     /// Unique within its schedule, ascending in creation order. It is the final tie-break everywhere.
     pub id: u32,
@@ -96,7 +96,7 @@ impl ToCanon for Reservation {
 }
 
 /// Something the planner wanted to place and could not.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Dropped {
     pub what: String,
     pub reason: ReasonCode,
@@ -121,7 +121,7 @@ pub enum PlaceError {
 }
 
 /// One pawn's plan for one day.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DaySchedule {
     pub day: u64,
     slots: Vec<Option<u32>>,
@@ -170,7 +170,8 @@ impl DaySchedule {
 
     /// The reservation covering `slot`.
     pub fn owner(&self, slot: u32) -> Option<&Reservation> {
-        self.owner_id(slot).and_then(|id| self.reservations.get(&id))
+        self.owner_id(slot)
+            .and_then(|id| self.reservations.get(&id))
     }
 
     pub fn is_free_run(&self, start: u32, len: u32) -> bool {
@@ -415,8 +416,20 @@ pub fn plan_day(
     slots_per_day: u32,
     inputs: &PlanInputs,
 ) -> DaySchedule {
+    plan_day_from(seed, pawn, day, slots_per_day, 0, inputs)
+}
+
+/// Plans a day whose first `from` slots are already behind the pawn (a pawn that appears mid-day).
+pub fn plan_day_from(
+    seed: Seed,
+    pawn: EntityId,
+    day: u64,
+    slots_per_day: u32,
+    from: u32,
+    inputs: &PlanInputs,
+) -> DaySchedule {
     let mut s = DaySchedule::new(day, slots_per_day);
-    fill(&mut s, seed, pawn, 0, inputs);
+    fill(&mut s, seed, pawn, from, inputs);
     s
 }
 
@@ -573,13 +586,7 @@ fn place_commitments(s: &mut DaySchedule, from: u32, inputs: &PlanInputs) {
         if s.reservations().any(|r| r.commitment == Some(c.id)) {
             continue;
         }
-        let mk = |start: u32, reason: ReasonCode| {
-            let mut r = blank(Priority::Commitment, &c.action, &c.params, start, c.len, reason);
-            r.created_tick = c.created_tick;
-            r.reschedulable = c.reschedulable;
-            r.commitment = Some(c.id);
-            r
-        };
+        let mk = |start: u32, reason: ReasonCode| commitment_reservation(c, start, reason);
         if c.start >= from {
             let reason = ReasonCode::builtin(
                 "commitment_placed",
@@ -595,10 +602,8 @@ fn place_commitments(s: &mut DaySchedule, from: u32, inputs: &PlanInputs) {
             .flatten();
         match moved {
             Some(to) => {
-                let reason = ReasonCode::builtin(
-                    "commitment_moved",
-                    [("from", n(c.start)), ("to", n(to))],
-                );
+                let reason =
+                    ReasonCode::builtin("commitment_moved", [("from", n(c.start)), ("to", n(to))]);
                 let _ = s.place(mk(to, reason));
             }
             None => {
@@ -652,7 +657,10 @@ fn place_chores(s: &mut DaySchedule, from: u32, inputs: &PlanInputs) {
                 what: format!("chore {} '{}'", c.id, c.action),
                 reason: ReasonCode::builtin(
                     "chore_dropped",
-                    [("urgency", n(c.urgency)), ("deadline", Canon::str(deadline))],
+                    [
+                        ("urgency", n(c.urgency)),
+                        ("deadline", Canon::str(deadline)),
+                    ],
                 ),
             }),
         }
@@ -714,6 +722,98 @@ fn place_leisure(s: &mut DaySchedule, seed: Seed, pawn: EntityId, from: u32, inp
     }
 }
 
+/// Puts reservations that were lifted out of the schedule back: those whose original slots are still free
+/// return unchanged (first, so a relocated one can never take their place); the rest move to the first
+/// later free run, or are dropped with `no_free_slot`. Priority then urgency decides who relocates first.
+fn reflow(s: &mut DaySchedule, mut displaced: Vec<Reservation>) {
+    displaced.sort_by_key(|r| (r.priority, std::cmp::Reverse(r.urgency), r.id));
+    // Removed but not actually in the way: those go straight back first, so a relocated reservation can
+    // never take their place.
+    let (in_the_way, untouched): (Vec<Reservation>, Vec<Reservation>) = displaced
+        .into_iter()
+        .partition(|r| !s.is_free_run(r.start, r.len));
+    for r in untouched {
+        let _ = s.place(r);
+    }
+    for mut r in in_the_way {
+        let was = r.start;
+        match s.first_fit(was.saturating_add(1), r.len, None, None) {
+            Some(to) => {
+                r.start = to;
+                r.reason = ReasonCode::builtin("moved_later", [("from", n(was)), ("to", n(to))]);
+                let _ = s.place(r);
+            }
+            None => s.dropped.push(Dropped {
+                what: describe(&r),
+                reason: ReasonCode::builtin("no_free_slot", [("what", Canon::str(describe(&r)))]),
+            }),
+        }
+    }
+}
+
+fn commitment_reservation(c: &CommitmentReq, start: u32, reason: ReasonCode) -> Reservation {
+    let mut r = blank(
+        Priority::Commitment,
+        &c.action,
+        &c.params,
+        start,
+        c.len,
+        reason,
+    );
+    r.created_tick = c.created_tick;
+    r.reschedulable = c.reschedulable;
+    r.commitment = Some(c.id);
+    r
+}
+
+/// Reserves an accepted commitment at its agreed slots. Free slots are simply taken; slots held only by
+/// chores or leisure are cleared (those move later or are dropped). Duties, urgent needs and other
+/// commitments are never displaced: the call fails with `commitment_failed` and changes nothing.
+pub fn reserve_commitment(
+    s: &mut DaySchedule,
+    c: &CommitmentReq,
+    from: u32,
+) -> Result<u32, ReasonCode> {
+    let fail = |why: String| {
+        ReasonCode::builtin(
+            "commitment_failed",
+            [("slot", n(c.start)), ("why", Canon::str(why))],
+        )
+    };
+    if c.start < from {
+        return Err(fail("that slot has already started".to_owned()));
+    }
+    let placed = ReasonCode::builtin(
+        "commitment_placed",
+        [("slot", n(c.start)), ("slots", n(c.len))],
+    );
+    if s.is_free_run(c.start, c.len) {
+        return s
+            .place(commitment_reservation(c, c.start, placed))
+            .map_err(|_| fail("it does not fit in the day".to_owned()));
+    }
+    let end = c.start.saturating_add(c.len);
+    if c.len == 0 || end > s.slots_per_day() {
+        return Err(fail("it does not fit in the day".to_owned()));
+    }
+    let mut blockers: Vec<u32> = (c.start..end).filter_map(|x| s.owner_id(x)).collect();
+    blockers.sort_unstable();
+    blockers.dedup();
+    if let Some(strong) = blockers
+        .iter()
+        .filter_map(|id| s.reservation(*id))
+        .find(|r| !r.priority.displaceable() || r.start < from)
+    {
+        return Err(fail(format!("it overlaps a {}", describe(strong))));
+    }
+    let lifted: Vec<Reservation> = blockers.into_iter().filter_map(|id| s.remove(id)).collect();
+    let result = s
+        .place(commitment_reservation(c, c.start, placed))
+        .map_err(|_| fail("it does not fit in the day".to_owned()));
+    reflow(s, lifted);
+    result
+}
+
 /// A need became critical mid-day: place its restoring activity from `from`, displacing priority 4-5
 /// reservations if there is no room. Displaced reservations move to a later free slot or are dropped
 /// (`no_free_slot`). Priorities 1 and 3 are never touched.
@@ -729,12 +829,7 @@ pub fn insert_urgent(s: &mut DaySchedule, from: u32, u: &UrgentNeed) -> Option<u
         .map(|r| (r.priority.number(), r.urgency, r.start, r.id))
         .collect();
     candidates.sort_by_key(|(p, urg, start, id)| {
-        (
-            std::cmp::Reverse(*p),
-            *urg,
-            std::cmp::Reverse(*start),
-            *id,
-        )
+        (std::cmp::Reverse(*p), *urg, std::cmp::Reverse(*start), *id)
     });
     let mut displaced: Vec<Reservation> = Vec::new();
     let mut placed = None;
@@ -766,35 +861,7 @@ pub fn insert_urgent(s: &mut DaySchedule, from: u32, u: &UrgentNeed) -> Option<u
             );
         }
     }
-    displaced.sort_by_key(|r| (r.priority, std::cmp::Reverse(r.urgency), r.id));
-    // Removed but not actually in the way: those go straight back first, so a relocated reservation can
-    // never take their place.
-    let (in_the_way, untouched): (Vec<Reservation>, Vec<Reservation>) = displaced
-        .into_iter()
-        .partition(|r| !s.is_free_run(r.start, r.len));
-    for r in untouched {
-        let _ = s.place(r);
-    }
-    for mut r in in_the_way {
-        let was = r.start;
-        match s.first_fit(was.saturating_add(1), r.len, None, None) {
-            Some(to) => {
-                r.start = to;
-                r.reason = ReasonCode::builtin(
-                    "moved_later",
-                    [("from", n(was)), ("to", n(to))],
-                );
-                let _ = s.place(r);
-            }
-            None => s.dropped.push(Dropped {
-                what: describe(&r),
-                reason: ReasonCode::builtin(
-                    "no_free_slot",
-                    [("what", Canon::str(describe(&r)))],
-                ),
-            }),
-        }
-    }
+    reflow(s, displaced);
     placed
 }
 

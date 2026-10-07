@@ -47,6 +47,7 @@ fn event(ctx: &mut TickCtx<'_>, kind: &str, pawn: EntityId, extra: (&str, Canon)
 fn fail(ctx: &mut TickCtx<'_>, pawn: EntityId, reason: &str) {
     if let Some(p) = ctx.world.pawns.get_mut(pawn) {
         p.route = None;
+        p.move_failure = Some(reason.to_owned());
     }
     event(ctx, "move.failed", pawn, ("reason", Canon::str(reason)));
 }

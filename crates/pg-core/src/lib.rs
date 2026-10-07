@@ -9,7 +9,10 @@
 )]
 
 pub use pg_canon as canon;
+pub mod action;
+pub mod activity;
 pub mod commands;
+pub mod commitment;
 pub mod containment;
 pub mod dev;
 pub mod hash;

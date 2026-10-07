@@ -5,12 +5,14 @@
 //! replaced by real gameplay commands (and the editor's `EditCommand`s) in later milestones.
 
 use crate::canon::{Canon, CanonError, ToCanon};
+use crate::commitment::{CommitState, Commitment};
 use crate::containment;
-use crate::id::EntityId;
+use crate::id::{EntityId, Kind};
 use crate::map::{MapKind, Tile};
 use crate::object::{Location, Parent};
 use crate::pawn::Route;
 use crate::pipeline::Event;
+use crate::reason::ReasonCode;
 use crate::world::WorldState;
 use pg_content::ContentSet;
 
@@ -49,6 +51,19 @@ pub enum Command {
         at: Tile,
         blocked: bool,
     },
+    /// **Dev:** `proposer` asks `invitee` to meet at `at` during slots `start..start+len` today. The
+    /// proposal lapses `expires_in` ticks from now.
+    DevPropose {
+        proposer: EntityId,
+        invitee: EntityId,
+        start: u32,
+        len: u32,
+        at: Tile,
+        expires_in: u32,
+        reschedulable: bool,
+    },
+    /// **Dev:** cancels a live commitment and frees both pawns' reserved slots.
+    DevCancelCommitment { commitment: EntityId },
 }
 
 fn id_of(c: &Canon, key: &str) -> Result<EntityId, CanonError> {
@@ -67,6 +82,13 @@ fn int_of(c: &Canon, key: &str) -> Result<i32, CanonError> {
         .as_i64()
         .and_then(|v| i32::try_from(v).ok())
         .ok_or_else(|| CanonError(format!("'{key}' must be an integer that fits i32")))
+}
+
+fn u32_of(c: &Canon, key: &str) -> Result<u32, CanonError> {
+    c.field(key)?
+        .as_i64()
+        .and_then(|v| u32::try_from(v).ok())
+        .ok_or_else(|| CanonError(format!("'{key}' must be a non-negative integer")))
 }
 
 fn text_of(c: &Canon, key: &str) -> Result<String, CanonError> {
@@ -122,6 +144,28 @@ impl ToCanon for Command {
                 ("at", at.to_canon()),
                 ("blocked", blocked.to_canon()),
             ]),
+            Command::DevPropose {
+                proposer,
+                invitee,
+                start,
+                len,
+                at,
+                expires_in,
+                reschedulable,
+            } => Canon::map([
+                ("type", Canon::str("dev_propose")),
+                ("proposer", proposer.to_canon()),
+                ("invitee", invitee.to_canon()),
+                ("start", start.to_canon()),
+                ("len", len.to_canon()),
+                ("at", at.to_canon()),
+                ("expires_in", expires_in.to_canon()),
+                ("reschedulable", reschedulable.to_canon()),
+            ]),
+            Command::DevCancelCommitment { commitment } => Canon::map([
+                ("type", Canon::str("dev_cancel_commitment")),
+                ("commitment", commitment.to_canon()),
+            ]),
         }
     }
 }
@@ -171,6 +215,21 @@ impl Command {
                     .field("blocked")?
                     .as_bool()
                     .ok_or_else(|| CanonError::new("'blocked' must be true or false"))?,
+            }),
+            "dev_propose" => Ok(Command::DevPropose {
+                proposer: id_of(c, "proposer")?,
+                invitee: id_of(c, "invitee")?,
+                start: u32_of(c, "start")?,
+                len: u32_of(c, "len")?,
+                at: tile_of(c, "at")?,
+                expires_in: u32_of(c, "expires_in")?,
+                reschedulable: c
+                    .field("reschedulable")?
+                    .as_bool()
+                    .ok_or_else(|| CanonError::new("'reschedulable' must be true or false"))?,
+            }),
+            "dev_cancel_commitment" => Ok(Command::DevCancelCommitment {
+                commitment: id_of(c, "commitment")?,
             }),
             other => Err(CanonError(format!("unknown command type '{other}'"))),
         }
@@ -329,6 +388,29 @@ pub(crate) fn apply(
                 Canon::map([("pawn", pawn.to_canon()), ("to", to.to_canon())]),
             ));
         }
+        Command::DevPropose {
+            proposer,
+            invitee,
+            start,
+            len,
+            at,
+            expires_in,
+            reschedulable,
+        } => propose(
+            world,
+            tick,
+            events,
+            (
+                *proposer,
+                *invitee,
+                *start,
+                *len,
+                *at,
+                *expires_in,
+                *reschedulable,
+            ),
+        ),
+        Command::DevCancelCommitment { commitment } => cancel(world, tick, events, *commitment),
         Command::DevSetBlocked { map, at, blocked } => match world.maps.get_mut(*map) {
             None => events.push(rejected(tick, "dev_set_blocked", &format!("no map {map}"))),
             Some(m) => match m.set_blocked(*at, *blocked) {
@@ -345,6 +427,102 @@ pub(crate) fn apply(
             },
         },
     }
+}
+
+type ProposalArgs = (EntityId, EntityId, u32, u32, Tile, u32, bool);
+
+fn propose(world: &mut WorldState, tick: u64, events: &mut Vec<Event>, args: ProposalArgs) {
+    let (proposer, invitee, start, len, at, expires_in, reschedulable) = args;
+    let refuse =
+        |events: &mut Vec<Event>, why: &str| events.push(rejected(tick, "dev_propose", why));
+    if proposer == invitee {
+        return refuse(events, "a pawn cannot meet itself");
+    }
+    let Some(map) = world.pawns.get(proposer).map(|p| p.position.map) else {
+        return refuse(events, &format!("no pawn {proposer}"));
+    };
+    if !world.pawns.contains(invitee) {
+        return refuse(events, &format!("no pawn {invitee}"));
+    }
+    let slots = world.settings.slot_minutes.slots_per_day();
+    if len == 0 || start.checked_add(len).is_none_or(|end| end > slots) {
+        return refuse(
+            events,
+            &format!("slots {start}+{len} do not fit in a day of {slots}"),
+        );
+    }
+    if !world.is_passable(map, at) {
+        return refuse(events, &format!("tile {at} cannot be stood on"));
+    }
+    let Ok(action) = pg_content::ActionId::new("meet_at") else {
+        return refuse(events, "the meet_at action id is invalid");
+    };
+    let id = match world.id_counters.allocate(Kind::Commitment) {
+        Ok(id) => id,
+        Err(e) => return refuse(events, &e.to_string()),
+    };
+    let commitment = Commitment {
+        id,
+        proposer,
+        invitee,
+        day: world.clock.day(),
+        start,
+        len,
+        action,
+        params: Canon::map([("at", at.to_canon())]),
+        state: CommitState::Proposed,
+        created_tick: tick,
+        expires_tick: tick.saturating_add(u64::from(expires_in)),
+        reschedulable,
+        reason: None,
+    };
+    let _ = world.commitments.insert(id, commitment);
+    events.push(event(
+        tick,
+        "commitment.proposed",
+        Canon::map([
+            ("commitment", id.to_canon()),
+            ("proposer", proposer.to_canon()),
+            ("invitee", invitee.to_canon()),
+            ("start", start.to_canon()),
+            ("len", len.to_canon()),
+        ]),
+    ));
+}
+
+fn cancel(world: &mut WorldState, tick: u64, events: &mut Vec<Event>, id: EntityId) {
+    let Some(c) = world.commitments.get_mut(id) else {
+        return events.push(rejected(
+            tick,
+            "dev_cancel_commitment",
+            &format!("no commitment {id}"),
+        ));
+    };
+    let reason = ReasonCode::builtin(
+        "commitment_cancelled",
+        [("why", Canon::str("cancelled by request"))],
+    );
+    if let Err(e) = c.transition(CommitState::Cancelled, reason) {
+        return events.push(rejected(tick, "dev_cancel_commitment", &e.to_string()));
+    }
+    let parties = c.parties();
+    for who in parties {
+        if let Some(schedule) = world.pawns.get_mut(who).and_then(|p| p.schedule.as_mut()) {
+            let held: Vec<u32> = schedule
+                .reservations()
+                .filter(|r| r.commitment == Some(id))
+                .map(|r| r.id)
+                .collect();
+            for r in held {
+                schedule.remove(r);
+            }
+        }
+    }
+    events.push(event(
+        tick,
+        "commitment.cancelled",
+        Canon::map([("commitment", id.to_canon())]),
+    ));
 }
 
 #[cfg(test)]
@@ -393,6 +571,18 @@ mod tests {
                 map: id(Kind::Map, 1),
                 at: Tile::new(5, 5),
                 blocked: true,
+            },
+            Command::DevPropose {
+                proposer: id(Kind::Pawn, 1),
+                invitee: id(Kind::Pawn, 2),
+                start: 4,
+                len: 2,
+                at: Tile::new(3, 3),
+                expires_in: 600,
+                reschedulable: true,
+            },
+            Command::DevCancelCommitment {
+                commitment: id(Kind::Commitment, 1),
             },
         ];
         for c in cmds {

@@ -308,7 +308,11 @@ fn an_urgent_insert_displaces_the_weakest_that_is_in_the_way_and_nothing_stronge
     let chore_id = put(&mut s, Priority::Chore, 4, 2, 3);
     let leisure_id = put(&mut s, Priority::Leisure, 6, 2, 0);
     let got = insert_urgent(&mut s, 0, &urgent("energy", 6, 2)).unwrap();
-    assert_eq!(s.reservation(got).unwrap().start, 4, "took the chore's slots");
+    assert_eq!(
+        s.reservation(got).unwrap().start,
+        4,
+        "took the chore's slots"
+    );
     assert!(s
         .reservation(got)
         .unwrap()
@@ -378,23 +382,24 @@ fn place_rejects_bad_ranges_and_overlaps() {
 // ---- properties ------------------------------------------------------------------------------------
 
 fn arb_inputs() -> impl Strategy<Value = PlanInputs> {
-    let duties = prop::collection::vec((0u32..48, 1u32..10, 0u32..3, 0u32..3), 0..4).prop_map(|v| {
-        v.into_iter()
-            .map(|(start, len, e, l)| DutyTemplate {
-                min_len: 1.max(len / 2),
-                shift_earlier: e,
-                shift_later: l,
-                ..duty(start, len)
-            })
-            .collect::<Vec<_>>()
-    });
+    let duties =
+        prop::collection::vec((0u32..48, 1u32..10, 0u32..3, 0u32..3), 0..4).prop_map(|v| {
+            v.into_iter()
+                .map(|(start, len, e, l)| DutyTemplate {
+                    min_len: 1.max(len / 2),
+                    shift_earlier: e,
+                    shift_later: l,
+                    ..duty(start, len)
+                })
+                .collect::<Vec<_>>()
+        });
     let urgent_ = prop::collection::vec((0u32..60, 1u32..5, 0usize..3), 0..4).prop_map(|v| {
         v.into_iter()
             .map(|(p, len, i)| urgent(["hunger", "energy", "bladder"][i], p, len))
             .collect::<Vec<_>>()
     });
-    let commitments =
-        prop::collection::vec((0u32..48, 1u32..6, any::<bool>(), 0u64..20), 0..4).prop_map(|v| {
+    let commitments = prop::collection::vec((0u32..48, 1u32..6, any::<bool>(), 0u64..20), 0..4)
+        .prop_map(|v| {
             v.into_iter()
                 .enumerate()
                 .map(|(i, (s, l, r, t))| commitment(i as u32 + 1, s, l, r, t))

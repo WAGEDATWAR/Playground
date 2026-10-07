@@ -5,6 +5,11 @@
 //! `(slot, placement, registration sequence, id)`. Each system declares a [`Cadence`]; the pipeline
 //! runs it only when the tick's [`TimeFlags`] say that boundary was crossed.
 
+use crate::action::ActionRegistry;
+use crate::activity::{
+    ActivitySystem, CommitmentSystem, DayPlannerSystem, NoPlans, PlanSource,
+    ReservationActivatorSystem, TaskPlannerSystem,
+};
 use crate::canon::Canon;
 use crate::hash::StateHash;
 use crate::id::EntityId;
@@ -15,6 +20,7 @@ use crate::time::TimeFlags;
 use crate::world::WorldState;
 use std::collections::BTreeSet;
 use std::fmt;
+use std::sync::Arc;
 
 /// The built-in slots, in execution order. The discriminant is the order.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -263,9 +269,35 @@ impl Default for Pipeline {
     }
 }
 
+/// The system that ships in a built-in slot: the real behaviour systems, and no-ops for the slots whose
+/// systems arrive in later milestones.
+fn builtin_system(
+    slot: SystemSlot,
+    plans: &Arc<dyn PlanSource>,
+    registry: &Arc<ActionRegistry>,
+) -> Box<dyn System> {
+    match slot {
+        SystemSlot::DayPlanner => Box::new(DayPlannerSystem::new(Arc::clone(plans))),
+        SystemSlot::Commitment => Box::new(CommitmentSystem),
+        SystemSlot::ReservationActivator => {
+            Box::new(ReservationActivatorSystem::new(Arc::clone(plans)))
+        }
+        SystemSlot::TaskPlanner => Box::new(TaskPlannerSystem::new(Arc::clone(registry))),
+        SystemSlot::Movement => Box::new(MovementSystem),
+        SystemSlot::Activity => Box::new(ActivitySystem),
+        other => Box::new(NoOp(other.name())),
+    }
+}
+
 impl Pipeline {
     /// A pipeline with a no-op system in each of the thirteen slots.
     pub fn new() -> Pipeline {
+        Pipeline::with_plan_source(Arc::new(NoPlans))
+    }
+
+    /// A pipeline whose planner takes its inputs from `source`.
+    pub fn with_plan_source(plans: Arc<dyn PlanSource>) -> Pipeline {
+        let registry = Arc::new(ActionRegistry::builtin());
         let entries = SystemSlot::ALL
             .into_iter()
             .map(|slot| Entry {
@@ -273,11 +305,7 @@ impl Pipeline {
                 placement: None,
                 seq: 0,
                 cadence: slot.cadence(),
-                system: if slot == SystemSlot::Movement {
-                    Box::new(MovementSystem)
-                } else {
-                    Box::new(NoOp(slot.name()))
-                },
+                system: builtin_system(slot, &plans, &registry),
             })
             .collect();
         let mut p = Pipeline {

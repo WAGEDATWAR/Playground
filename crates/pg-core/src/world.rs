@@ -5,9 +5,10 @@
 //! relationships and the rest arrive with Stage 1.
 
 use crate::canon::{Canon, ToCanon};
+use crate::commitment::Commitment;
 use crate::hash::{combine_table_hashes, hash_value, StateHash};
 use crate::id::{EntityId, IdCounters, IdsExhausted, Kind};
-use crate::map::{Dir4, MapData, MapError, MapKind, MoveCosts, Tile};
+use crate::map::{MapData, MapError, MapKind, MoveCosts, Tile};
 use crate::object::ObjectInstance;
 use crate::occupancy::{Occupancy, OccupancyError};
 use crate::pawn::{Pawn, Position};
@@ -18,7 +19,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 /// Bumped whenever the saved shape of `WorldState` changes (migrations hang off this, §13.5).
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorldMeta {
@@ -138,6 +139,7 @@ pub struct WorldState {
     pub maps: Table<MapData>,
     pub objects: Table<ObjectInstance>,
     pub pawns: Table<Pawn>,
+    pub commitments: Table<Commitment>,
     pub probe: Probe,
     /// Derived from `pawns` and `maps`; never hashed or saved. Call [`WorldState::rebuild_derived`] after
     /// loading.
@@ -159,6 +161,7 @@ impl WorldState {
             maps: Table::new(),
             objects: Table::new(),
             pawns: Table::new(),
+            commitments: Table::new(),
             probe: Probe::default(),
             occupancy: Occupancy::new(),
         }
@@ -231,13 +234,7 @@ impl WorldState {
         }
         let id = self.id_counters.allocate(Kind::Pawn)?;
         self.occupancy.place(map, tile, id)?;
-        let pawn = Pawn {
-            id,
-            name: name.to_owned(),
-            position: Position { map, tile },
-            facing: Dir4::S,
-            route: None,
-        };
+        let pawn = Pawn::new(id, name, Position { map, tile });
         let _ = self.pawns.insert(id, pawn);
         Ok(id)
     }
@@ -246,6 +243,7 @@ impl WorldState {
     pub fn table_hashes(&self) -> Vec<(&'static str, StateHash)> {
         vec![
             ("clock", hash_value(&self.clock)),
+            ("commitments", hash_value(&self.commitments)),
             ("id_counters", hash_value(&self.id_counters)),
             ("maps", hash_value(&self.maps)),
             ("meta", hash_value(&self.meta)),
@@ -315,6 +313,7 @@ impl ToCanon for WorldState {
             ("maps", self.maps.to_canon()),
             ("objects", self.objects.to_canon()),
             ("pawns", self.pawns.to_canon()),
+            ("commitments", self.commitments.to_canon()),
             ("probe", self.probe.to_canon()),
         ])
     }
@@ -372,7 +371,7 @@ mod tests {
         let w = WorldState::new("Town", "seed");
         assert_eq!(
             w.to_canon().to_canonical_string(),
-            r#"{"clock":{"tick":0},"id_counters":{},"maps":{},"meta":{"name":"Town","seed_text":"seed"},"objects":{},"pawns":{},"probe":{"days":0,"minutes":0,"value":0},"rng_counters":{},"schema":2,"settings":{"movement":{"max_repaths":3,"max_wait_ticks":20,"move_ticks_per_tile":2,"path_expansion_cap":20000},"slot_minutes":30}}"#
+            r#"{"clock":{"tick":0},"commitments":{},"id_counters":{},"maps":{},"meta":{"name":"Town","seed_text":"seed"},"objects":{},"pawns":{},"probe":{"days":0,"minutes":0,"value":0},"rng_counters":{},"schema":3,"settings":{"movement":{"max_repaths":3,"max_wait_ticks":20,"move_ticks_per_tile":2,"path_expansion_cap":20000},"slot_minutes":30}}"#
         );
     }
 

@@ -632,7 +632,7 @@ mod tests {
         assert_eq!(log.day_hashes.len(), 3);
         assert_eq!(log.inputs.len(), 3);
         assert!(
-            log.day_hashes.iter().all(|d| d.tables.len() == 9),
+            log.day_hashes.iter().all(|d| d.tables.len() == 10),
             "per-table hashes are recorded"
         );
         let out = replay(&log, None).unwrap();
