@@ -5,6 +5,7 @@ A deterministic 2D pixel-art life-simulation sandbox for desktop. A small fictio
 **Status:** Phase 0 (foundations) — pre-alpha, nothing playable yet.
 
 - Specification: [`docs/reference/`](docs/reference/)
+- **Build and test it yourself:** [`docs/BUILDING.md`](docs/BUILDING.md)
 - Build plan: [`docs/PLAN.md`](docs/PLAN.md) · rolling todo: [`docs/TODO.md`](docs/TODO.md)
 - Ideas beyond the spec: [`docs/SUGGESTIONS.md`](docs/SUGGESTIONS.md) · decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md)
 

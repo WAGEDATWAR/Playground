@@ -1,6 +1,6 @@
 # Playground — Design Document v3.1
 
-**Status (v3.1):** adds the developer-experience commitments accepted during Phase 0 (§12.6, §14.4); no change to scope or pillars. Updated from v2.0 to define Playground as a **native desktop game written in Rust, with a sandboxed Luau scripting layer for user-created content packs**. Where this document and earlier versions conflict, v3.0 decides (see §17). **Companion docs:** Native Desktop Roadmap v4.1 (when), Architecture Blueprint v2.2 (how).
+**Status (v3.1):** adds the developer-experience commitments accepted during Phase 0 (§12.6, §14.4); no change to scope or pillars. Updated from v2.0 to define Playground as a **native desktop game written in Rust, with a sandboxed Luau scripting layer for user-created content packs**. Where this document and earlier versions conflict, v3.0 decides (see §17). **Companion docs:** Native Desktop Roadmap v4.2 (when), Architecture Blueprint v2.3 (how).
 
 ## 1. Premise
 

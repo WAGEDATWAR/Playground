@@ -1,6 +1,6 @@
 # Suggestions
 
-Ideas that go beyond the reference specification: system additions and expansions, content, feature variations, tooling and process insights. Accepted items are scheduled in `PLAN.md` and folded into the spec documents (Blueprint v2.2, Roadmap v4.1, Design Document v3.1) at the place they belong; anything that changes the spec is also recorded in `DECISIONS.md`.
+Ideas that go beyond the reference specification: system additions and expansions, content, feature variations, tooling and process insights. Accepted items are scheduled in `PLAN.md` and folded into the spec documents (Blueprint v2.3, Roadmap v4.2, Design Document v3.1) at the place they belong; anything that changes the spec is also recorded in `DECISIONS.md`.
 
 Format: **ID — title** · area · status (`proposed` / `accepted` / `rejected` / `done`) · why · cost · **target**.
 
@@ -25,6 +25,9 @@ Ordering principle: do small, high-leverage tooling when the thing it observes i
 | S-011 | Soak scenario file | **0.11** | Needs scenarios (S-003) and the full Phase 0 loop |
 | S-015 | Inheritance tree view | **Stage 1** | Trivial; only useful once content grows past ~15 templates |
 | S-016 | Template variants | evaluate end of **Stage 1**, implement when ≥ 50 templates (expected **Stage 6**) | Premature before there is repetitive content to prove the need |
+| S-017 | A\* scratch buffers | **0.8** profiling pass (only if paths show up in the profile) | Premature before real profiling; guarded by existing equivalence tests |
+| S-018 | Pawn-aware routing | **Stage 1** | Only matters once pawns genuinely stand still (working, sleeping, talking) |
+| S-019 | Compressed, trimmable replay logs | **0.6** with S-001 | Persistence brings zstd; bug bundles need small logs |
 
 ## Process and tooling
 
@@ -60,6 +63,6 @@ Ordering principle: do small, high-leverage tooling when the thing it observes i
 
 ## Performance and simulation (added in 0.4)
 
-- **S-017 — A\* scratch buffers instead of a sparse map** · performance · proposed · Path search keeps its scores in a `BTreeMap` for simplicity (about 4 µs per node expanded; `pg map bench-paths` shows ~3 ms per request on a 160x120 town). A reusable dense `Vec` stamped with a search generation (one per worker thread) removes the allocation and the tree lookups and should be several times faster, with identical results (the Dijkstra property test and the threaded-vs-serial test guard it). Do it when profiling at 0.8 / Stage 11 says paths matter, not before. · Low–medium. · **Target: 0.8 profiling pass.**
-- **S-018 — Pawn-aware routing** · simulation · proposed · Today paths ignore other pawns, so a pawn blocked by a stationary pawn waits, sidesteps and finally fails (D-015). Treating *idle* pawns as temporary obstacles in the search (with the cache keyed accordingly), or adding a small "crowd cost" on occupied tiles, would route around standing pawns and doorway clumps. Needs care to keep results deterministic and cacheable. · Medium. · **Target: Stage 1 (when pawns stand still for real: working, sleeping, chatting).**
-- **S-019 — Replay log compression and `pg replay --trim`** · tooling · proposed · Long logs (many days, many pawns) get large because every input is stored as JSON. A zstd-compressed `.pgreplay` form (the persistence crate already brings zstd at 0.6) and a `--trim <tick>` to cut a log to the first N ticks would keep bug bundles (S-001) small. · Low. · **Target: 0.6 with S-001.**
+- **S-017 — A\* scratch buffers instead of a sparse map** · performance · accepted · Path search keeps its scores in a `BTreeMap` for simplicity (about 4 µs per node expanded; `pg map bench-paths` shows ~3 ms per request on a 160x120 town). A reusable dense `Vec` stamped with a search generation (one per worker thread) removes the allocation and the tree lookups and should be several times faster, with identical results (the Dijkstra property test and the threaded-vs-serial test guard it). Do it when profiling at 0.8 / Stage 11 says paths matter, not before. · Low–medium. · **Target: 0.8 profiling pass.**
+- **S-018 — Pawn-aware routing** · simulation · accepted · Today paths ignore other pawns, so a pawn blocked by a stationary pawn waits, sidesteps and finally fails (D-015). Treating *idle* pawns as temporary obstacles in the search (with the cache keyed accordingly), or adding a small "crowd cost" on occupied tiles, would route around standing pawns and doorway clumps. Needs care to keep results deterministic and cacheable. · Medium. · **Target: Stage 1 (when pawns stand still for real: working, sleeping, chatting).**
+- **S-019 — Replay log compression and `pg replay --trim`** · tooling · accepted · Long logs (many days, many pawns) get large because every input is stored as JSON. A zstd-compressed `.pgreplay` form (the persistence crate already brings zstd at 0.6) and a `--trim <tick>` to cut a log to the first N ticks would keep bug bundles (S-001) small. · Low. · **Target: 0.6 with S-001.**

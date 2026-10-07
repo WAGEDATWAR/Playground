@@ -1,9 +1,10 @@
 # Playground — Native Desktop Product & Build Roadmap
 
-**Version:** 4.1 · **Last updated:** 2026-10-06 **Basis:** Roadmap v4.1 (itself based on v3.0) (authoritative for all mechanics), which refined the original Design Document **Style:** Ordered stages. Effort and foundation are relative sizes, not calendar promises.
+**Version:** 4.2 · **Last updated:** 2026-10-06 **Basis:** Roadmap v4.1 (itself based on v4.0 and v3.0)
 
 ## 1. What changed from v3.0
 
+- **v4.2:** scheduled three more suggestions: path-search scratch buffers (0.8 profiling pass), pawn-aware routing (Stage 1) and compressed, trimmable replay logs (0.6). No product decision or gate changed.
 - **v4.1:** the developer-experience suggestions accepted during Phase 0 are scheduled where they are cheapest and most useful: reproducibility tooling and authoring aids in Stage 0, content-growth tooling in Stages 1 and 6, and polish in Stage 11 (new principle 16, extra items marked **\[DX\]** below). No product decision or gate changed.
 - Product decisions, stage order and gates for the *game* are unchanged. Nothing in the simulation design was reversed.
 - **Platform:** the platform-agnostic, touch-first handheld direction is replaced by a **native desktop binary**. Handheld, web and mobile are no longer targets. The Platform Abstraction Layer is replaced by a thin **host services** layer that exists for testing, not portability.
@@ -142,7 +143,7 @@ These replace the v3.0 neutrality rules.
 - [ ] Key sent directly to the provider per request; never logged or persisted in saves, exports or crash reports.
 - [ ] Versioned local save slots (atomic single-file generations), migrations, corruption recovery, periodic autosave, saves on focus loss / close, manual save, manual JSON world export / import.
 - [ ] **Modding spike:** pack manifest and loader; Luau host with sandbox profile, deterministic fuel and memory metering, source-only loading; typed value boundary; one end-to-end extension (a component, a system and a hook) driven by a test pack; the base content loaded through the pack loader; quarantine and safe mode.
-- [ ] **\[DX\] Reproducibility and authoring tooling, scheduled across the Stage 0 milestones:** replay diff and bisect with per-table hashes stored in logs, event filter, content-validator hints (0.4); RNG stream registry (0.5); bug bundles, scenario-file format, canonical-JSON cross-check against RFC 8785, `pg content diff` and the load-time compatibility report (0.6); JSON Schema export for pack data, first three cookbook packs (0.9); reason-code explorer and bug-bundle button in the dev overlay (0.10); soak scenario (0.11).
+- [ ] **\[DX\] Reproducibility and authoring tooling, scheduled across the Stage 0 milestones:** replay diff and bisect with per-table hashes stored in logs, event filter, content-validator hints (0.4); RNG stream registry (0.5); bug bundles, compressed and trimmable replay logs, scenario-file format, canonical-JSON cross-check against RFC 8785, `pg content diff` and the load-time compatibility report (0.6); JSON Schema export for pack data, first three cookbook packs (0.9); reason-code explorer and bug-bundle button in the dev overlay (0.10); soak scenario (0.11); A* scratch-buffer optimization if the 0.8 profiling pass shows pathfinding matters.
 - [ ] **Sandbox conformance and determinism tests:** hostile-pack corpus, VM-reload determinism variant, cross-OS golden hashes with a script pack loaded.
 - [ ] **Define the `ScriptVm` boundary** (Blueprint §23.15) so no other code names the binding crate, and implement it over `mlua` with the Luau backend.
 - [ ] **Answer the binding spike questions** (§12 item 1) with recorded measurements, and **decide** whether `mlua` stays, a hybrid is needed or an in-house binding is justified; set initial script budgets from the same measurements.
@@ -169,6 +170,7 @@ These replace the v3.0 neutrality rules.
 - [ ] Native renderer and UI: wgpu tile and sprite rendering, egui screens, keyboard and mouse input mapping, window modes, high-DPI handling.
 - [ ] **Base game shipped as a content pack** using the same format and API as player packs. **Modding API 0.1:** components, events (read), bounded hooks for needs, mood, memory and relationships.
 - [ ] Basic Mods screen: list, enable / disable, capability approval, errors, safe-mode launch.
+- [ ] **Pawn-aware routing:** idle pawns act as temporary obstacles (or a crowd cost) in path search, so pawns that stand still while working, sleeping or talking no longer block others; results stay deterministic and cacheable.
 - [ ] **\[DX\]** `pg content tree` (inheritance forest); evaluate template variants (data-only expansion of one template into several) against the content written so far; add a cookbook sample for hooks.
 
 **Done when:** a seeded 10–20-resident town runs autonomously in the native app, can be observed and inspected, produces overheard conversation, and keeps state and social history after restart; the base content loads through the pack loader; a sample pack adds a component and a hook that visibly change behavior and are attributed in the inspector.
