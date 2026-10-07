@@ -6,7 +6,7 @@
 
 use crate::canon::{Canon, ToCanon};
 use crate::commitment::Commitment;
-use crate::hash::{combine_table_hashes, hash_value, StateHash};
+use crate::hash::{combine_row_hashes, combine_table_hashes, hash_value, StateHash};
 use crate::id::{EntityId, IdCounters, IdsExhausted, Kind};
 use crate::map::{MapData, MapError, MapKind, MoveCosts, Tile};
 use crate::object::ObjectInstance;
@@ -76,6 +76,28 @@ pub struct Probe {
     pub value: i64,
     pub minutes: u64,
     pub days: u64,
+}
+
+/// The entities whose rows differ between two worlds in `table`: present in only one, or different in
+/// both. Empty for tables without rows or when the table is identical.
+pub fn differing_rows(a: &WorldState, b: &WorldState, table: &str) -> Vec<String> {
+    let (Some(ra), Some(rb)) = (a.row_hashes(table), b.row_hashes(table)) else {
+        return Vec::new();
+    };
+    let mb: BTreeMap<&String, &StateHash> = rb.iter().map(|(k, h)| (k, h)).collect();
+    let ma: BTreeMap<&String, &StateHash> = ra.iter().map(|(k, h)| (k, h)).collect();
+    let mut out: Vec<String> = ra
+        .iter()
+        .filter(|(k, h)| mb.get(k) != Some(&h))
+        .map(|(k, _)| k.clone())
+        .collect();
+    out.extend(
+        rb.iter()
+            .filter(|(k, _)| !ma.contains_key(k))
+            .map(|(k, _)| k.clone()),
+    );
+    out.sort();
+    out
 }
 
 /// Why a world mutation was refused. A refused mutation changes nothing.
@@ -240,16 +262,34 @@ impl WorldState {
         Ok(id)
     }
 
-    /// Per-table hashes in a fixed order.
+    /// Per-row hashes of an entity table (`maps`, `objects`, `pawns`, `commitments`), in id order, or
+    /// `None` for a table that has no rows (S-023).
+    pub fn row_hashes(&self, table: &str) -> Option<Vec<(String, StateHash)>> {
+        fn rows<T: ToCanon>(t: &Table<T>) -> Vec<(String, StateHash)> {
+            t.iter()
+                .map(|(id, row)| (id.to_string(), hash_value(row)))
+                .collect()
+        }
+        match table {
+            "maps" => Some(rows(&self.maps)),
+            "objects" => Some(rows(&self.objects)),
+            "pawns" => Some(rows(&self.pawns)),
+            "commitments" => Some(rows(&self.commitments)),
+            _ => None,
+        }
+    }
+
+    /// Per-table hashes in a fixed order. Entity tables hash as the combination of their rows.
     pub fn table_hashes(&self) -> Vec<(&'static str, StateHash)> {
+        let table = |name: &str| combine_row_hashes(&self.row_hashes(name).unwrap_or_default());
         vec![
             ("clock", hash_value(&self.clock)),
-            ("commitments", hash_value(&self.commitments)),
+            ("commitments", table("commitments")),
             ("id_counters", hash_value(&self.id_counters)),
-            ("maps", hash_value(&self.maps)),
+            ("maps", table("maps")),
             ("meta", hash_value(&self.meta)),
-            ("objects", hash_value(&self.objects)),
-            ("pawns", hash_value(&self.pawns)),
+            ("objects", table("objects")),
+            ("pawns", table("pawns")),
             ("probe", hash_value(&self.probe)),
             ("rng_counters", hash_value(&self.rng_counters)),
             ("settings", hash_value(&self.settings)),
@@ -588,5 +628,55 @@ mod tests {
         assert_eq!(w.occupancy.occupant(m, Tile::new(1, 1)), Some(a));
         assert_eq!(w.occupancy.occupant(m, Tile::new(4, 4)), Some(b));
         assert_eq!(w.state_hash(), hash, "occupancy is not part of the hash");
+    }
+
+    fn world_with_pawns() -> WorldState {
+        let mut w = WorldState::new("Rows", "seed");
+        let m = w.create_map(MapKind::Overworld, 8, 8).unwrap();
+        for (i, name) in ["Ann", "Bob", "Cy"].iter().enumerate() {
+            w.spawn_pawn(name, m, Tile::new(i as i32, 0)).unwrap();
+        }
+        w
+    }
+
+    #[test]
+    fn row_hashes_name_the_entity_that_changed() {
+        let a = world_with_pawns();
+        let mut b = a.clone();
+        assert!(differing_rows(&a, &b, "pawns").is_empty());
+        assert_eq!(a.state_hash(), b.state_hash());
+        let id = EntityId::new(Kind::Pawn, 2);
+        b.pawns.get_mut(id).unwrap().name = "Robert".into();
+        assert_ne!(a.state_hash(), b.state_hash());
+        assert_eq!(differing_rows(&a, &b, "pawns"), ["pawn_2"]);
+        assert!(differing_rows(&a, &b, "maps").is_empty());
+        // Added and removed rows are reported too, in id order.
+        b.pawns.remove(EntityId::new(Kind::Pawn, 3));
+        let m = EntityId::new(Kind::Map, 1);
+        b.spawn_pawn("Dee", m, Tile::new(5, 5)).unwrap();
+        assert_eq!(
+            differing_rows(&a, &b, "pawns"),
+            ["pawn_2", "pawn_3", "pawn_4"]
+        );
+        // Tables without rows have no row hashes.
+        assert!(a.row_hashes("clock").is_none() && differing_rows(&a, &b, "clock").is_empty());
+        assert_eq!(a.row_hashes("pawns").unwrap().len(), 3);
+    }
+
+    #[test]
+    fn a_table_hash_depends_on_its_rows_and_their_ids_not_on_incidental_order() {
+        let a = world_with_pawns();
+        let b = world_with_pawns();
+        assert_eq!(a.table_hashes(), b.table_hashes());
+        // Renaming an id (same content) changes the table hash.
+        let mut c = a.clone();
+        let row = c.pawns.remove(EntityId::new(Kind::Pawn, 1)).unwrap();
+        let mut moved = row.clone();
+        moved.id = EntityId::new(Kind::Pawn, 9);
+        c.pawns.insert(moved.id, moved).unwrap();
+        assert_ne!(
+            a.table_hashes().iter().find(|(n, _)| *n == "pawns"),
+            c.table_hashes().iter().find(|(n, _)| *n == "pawns")
+        );
     }
 }

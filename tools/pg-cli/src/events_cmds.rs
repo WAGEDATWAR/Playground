@@ -12,13 +12,20 @@ pub fn events_cmd(args: &[String]) -> Result<ExitCode, String> {
         Some("list") | None => {
             let filter = args.get(1).map(String::as_str);
             let mut n = 0;
-            for d in catalog.iter().filter(|d| filter.is_none_or(|f| d.category.name() == f)) {
+            for d in catalog
+                .iter()
+                .filter(|d| filter.is_none_or(|f| d.category.name() == f))
+            {
                 n += 1;
                 println!(
                     "{:<22} {:<11} {} {}",
                     d.kind,
                     d.category.name(),
-                    if d.default_visible { "shown " } else { "hidden" },
+                    if d.default_visible {
+                        "shown "
+                    } else {
+                        "hidden"
+                    },
                     d.summary
                 );
             }
@@ -27,10 +34,30 @@ pub fn events_cmd(args: &[String]) -> Result<ExitCode, String> {
         }
         Some("show") => {
             let kind = args.get(1).ok_or(USAGE)?;
-            let d = catalog.get(kind).ok_or_else(|| format!("no event kind '{kind}'"))?;
-            println!("{}  ({}, {})\n  {}", d.kind, d.category.name(), if d.default_visible { "shown by default" } else { "hidden by default" }, d.summary);
+            let d = catalog
+                .get(kind)
+                .ok_or_else(|| format!("no event kind '{kind}'"))?;
+            println!(
+                "{}  ({}, {})\n  {}",
+                d.kind,
+                d.category.name(),
+                if d.default_visible {
+                    "shown by default"
+                } else {
+                    "hidden by default"
+                },
+                d.summary
+            );
             for (name, f) in &d.fields.fields {
-                println!("  {name}: {}{}", describe_field(&f.schema), if f.default.is_some() { " (optional)" } else { "" });
+                println!(
+                    "  {name}: {}{}",
+                    describe_field(&f.schema),
+                    if f.default.is_some() {
+                        " (optional)"
+                    } else {
+                        ""
+                    }
+                );
             }
             Ok(ExitCode::SUCCESS)
         }

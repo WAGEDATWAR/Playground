@@ -62,6 +62,20 @@ pub fn hash_value<T: ToCanon + ?Sized>(value: &T) -> StateHash {
     hash_canon(&value.to_canon())
 }
 
+/// Combines per-row hashes (in the order given, which is id order for tables) into the table's hash
+/// (suggestion S-023): each row contributes its id and its own hash, so the table hash changes if any
+/// row changes, and the rows that changed can be named by comparing the lists.
+pub fn combine_row_hashes(rows: &[(String, StateHash)]) -> StateHash {
+    let mut h = blake3::Hasher::new();
+    h.update(b"pg-rows-v1");
+    for (id, row) in rows {
+        h.update(&(id.len() as u32).to_le_bytes());
+        h.update(id.as_bytes());
+        h.update(row.as_bytes());
+    }
+    StateHash(*h.finalize().as_bytes())
+}
+
 /// Combines named per-table hashes into one. The combination is itself a canonical map, so it does
 /// not depend on the order the pairs are supplied in.
 pub fn combine_table_hashes<'a>(

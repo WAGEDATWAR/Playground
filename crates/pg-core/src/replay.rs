@@ -20,7 +20,7 @@ use pg_content::ContentSet;
 use std::sync::Arc;
 
 pub const REPLAY_FORMAT: &str = "playground-replay";
-pub const REPLAY_VERSION: u32 = 3;
+pub const REPLAY_VERSION: u32 = 4;
 
 /// Which set of systems the run used.
 pub const PROFILE_DEV: &str = "dev";
@@ -628,6 +628,8 @@ pub struct BisectResult {
     /// `None` if they never differ within the shorter run.
     pub first_diff_tick: Option<u64>,
     pub tables: Vec<String>,
+    /// For each differing entity table, the entities (ids) whose rows differ (S-023).
+    pub rows: Vec<(String, Vec<String>)>,
     /// The inputs each run applied on that tick.
     pub applied_a: Vec<StampedInput>,
     pub applied_b: Vec<StampedInput>,
@@ -663,9 +665,23 @@ pub fn bisect(
                 .filter(|(x, y)| x.1 != y.1)
                 .map(|(x, _)| x.0.to_owned())
                 .collect();
+            let rows: Vec<(String, Vec<String>)> = {
+                let names: &Vec<String> = &tables;
+                names
+                    .iter()
+                    .map(|t| {
+                        (
+                            t.clone(),
+                            crate::world::differing_rows(sa.world(), sb.world(), t),
+                        )
+                    })
+                    .filter(|(_, r)| !r.is_empty())
+                    .collect()
+            };
             return Ok(BisectResult {
                 first_diff_tick: Some(tick),
                 tables,
+                rows,
                 applied_a: sa.applied_inputs().get(before_a..).unwrap_or(&[]).to_vec(),
                 applied_b: sb.applied_inputs().get(before_b..).unwrap_or(&[]).to_vec(),
             });
@@ -674,6 +690,7 @@ pub fn bisect(
     Ok(BisectResult {
         first_diff_tick: None,
         tables: Vec::new(),
+        rows: Vec::new(),
         applied_a: Vec::new(),
         applied_b: Vec::new(),
     })
@@ -1044,5 +1061,58 @@ mod tests {
             }
         }
         assert!(matches!(replay(&log, None), Err(ReplayError::BadStart(_))));
+    }
+
+    #[test]
+    fn bisect_names_the_entity_that_diverged() {
+        use crate::commands::Command;
+        use crate::id::{EntityId, Kind};
+        use crate::map::Tile;
+        let run = |walk: bool| {
+            let mut sim = Sim::with_dev_systems(WorldState::new("Rows", "rows"));
+            let cmd = |c| SimInput::Command {
+                actor: None,
+                cmd: c,
+            };
+            sim.submit(
+                0,
+                cmd(Command::DevCreateMap {
+                    w: 20,
+                    h: 20,
+                    style: 0,
+                }),
+            )
+            .unwrap();
+            for i in 0..3 {
+                sim.submit(
+                    0,
+                    cmd(Command::DevSpawnPawn {
+                        map: EntityId::new(Kind::Map, 1),
+                        at: Some(Tile::new(i, 0)),
+                        name: format!("P{i}"),
+                    }),
+                )
+                .unwrap();
+            }
+            if walk {
+                sim.submit(
+                    5,
+                    cmd(Command::DevMove {
+                        pawn: EntityId::new(Kind::Pawn, 2),
+                        to: Tile::new(10, 10),
+                    }),
+                )
+                .unwrap();
+            }
+            sim.run_ticks(200).unwrap();
+            ReplayLog::record(&sim)
+        };
+        let r = bisect(&run(false), &run(true), None).unwrap();
+        assert_eq!(r.first_diff_tick, Some(5));
+        assert!(r.tables.contains(&"pawns".to_owned()));
+        assert_eq!(
+            r.rows,
+            vec![("pawns".to_owned(), vec!["pawn_2".to_owned()])]
+        );
     }
 }

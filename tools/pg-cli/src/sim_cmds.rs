@@ -582,6 +582,9 @@ fn bisect_cmd(p: &Parsed) -> Result<ExitCode, String> {
                 flags.minute_of_day % 60,
                 r.tables.join(", ")
             );
+            for (table, ids) in &r.rows {
+                println!("  {table}: differing row(s): {}", ids.join(", "));
+            }
             for (label, applied) in [("a", &r.applied_a), ("b", &r.applied_b)] {
                 if applied.is_empty() {
                     println!("  {label}: no inputs applied on that tick (the difference comes from earlier state or a system)");
