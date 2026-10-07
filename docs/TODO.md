@@ -4,19 +4,18 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Phase 0 / Milestone 0.7 — Host services and AI client skeleton: implemented, awaiting CI + user acceptance.** Accepted and tagged: `m0.0`..`m0.6`. No mandatory checkpoint here; the next one is after 0.9.
+**Phase 0 / Milestone 0.7 — accepted (`m0.7`), including the Player2 provider groundwork.** Accepted and tagged: `m0.0`..`m0.7`. Next: **0.8 Runtime, threading and debuggability groundwork**, which also carries the accepted suggestions S-022..S-030 (see `docs/PLAN.md` row 0.8).
 
-0.7 delivered: `pg-host` traits and doubles for `SecretStore`, `Net` (plus `AllowListNet`), `Clock`, `Dialogs`, `Audio`, log sinks (`RedactingLog`, `MemLog`), `Secret` and `redact()`; `pg-host-os` `KeyringSecretStore` (OS credential store with session-only fallback), `UreqNet` (HTTPS, no redirects), `SystemClock`; `pg-ai`: four provider adapters (OpenAI, DeepSeek, Anthropic, OpenRouter; pure, fixture-tested, hostile-reply tests), circuit breaker, error taxonomy with plain messages, settings and key manager (`settings/device.json`, keys only in the credential store), `AiClient` (cache, rate cap, retry, breaker, allow-list), redaction self-check; `pg-persist` crash reports; the sentinel-key leak test; reason-code lint (S-031). CLI: `pg ai providers|key|settings|test|selfcheck`, `pg check` (S-032). Plan updated for the graphical main menu (0.10 checkpoint, Roadmap v4.3, Blueprint v2.6, D-025); ten new suggestions S-022..S-032 proposed, awaiting your decision.
+Docs are current: Blueprint v2.7, Roadmap v4.4, Design Document v3.2, D-027 (Player2), D-028 (suggestions placed).
 
 ## Blocked / waiting on user
 
-- [ ] Confirm CI for the 0.7 commit (three OSes) and accept 0.7.
-- [ ] Decide on the proposed suggestions S-022..S-030 (S-031 and S-032 are done); table at the bottom of `docs/SUGGESTIONS.md`.
+- [ ] **Register a Player2 `client_id`** for this game (Roadmap §12 item 8) and confirm the API base URL and terms (`player2.game/devtos`). Until then `pg ai login player2` uses a placeholder the provider will likely refuse. Not blocking 0.8.
 
 ## Next up
 
-1. After acceptance: tag `m0.7`; start 0.8 runtime and threading (sim thread, command queue, worker pool, `RenderSnapshot`, run states, autosave policy, panic guard; GUI dependencies compile-only in CI; profiling pass).
-2. 0.9 script spike (checkpoint), 0.10 app shell and graphical main menu (checkpoint: you launch the game), 0.11 Stage 0 gate.
+1. 0.8 in this order: (a) settings registry and string-table core (they touch existing code, so do them before more code exists); (b) event catalog and row-level hashes; (c) runtime: sim thread, command queue, worker pool, `RenderSnapshot`, run states, autosave, panic guard; (d) keyframe ring, automatic bug bundle, shadow verification; (e) manifest summaries; (f) profiling pass and the GUI stack compile-only check.
+2. 0.9 script spike (checkpoint), 0.10 app shell and graphical main menu (checkpoint), 0.11 Stage 0 gate.
 3. Prune dev scaffolding as real systems land (D-009).
 
 ## Shell note
@@ -48,3 +47,4 @@ Python is available for scripts (`scripts/check_deps.py`). Avoid bash heredocs c
 - 2026-10-06: **0.5 scheduler and actions skeleton**: see Current focus. Found while testing: two pawns cannot share a meeting tile (added `meet_at` + radius), the activator ends tasks at the boundary tick before the activity system runs (performing ends at `end - 1`), and a slot-length change invalidates schedules and commitments (handled). Logged D-019..D-021, S-021.
 - 2026-10-07: **0.6 persistence**: see Current focus. Findings: `Canon` key order vs RFC 8785 (D-022); only the fastest zstd level exists in the pure-Rust encoder; a replay log is tiny, so the useful compression and trimming target is the world snapshot in bundles.
 - 2026-10-07: **0.7 host services and AI client skeleton**: see Current focus. Findings: real providers return floats, so the AI boundary uses `serde_json` instead of the core parser; the keyring ecosystem changed shape (v4, per-platform store crates behind a `v1` feature); `webpki-roots` needs a data-license entry in `deny.toml`.
+- 2026-10-07: Accepted 0.7. Added Player2 as a provider (D-027): adapter, provider-chosen model, free credits check, device-code sign-in protocol (`pg_ai::login`), `pg ai login`; 506 tests. Accepted S-022..S-030 and placed them (D-028); specs bumped to Blueprint v2.7, Roadmap v4.4, Design Document v3.2.

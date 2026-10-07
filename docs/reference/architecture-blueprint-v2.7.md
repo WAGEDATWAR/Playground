@@ -1,4 +1,4 @@
-# Playground — Architecture Blueprint v2.6
+# Playground — Architecture Blueprint v2.7
 
 **Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.1 and Roadmap v4.2. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). It is a spec, not final source; names and signatures may shift during implementation, but the contracts and invariants may not. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
 
@@ -15,6 +15,8 @@
 **v2.5 (during Phase 0):** milestone 0.6 made persistence precise where the first implementation had to choose: the manifest lists both generations (§13.1, §13.4), the `.pgsave`/`.pglog`/`.pgbundle` container layout, the pure-Rust zstd encoder and its single level (§13.1), what a save contains and what it deliberately does not (§13.2), replay-log trimming and bug bundles (§20), and a known difference between `Canon` and RFC 8785 key ordering (§5.4).
 
 **v2.6 (during Phase 0):** the Stage 0 app shell and graphical main menu are specified as a milestone of their own (§14.3 "Stage 0 scope"), and Roadmap v4.3 makes them part of the Stage 0 gate.
+
+**v2.7 (during Phase 0):** milestone 0.7 specifics (§3 services and redaction, §10 provider set, Player2 and the device-code sign-in, key and log hygiene) and the architecture additions accepted as S-022 to S-030: typed event catalog (§6.2, §20), row-level state hashes (§5.4), save summaries (§13.1), schema-driven settings (§13.1, §14.3), string tables (§14.3), automatic bug bundles, keyframe snapshots and shadow verification (§6.4, §17, §18), headless UI snapshots (§14.3).
 
 ## 0. Architectural principles
 
@@ -139,6 +141,8 @@ trait Audio { fn play(&self, id: &str, bus: Bus); fn set_volume(&self, bus: Bus,
 **Lifecycle** is not a trait: `pg-app` translates window events (focus lost, minimized, close requested, restored) into runtime events (§6.4).
 
 **Rules:** no wall clock inside `pg-core`; secrets never pass through `Storage`; exports are built by `pg-persist`, which strips secrets; on Linux where no credential service is available, the key is kept for the session only and is never written to disk in plaintext.
+
+**Implementation notes (0.7).** Beyond the traits above, `pg-host` has `LogSink` (with `RedactingLog`, `MemLog`, `StderrLog`), `Secret` and `redact()`, `AllowListNet`, and doubles for every trait (`MemSecretStore`, `ScriptedNet` that records requests, `FixedClock`, `ScriptedDialogs`, `NullAudio`, fault-injecting `MemStorage`). `pg-host-os` provides `FsStorage`, `KeyringSecretStore` (Windows Credential Manager, macOS Keychain, Linux Secret Service, with the session-only fallback), `UreqNet` (rustls, `https_only`, no redirects) and `SystemClock`. The native-dialogs implementation arrives with the app shell (0.10).
 
 ## 4. Data model
 
@@ -323,6 +327,8 @@ AI text is nondeterministic, so its **result is recorded as an input** and repla
 
 **Known difference from RFC 8785 (0.6, D-022):** `Canon` writes object members in Unicode code point order (UTF-8 byte order); RFC 8785 sorts by UTF-16 code units. They agree except when keys mix characters from U+E000-U+FFFF with supplementary-plane characters. Engine keys are ASCII, so hashes and saves are unaffected and remain deterministic; the difference is pinned by a test and matters only if canonical JSON is ever handed to an external RFC 8785 verifier with such keys.
 
+**Row-level hashes (S-023, milestone 0.8).** Each table's hash becomes the combination of per-row hashes (row id and the row's canonical form), so a divergence can be localised below the table: `pg replay --bisect` and the divergence detector name the entity (`pawns: pawn_3`). Day hashes recorded in logs stay per-table; a per-row dump is produced on mismatch. Memory and CPU cost are about those of hashing the table whole.
+
 ## 6. Simulation loop and time \[S0\]
 
 ### 6.1 Time units
@@ -366,6 +372,8 @@ If the machine cannot keep up, the world runs slower (excess accumulator is drop
 
 Systems whose per-pawn work is independent may run data-parallel on the worker pool (for example needs and mood updates), provided results are merged in ascending id order and golden replays stay identical. This is an optimization gated on measurement (§19), not a requirement.
 
+**Event catalog (S-022, milestone 0.8).** Events stay `(kind, detail)` values that are not part of hashed state, but each kind is declared once in a catalog (kind, category, field schema using `ParamSchema`, default visibility). Debug builds validate every emitted event against it; packs register `<pack>.<kind>`; `pg events list` and the overlay's event viewer read the same catalog.
+
 ### 6.3 Movement speed versus tile scale
 
 One tile is about 1 m, but a game day lasts about 25 real minutes, so physically accurate walking would cross the town in a blink. **Movement speed is a tuned abstraction**, stored as `move_ticks_per_tile` (a data value of at least 1 tick per tile, tuned so typical in-town trips take roughly 5–20 game minutes; if that needs finer speed control, raise `TICKS_PER_GAME_MINUTE`). It is a setting, not a derived value, and is listed in the roadmap's tuning decisions.
@@ -380,6 +388,8 @@ Running -> Exiting (close requested; autosave; then quit)
 ```
 
 The world never advances while Suspended or AwaitingResume. The "pause on focus loss" behavior is a device setting, default on.
+
+**Runtime safety nets (S-028, S-029, S-030, milestone 0.8).** (a) *Keyframes:* the sim thread keeps a memory-bounded ring of snapshots (default one per simulated hour, the last 24), each with the inputs applied since; they are what the overlay's time-scrub restores, what the crash path starts a bundle from, and what shadow verification replays. (b) *Automatic bug bundle:* the last-resort tick guard and the divergence detector write a redacted `.pgbundle` (latest keyframe plus the inputs since, content refs, note) to `crash/`; the next launch offers to open it. (c) *Shadow verification:* in dev and soak runs a worker re-simulates the span between two keyframes with a different worker count and compares per-table hashes at day boundaries; a mismatch writes a bundle and flags the last system that ran.
 
 ### 6.5 Jobs and the worker pool
 
@@ -620,11 +630,11 @@ While possessing, the player starts or joins a conversation through a Command. P
 
 ```rust
 trait AiClient {                         // runs on worker threads; results re-enter as SimInputs
-    fn test_connection(&self, cfg: &AiConfig) -> AiResult<()>;
+    fn test_connection(&self, cfg: &AiConfig) -> AiResult<ConnectionInfo>;   // credits/tier when the provider reports them
     fn generate_dialogue(&self, req: &DialogueRequest, cfg: &AiConfig) -> AiResult<Vec<DialogueLine>>;
     fn propose_action(&self, req: &ProposalRequest, cfg: &AiConfig) -> AiResult<ActionProposal>;   // [S10]
 }
-struct AiConfig { provider: Provider /* OpenAi | DeepSeek | Anthropic | OpenRouter */, model: String /* key is NOT here */ }
+struct AiConfig { provider: Provider /* OpenAi | DeepSeek | Anthropic | OpenRouter | Player2 */, model: String /* key is NOT here; empty for providers that choose the model */ }
 type AiResult<T> = Result<AiOk<T>, AiError>;
 enum AiError { Auth, RateLimit { retry_after: Option<Duration> }, Quota, Timeout, Offline, BadOutput, Provider(String), Disabled }
 
@@ -639,12 +649,18 @@ trait ProviderAdapter {
 
 Adapters are pure request builders and parsers, testable with recorded fixtures and no network.
 
+**Implementation notes (0.7).** (a) Adapters are pure and fixture-tested; provider replies are untrusted: size-capped (1 MiB), parsed with serde_json (real providers send floats, which the core's strict parser would refuse; this is the only place outside persistence edges that uses it), reduced to one text field, stripped of control and direction-override characters and length-capped; error messages are redacted and capped. (b) `ProviderAdapter` also has an optional `connection_check` (a free account request) with `parse_connection_check -> ConnectionInfo { credits, tier }`; providers without one test with a tiny generation. (c) The client adds a bounded response cache, a per-minute request cap, one retry on transient failures and a circuit breaker that counts only provider-health failures (timeouts, offline, 5xx, unusable replies), not bad keys, quota, rate limits or cancels. (d) `Provider::chooses_own_model()` providers send no model id and reject a custom model in settings.
+
+**Player2 (added in 0.7 groundwork).** Taken from Player2's published OpenAPI document (`https://api.player2.game/v1/openapi.json`): base `https://api.player2.game/v1`; `POST /chat/completions` is OpenAI-style (`messages`, `max_tokens`, `temperature`, `stream`; no `model` field) with `Authorization: Bearer <p2Key>`; `GET /account/joules` returns `{ joules, patron_tier, user_id }` and is the free connection check; `GET /health` is a liveness probe; 401, 402 (insufficient credits), 429 are used for auth, quota and rate limiting. Keys come from the **device-code flow** (`POST /login/device/new { client_id }` returns `deviceCode`, `userCode`, `verificationUri[Complete]`, `expiresIn`, `interval`; `POST /login/device/token { client_id, device_code, grant_type: "urn:ietf:params:oauth:grant-type:device_code" }` returns `{ p2Key }`), or a pasted key. `pg_ai::login` implements the protocol as pure request builders, parsers and a polling schedule (`DeviceLoginSession`) driven by a caller-supplied clock, so it never sleeps; the verification link must be https on `player2.game` or a subdomain, the user code is cleaned and capped, timings are clamped, and the device code is a `Secret`. The Player2 NPC (`/npcs/*`), game-data, text-to-speech and speech-to-text endpoints are **not used**: dialogue stays rule-driven with optional generated lines through `/chat/completions` (suggestion S-033 records the possible later uses). The `client_id` is an open decision (Roadmap §12 item 8).
+
 ### 10.2 Key handling
 
 1. The key lives in `SecretStore` (Windows Credential Manager, macOS Keychain, Linux Secret Service) only. Settings and saves hold provider and model id, never the key. Where no credential service exists, the key is session-only and never written to disk in plaintext.
 2. The AI client reads the key at call time and calls the provider **directly over HTTPS** (rustls) through the `Net` trait on a worker thread. There is no gateway and no proxy; a desktop binary has no origin restrictions, so the hosted-gateway design from v1.0 is removed. Requests go only to an allow-listed set of provider hosts.
 3. A single `redact()` utility scrubs keys from any string before logging. A CI test runs the game with a sentinel key and greps logs, saves, exports and crash reports for it.
 4. **Packs never reach the network or the key.** Scripts have no I/O (§23.4). Pack-supplied strings that reach prompts are length-capped, sanitized, treated as untrusted data in the *user* payload, and never placed in the system instruction.
+
+**Implementation notes (0.7).** `Secret` wraps every key: no `Display`, `Debug` prints `Secret(***)`, best-effort wipe on drop. `HttpRequest`'s `Debug` hides credential headers and query values. `redact()` removes secrets it is told about and anything shaped like a credential (`sk-…`, `AIza…`, `Bearer …`, `x-api-key: …`, `key=…`, `"api_key":"…"`); every log path goes through `RedactingLog`. `AllowListNet` refuses anything but plain `https` to an allow-listed host; the real network layer never follows redirects. Where no OS credential service exists the store is session-only and says so (`is_persistent`). The sentinel-key test scans errors, logs, `Debug` output, storage, saves, exports, replay logs, bug bundles and crash reports, raw and decompressed; `pg ai selfcheck` runs the AI-side scan and `pg check` runs everything.
 
 ### 10.3 Reliability
 
@@ -741,6 +757,8 @@ mods/<pack_id>/ or mods/<pack_id>.pgpack   installed content packs (the shipped 
 ```
 
 User-data directory: `%APPDATA%\Playground` (Windows), `~/Library/Application Support/Playground` (macOS), `$XDG_DATA_HOME/playground` (Linux), resolved through a directories crate. `<gen>` is a monotonically increasing generation number. The manifest names the current generation; the previous generation is kept as a fallback. A single file per generation replaces v1.0's multi-part snapshots, since a desktop has the memory and disk to write it whole.
+
+**Save summaries (S-024, milestone 0.8).** The manifest gains additive summary fields (world name, day, population, play ticks, content packs, last-saved time and, from the app, an optional small thumbnail blob `thumb.<gen>.png` referenced by name) so the Saved Worlds screen lists worlds without loading them, and damaged slots still list. **Settings registry (S-025, milestone 0.8):** device settings are described by a typed registry built on `ParamSchema` (id, type and range, default, label key, scope device or world, restart-required); it validates `settings/device.json`, migrates it (same rules as §13.5), drives `pg settings get/set/list` and, in 0.10, generates the Options screen. Secrets are never settings.
 
 ### 13.2 Save procedure (atomic, never destroys the last good save)
 
@@ -842,6 +860,8 @@ Screens are state machines in `pg-ui-model`; `pg-app` draws them with egui (menu
 - **Inspector panel:** activity, mood, needs bars, top relevant memories with reasons, relationship labels, pack-contributed sections (view-model data only; §23.7).
 - **Options:** General, Graphics (window mode, resolution, vsync, UI scale), Audio, Controls (rebindable), LLM Configuration (provider, model, key entry, test, status); others as their features arrive.
 - **Mods:** installed packs, enable / disable, load order, capability approvals, errors and quarantine status, safe-mode launch.
+
+**String tables (S-026, milestone 0.8 core, 0.10 menus).** All player-visible text is a key into `strings/<locale>.json` tables in the base pack (pack strings are namespaced `<pack>.<key>`); the reason-code sentence table moves into them and `ReasonCode::explain` renders from the active table. A lint reports missing and unused keys and a pseudo-locale (accented, 40 percent longer) is available in dev builds. **Headless UI snapshots (S-027, milestone 0.10):** each screen model can emit a UI-agnostic widget tree (labels, buttons, fields, focus order); tests snapshot it as text and assert that every action is reachable by keyboard; the egui layer maps the same tree to its accessibility output.
 
 ### 14.4 Camera, focus and bubbles
 
@@ -947,6 +967,8 @@ Tooling: `cargo nextest`, `proptest` (property tests), `insta` (snapshot tests),
 13. **Fuzzing:** pack manifest parser, archive reader, Luau-value-to-command marshalling, import pipeline, save loader.
 14. **Independent canonicalization check \[S0, milestone 0.6\]:** a property test that `Canon::to_canonical_string` equals RFC 8785 (JCS) output, from a third-party implementation used as a dev-dependency, for integer-only documents, so a bug in our own escaping or ordering cannot hide behind our own vectors.
 15. **Scenario files \[S0, format at 0.6\]:** each gate's 'Done when' (and the 30+ day soak with its invariants: bounded memories, events, caches, VM memory) is a JSON scenario (seed, packs, scripted inputs, steps such as save and reload, assertions) run by `pg scenario run`, so acceptance tests read like the roadmap.
+
+**Added in v2.7.** Sentinel-key leak test across every output surface (milestone 0.7, in `tools/pg-cli/tests`); crash-at-every-storage-operation fault injection for saves (0.6); shadow determinism verification in soak runs (0.8, 0.11); menu-flow scenarios against in-memory storage and the scripted AI client (0.10, 0.11); headless UI snapshot and keyboard-reachability tests (0.10).
 
 ## 19. Performance plan
 

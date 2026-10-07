@@ -6,6 +6,7 @@
 pub mod breaker;
 pub mod client;
 pub mod error;
+pub mod login;
 pub mod provider;
 pub mod selfcheck;
 pub mod settings;

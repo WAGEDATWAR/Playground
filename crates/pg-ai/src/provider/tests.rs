@@ -53,7 +53,11 @@ fn every_provider_builds_a_well_formed_https_request_to_its_own_host() {
         );
         assert_eq!(r.timeout_ms, 8_000);
         let b = body_json(&r);
-        assert_eq!(b["model"], p.recommended_model());
+        if p.chooses_own_model() {
+            assert!(b.get("model").is_none(), "{p} sends no model");
+        } else {
+            assert_eq!(b["model"], p.recommended_model());
+        }
         // The key is in exactly one header and nowhere in the body or URL.
         assert!(!r.body.as_deref().unwrap().contains("SENTINEL"));
         assert!(!r.url.contains("SENTINEL"));
@@ -121,10 +125,10 @@ fn provider_ids_and_names_round_trip() {
     for p in Provider::ALL {
         assert_eq!(Provider::from_id(p.id()), Some(p));
         assert!(p.secret_name().starts_with("playground.ai.") && p.secret_name().ends_with(p.id()));
-        assert!(!p.recommended_model().is_empty());
+        assert_eq!(p.recommended_model().is_empty(), p.chooses_own_model());
     }
     assert_eq!(Provider::from_id("nope"), None);
-    assert_eq!(allowed_hosts().len(), 4);
+    assert_eq!(allowed_hosts().len(), 5);
 }
 
 // ---- successful responses (recorded-style fixtures) ----------------------------------------------------
@@ -315,4 +319,110 @@ proptest! {
         prop_assert!(!out.chars().any(|c| (c.is_control() && c != '\n' && c != '\t') || is_spoofing(c)));
         prop_assert_eq!(clean_text(&out, max), out.clone());
     }
+}
+
+// ---- Player2 -------------------------------------------------------------------------------------------
+
+#[test]
+fn player2_requests_are_openai_style_without_a_model_and_use_a_bearer_key() {
+    let a = adapter_for(Provider::Player2);
+    let r = a.build_request(&task(), "", &key(), Duration::from_secs(8));
+    assert_eq!(r.url, "https://api.player2.game/v1/chat/completions");
+    let b = body_json(&r);
+    assert!(b.get("model").is_none());
+    assert_eq!(b["max_tokens"], 60);
+    assert_eq!(b["messages"][0]["role"], "system");
+    assert_eq!(b["messages"][1]["role"], "user");
+    assert!(r
+        .headers
+        .iter()
+        .any(|(k, v)| k == "Authorization" && v == &format!("Bearer {KEY}")));
+    assert_eq!(Provider::Player2.auth_method(), AuthMethod::DeviceLogin);
+    assert_eq!(Provider::OpenAi.auth_method(), AuthMethod::PastedKey);
+    assert_eq!(Provider::from_id("player2"), Some(Provider::Player2));
+    assert_eq!(Provider::Player2.secret_name(), "playground.ai.player2");
+    let reply = r#"{"id":"c1","object":"chat.completion","created":1,"model":"p2-chosen","choices":[{"index":0,"message":{"role":"assistant","content":"Hi there."},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":3,"total_tokens":6}}"#;
+    assert_eq!(a.parse_response(reply, 100).unwrap(), "Hi there.");
+}
+
+#[test]
+fn player2_connection_check_is_a_free_account_request() {
+    let a = adapter_for(Provider::Player2);
+    let r = a.connection_check(&key(), Duration::from_secs(8)).unwrap();
+    assert_eq!(
+        (r.method, r.url.as_str()),
+        (Method::Get, "https://api.player2.game/v1/account/joules")
+    );
+    assert!(r.body.is_none() && !format!("{r:?}").contains("SENTINEL"));
+    assert_eq!(
+        a.parse_connection_check(r#"{"joules":1500,"patron_tier":"free","user_id":"u1"}"#)
+            .unwrap(),
+        ConnectionInfo {
+            credits: Some(1500),
+            tier: Some("free".into())
+        }
+    );
+    // Credits as a float are floored; a tier with control characters is cleaned; a missing tier is fine.
+    // (JSON escapes for a bell character and a right-to-left override, built without literal control characters.)
+    let esc = [r"\u", "0007", r"\u", "202e"].concat();
+    let body = format!("{{\"joules\":12.9,\"patron_tier\":\"gold{esc}\"}}");
+    let info = a.parse_connection_check(&body).unwrap();
+    assert_eq!(
+        (info.credits, info.tier.as_deref()),
+        (Some(12), Some("gold"))
+    );
+    assert_eq!(
+        a.parse_connection_check(r#"{"joules":3}"#).unwrap().tier,
+        None
+    );
+    for bad in [
+        "{}",
+        r#"{"joules":"lots"}"#,
+        r#"{"joules":null}"#,
+        "[]",
+        "nope",
+    ] {
+        assert_eq!(
+            a.parse_connection_check(bad),
+            Err(AiError::BadOutput),
+            "{bad}"
+        );
+    }
+    // Other providers have no free check and fall back to a tiny generation.
+    for p in [
+        Provider::OpenAi,
+        Provider::DeepSeek,
+        Provider::Anthropic,
+        Provider::OpenRouter,
+    ] {
+        assert!(
+            adapter_for(p)
+                .connection_check(&key(), Duration::from_secs(8))
+                .is_none(),
+            "{p}"
+        );
+    }
+}
+
+#[test]
+fn player2_errors_are_classified_like_the_others() {
+    let a = adapter_for(Provider::Player2);
+    assert_eq!(
+        a.classify_error(&resp(401, &[], r#"{"message":"bad token"}"#)),
+        AiError::Auth
+    );
+    assert_eq!(
+        a.classify_error(&resp(402, &[], r#"{"message":"Insufficient credits"}"#)),
+        AiError::Quota
+    );
+    assert_eq!(
+        a.classify_error(&resp(429, &[("retry-after", "3")], "{}")),
+        AiError::RateLimit {
+            retry_after: Some(Duration::from_secs(3))
+        }
+    );
+    assert_eq!(
+        a.classify_error(&resp(500, &[], r#"{"message":"oops"}"#)),
+        AiError::Provider("oops".into())
+    );
 }

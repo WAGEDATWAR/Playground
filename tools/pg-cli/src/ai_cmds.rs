@@ -2,22 +2,23 @@
 
 use crate::args::{parse, Parsed, Spec};
 use pg_ai::client::{AiClient, ClientConfig};
-use pg_ai::provider::{adapter_for, allowed_hosts, AiTask, Provider};
+use pg_ai::login::{store_key, DeviceLoginSession, SessionState, PLACEHOLDER_CLIENT_ID};
+use pg_ai::provider::{adapter_for, allowed_hosts, AiTask, AuthMethod, Provider};
 use pg_ai::selfcheck;
 use pg_ai::settings::{validate_model_id, DeviceSettings, KeyManager};
-use pg_host::{AllowListNet, CancelToken, RedactingLog, Secret, StderrLog};
+use pg_host::{AllowListNet, CancelToken, Clock, RedactingLog, Secret, StderrLog};
 use pg_host_os::{FsStorage, KeyringSecretStore, SystemClock, UreqNet};
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
 const SPEC: Spec<'static> = Spec {
-    values: &["dir", "provider", "model", "from-env"],
+    values: &["dir", "provider", "model", "from-env", "client-id"],
     switches: &["dry-run", "enable", "disable", "default-model"],
     optional: &[],
 };
 
-const USAGE: &str = "usage: pg ai providers | key set <provider> [--from-env VAR] | key clear <provider> | key status | settings show|set [--provider P] [--model M | --default-model] [--enable | --disable] | test [--provider P] [--model M] [--dry-run] | selfcheck   (settings flags take --dir <data dir>, default ./pg-data)";
+const USAGE: &str = "usage: pg ai providers | key set <provider> [--from-env VAR] | key clear <provider> | key status | settings show|set [--provider P] [--model M | --default-model] [--enable | --disable] | login player2 [--client-id ID] | test [--provider P] [--model M] [--dry-run] | selfcheck   (settings flags take --dir <data dir>, default ./pg-data)";
 
 pub fn ai_cmd(args: &[String]) -> Result<ExitCode, String> {
     match args.split_first() {
@@ -25,6 +26,7 @@ pub fn ai_cmd(args: &[String]) -> Result<ExitCode, String> {
             "providers" => providers(rest),
             "key" => key(rest),
             "settings" => settings(rest),
+            "login" => login(rest),
             "test" => test(rest),
             "selfcheck" => Ok(selfcheck_cmd()),
             other => Err(format!("unknown ai command '{other}'\n{USAGE}")),
@@ -59,7 +61,11 @@ fn providers(args: &[String]) -> Result<ExitCode, String> {
             "{:<11} {:<18} {:<28} {}",
             p.id(),
             p.host(),
-            p.recommended_model(),
+            if p.chooses_own_model() {
+                "(chosen by the provider)"
+            } else {
+                p.recommended_model()
+            },
             if keys.has_key(p) { "stored" } else { "not set" }
         );
     }
@@ -126,10 +132,16 @@ fn settings(args: &[String]) -> Result<ExitCode, String> {
                 s.ai.provider = provider_arg(t)?;
             }
             if let Some(m) = p.one("model") {
+                if s.ai.provider.chooses_own_model() {
+                    return Err(format!(
+                        "{} chooses its own model; --model is not accepted",
+                        s.ai.provider
+                    ));
+                }
                 validate_model_id(m)?;
                 s.ai.custom_model = Some(m.to_owned());
             }
-            if p.has("default-model") {
+            if p.has("default-model") || s.ai.provider.chooses_own_model() {
                 s.ai.custom_model = None;
             }
             if p.has("enable") {
@@ -147,7 +159,9 @@ fn settings(args: &[String]) -> Result<ExitCode, String> {
         if s.ai.enabled { "on" } else { "off" },
         s.ai.provider,
         s.ai.effective_model(),
-        if s.ai.custom_model.is_some() {
+        if s.ai.provider.chooses_own_model() {
+            " (chosen by the provider)"
+        } else if s.ai.custom_model.is_some() {
             " (custom)"
         } else {
             " (recommended)"
@@ -166,14 +180,27 @@ fn test(args: &[String]) -> Result<ExitCode, String> {
         s.provider = provider_arg(t)?;
     }
     if let Some(m) = p.one("model") {
+        if s.provider.chooses_own_model() {
+            return Err(format!(
+                "{} chooses its own model; --model is not accepted",
+                s.provider
+            ));
+        }
         validate_model_id(m)?;
         s.custom_model = Some(m.to_owned());
+    }
+    if s.provider.chooses_own_model() {
+        s.custom_model = None;
     }
     println!(
         "provider {} ({}), model {}",
         s.provider,
         s.provider.host(),
-        s.effective_model()
+        if s.provider.chooses_own_model() {
+            "(chosen by the provider)".to_owned()
+        } else {
+            s.effective_model()
+        }
     );
     if p.has("dry-run") {
         // Show exactly what would be sent, with the credential hidden by the request's own Debug output.
@@ -196,13 +223,72 @@ fn test(args: &[String]) -> Result<ExitCode, String> {
         ClientConfig::default(),
     );
     match client.test_connection(&s, &CancelToken::new()) {
-        Ok(()) => {
+        Ok(info) => {
             println!("connection test passed");
+            if let Some(c) = info.credits {
+                println!(
+                    "credits: {c}{}",
+                    info.tier.map_or(String::new(), |t| format!("  tier: {t}"))
+                );
+            }
             Ok(ExitCode::SUCCESS)
         }
         Err(e) => {
             println!("{}", e.user_message());
             Ok(ExitCode::FAILURE)
+        }
+    }
+}
+
+/// `pg ai login player2`: the device-code sign-in. Shows a code and a link, polls until approved, and stores
+/// the key in the credential store. Needs a client id registered with the provider.
+fn login(args: &[String]) -> Result<ExitCode, String> {
+    let p = parse(args, &SPEC)?;
+    let provider = provider_arg(p.positional.first().map_or("player2", String::as_str))?;
+    if provider.auth_method() != AuthMethod::DeviceLogin {
+        return Err(format!(
+            "{provider} uses a pasted key: pg ai key set {}",
+            provider.id()
+        ));
+    }
+    let client_id = p
+        .one("client-id")
+        .map(str::to_owned)
+        .or_else(|| std::env::var("PG_PLAYER2_CLIENT_ID").ok())
+        .unwrap_or_else(|| PLACEHOLDER_CLIENT_ID.to_owned());
+    if client_id == PLACEHOLDER_CLIENT_ID {
+        println!("note: using the placeholder client id; the provider will probably refuse it until one is registered (--client-id or PG_PLAYER2_CLIENT_ID)");
+    }
+    let net = AllowListNet::new(UreqNet, &allowed_hosts());
+    let clock = SystemClock::new();
+    let cancel = CancelToken::new();
+    let mut session = DeviceLoginSession::begin(&net, &client_id, clock.now_monotonic(), &cancel)
+        .map_err(|e| e.user_message())?;
+    let prompt = session.prompt().clone();
+    println!(
+        "open {}",
+        prompt
+            .complete_url
+            .as_deref()
+            .unwrap_or(&prompt.verification_url)
+    );
+    println!("and confirm the code: {}", prompt.user_code);
+    println!(
+        "(expires in {} s; Ctrl+C to cancel)",
+        prompt.expires_in.as_secs()
+    );
+    loop {
+        match session.poll(&net, clock.now_monotonic(), &cancel) {
+            SessionState::Waiting { next_in } => std::thread::sleep(next_in),
+            SessionState::Done(key) => {
+                store_key(&KeyringSecretStore::new(), provider, &key)?;
+                println!("signed in; the key for {provider} is stored in the credential store");
+                return Ok(ExitCode::SUCCESS);
+            }
+            SessionState::Failed(e) => {
+                println!("{}", e.user_message());
+                return Ok(ExitCode::FAILURE);
+            }
         }
     }
 }

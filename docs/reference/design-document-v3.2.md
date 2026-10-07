@@ -1,6 +1,6 @@
 # Playground — Design Document v3.1
 
-**Status (v3.1):** adds the developer-experience commitments accepted during Phase 0 (§12.6, §14.4); no change to scope or pillars. Updated from v2.0 to define Playground as a **native desktop game written in Rust, with a sandboxed Luau scripting layer for user-created content packs**. Where this document and earlier versions conflict, v3.0 decides (see §17). **Companion docs:** Native Desktop Roadmap v4.2 (when), Architecture Blueprint v2.3 (how).
+**Status (v3.2):** adds **Player2 as a fifth AI provider** (§ providers) and commits the project to localisation-ready text and keyboard- and screen-reader-friendly menus from the first graphical build (§12.6, §14.4); no change to scope or pillars. **Status (v3.1):** adds the developer-experience commitments accepted during Phase 0 (§12.6, §14.4); no change to scope or pillars. Updated from v2.0 to define Playground as a **native desktop game written in Rust, with a sandboxed Luau scripting layer for user-created content packs**. Where this document and earlier versions conflict, v3.0 decides (see §17). **Companion docs:** Native Desktop Roadmap v4.2 (when), Architecture Blueprint v2.3 (how).
 
 ## 1. Premise
 
@@ -29,7 +29,7 @@ It takes inspiration from *Tomodachi Life* (charming, character-led social play)
 - Occupation-based schedules evolving into the free-time scheduler with commitments.
 - Conversations with speech bubbles for the focused resident; AI or rule-based text.
 - Watch, pause, speed, focus, inspect. Multiple local saves, export / import.
-- Provider options for four AI services (bring your own key).
+- Provider options for five AI services (bring your own key, or sign in with Player2).
 - Base game delivered as a content pack; the pack loader and Luau sandbox are working (API 0.x, developer-facing). Local packs can add data, components and hooks.
 
 ### 3.2 Planned expansion (in order)
@@ -157,7 +157,7 @@ Adults only at first. Later: children, elders, births, move-ins (each a separate
 | Dialogue lines | Stage 1 onward | Optional; cooldowns; fallback always present; text only |
 | Action proposals | Stage 10 | Closed registry; strict JSON; validated by simulation; cooldowns and caching |
 
-Providers: OpenAI, DeepSeek, Anthropic, OpenRouter. Players pay providers directly. A recommended model per provider plus an optional custom model ID. Keys are held in the operating system's credential store (session-only where none exists), sent directly to the provider only for the request that needs them, and never written to logs, saves, exports or crash reports. Only compact, relevant context is ever sent; never the full save or unrelated residents' private data. **Mods have no access to the network, to provider keys or to the model**; a pack with the `ai` capability can only mark its own actions as proposable and contribute bounded, sanitized context data.
+Providers: OpenAI, DeepSeek, Anthropic, OpenRouter and Player2. Players pay providers directly (Player2 players use their own Player2 account and credits and sign in with a short code in their browser; no key is pasted, and Player2 chooses the model). A recommended model per provider plus an optional custom model ID. Keys are held in the operating system's credential store (session-only where none exists), sent directly to the provider only for the request that needs them, and never written to logs, saves, exports or crash reports. Only compact, relevant context is ever sent; never the full save or unrelated residents' private data. **Mods have no access to the network, to provider keys or to the model**; a pack with the `ai` capability can only mark its own actions as proposable and contribute bounded, sanitized context data.
 
 ## 9. Content tone and filtering
 
@@ -225,6 +225,8 @@ One versioned, documented API (the `pg` namespace) exposes the engine's extensio
 - Cookbook: a gallery of small runnable sample packs covers every part of the API and doubles as the compatibility test suite.
 - Compatibility: when a pack changes, a diff tool and a load-time report say which changes are safe for existing saves and which are save-breaking.
 
+**Text and accessibility foundations (v3.2).** All player-visible text, including the plain-language reasons behind pawn decisions, comes from keyed string tables rather than being written into code, so translation and pack-supplied wording are possible without rewrites, and a stretched pseudo-locale is used to catch layout problems early. Menus are built as a structure of labelled controls with a defined keyboard order, which is both what automated tests check and what screen readers read. Full accessibility options remain a Stage 11 deliverable; this removes the expensive retrofit.
+
 ### 12.7 API maturity
 
 The API is `0.x` and may change through Stage 10 (documented, with lint migration hints). It freezes at `1.0` in Stage 11, with a deprecation policy. Early packs declare the API range they target; a pack built for an incompatible range is refused with a clear message.
@@ -263,6 +265,8 @@ Shows current activity, mood, needs, relevant memories and relationship label, w
 ### 14.4 Developer / debug tools (Stage 11, hooks earlier)
 
 World: spawn and destroy objects, spawn pawn, toggle pathfinding display. Pawns: full heal, resurrect, injure (random or by part), add / remove items, view / add / remove memories, reset occupation. Scripting: pack inspector (registrations, per-pack time and memory, errors), script console, hot reload, per-pack log viewer. Destructive actions need confirmation. Reproducibility and explanation: replay diff and bisect to locate any divergence, a **bug bundle** (snapshot, inputs, content versions) that lets any odd behavior be replayed exactly, scenario files that make acceptance checks executable, and a reason-code explorer that answers "why did this resident do that?".
+
+**Added in v3.2.** The event viewer lists events from a declared catalog (kind, fields, visibility); the overlay can step back to an earlier keyframe and replay forward deterministically; an unexpected crash or a detected divergence leaves a redacted, replayable bug bundle that the next launch offers to open; and in soak runs a second worker re-simulates stretches with a different thread count to prove the results match.
 
 ## 15. Component map
 

@@ -38,7 +38,7 @@ Go back to the latest work with `git checkout main`.
 cargo test --workspace
 ```
 
-The first run compiles everything (a few minutes); later runs are fast. You should see `test result: ok.` lines and no `FAILED`. At milestone 0.7 that is about 490 tests. To run only one crate or a few tests:
+The first run compiles everything (a few minutes); later runs are fast. You should see `test result: ok.` lines and no `FAILED`. At milestone 0.7 that is about 506 tests. To run only one crate or a few tests:
 
 ```bash
 cargo test -p pg-core                  # just the simulation core
@@ -113,11 +113,15 @@ cargo run -q -p pg-cli -- check
 # AI client skeleton (no network needed): providers, the exact request that would be sent, the leak check
 cargo run -q -p pg-cli -- ai providers
 cargo run -q -p pg-cli -- ai test --provider anthropic --dry-run
+cargo run -q -p pg-cli -- ai test --provider player2 --dry-run
 cargo run -q -p pg-cli -- ai selfcheck
 # With your own key (kept in the OS credential store, never in files): set it from an environment variable,
 # then run the real connection test
 #   PowerShell:  $env:MY_KEY = "sk-..."; cargo run -q -p pg-cli -- ai key set openai --from-env MY_KEY
 cargo run -q -p pg-cli -- ai test --provider openai
+# Player2 signs in with a code instead of a pasted key (needs a registered client id, see docs/TODO.md):
+#   PowerShell:  $env:PG_PLAYER2_CLIENT_ID = "<your client id>"; cargo run -q -p pg-cli -- ai login player2
+cargo run -q -p pg-cli -- ai test --provider player2
 
 # The golden replay CI checks on every OS
 cargo run -q -p pg-cli -- replay golden/dev-town-3days.json --snapshot-at 12345

@@ -46,6 +46,7 @@ jobs:
       # AI client skeleton (0.7): redaction self-check with a sentinel key, and the exact request is printable.
       - run: cargo run -q -p pg-cli -- ai selfcheck
       - run: cargo run -q -p pg-cli -- ai test --provider anthropic --dry-run
+      - run: cargo run -q -p pg-cli -- ai test --provider player2 --dry-run
       # Everything above in one report, as a person would run it.
       - run: cargo run -q -p pg-cli -- check
       # Parallel pathfinding must give results identical to serial on every OS (Blueprint §7.3, §19).

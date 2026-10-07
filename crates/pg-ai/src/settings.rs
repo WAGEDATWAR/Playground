@@ -35,7 +35,11 @@ impl Default for AiSettings {
 }
 
 impl AiSettings {
+    /// The model id to send (empty when the provider chooses its own).
     pub fn effective_model(&self) -> String {
+        if self.provider.chooses_own_model() {
+            return String::new();
+        }
         self.custom_model
             .clone()
             .unwrap_or_else(|| self.provider.recommended_model().to_owned())
@@ -137,7 +141,7 @@ impl DeviceSettings {
         let provider = Provider::from_id(provider_child.reader().str()?).ok_or_else(|| {
             provider_child
                 .reader()
-                .err("unknown provider (openai, deepseek, anthropic or openrouter)")
+                .err("unknown provider (openai, deepseek, anthropic, openrouter or player2)")
         })?;
         let custom_model = match a.maybe("custom_model")? {
             Some(m) => {
@@ -147,6 +151,11 @@ impl DeviceSettings {
             }
             None => None,
         };
+        if provider.chooses_own_model() && custom_model.is_some() {
+            return Err(a.child("custom_model")?.reader().err(format!(
+                "{provider} chooses its own model; leave this empty"
+            )));
+        }
         Ok(DeviceSettings {
             ai: AiSettings {
                 enabled: a.child("enabled")?.reader().bool()?,
@@ -318,6 +327,7 @@ mod tests {
             br#"{"ai":{"enabled":true,"provider":"openai","custom_model":"bad model!"}}"#,
             br#"{"ai":{"enabled":"yes","provider":"openai","custom_model":null}}"#,
             br#"{"ai":{"enabled":true,"provider":"openai","custom_model":null,"api_key":"sk-12345678"}}"#,
+            br#"{"ai":{"enabled":true,"provider":"player2","custom_model":"gpt-4o"}}"#,
             &[0xFF, 0xFE][..],
         ] {
             let mem = MemStorage::new();
@@ -325,7 +335,7 @@ mod tests {
             assert!(DeviceSettings::load(&mem).is_err(), "{:?}", String::from_utf8_lossy(bad));
             assert_eq!(DeviceSettings::load_or_default(&mem, &log), DeviceSettings::default());
         }
-        assert_eq!(log.lines().len(), 7);
+        assert_eq!(log.lines().len(), 8);
         assert!(log.lines().iter().all(|(l, _)| *l == Level::Warn));
         // The stray key field is refused, and the refusal does not repeat the key.
         assert!(!log.text().contains("sk-12345678"));

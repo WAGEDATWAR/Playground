@@ -1,9 +1,10 @@
 # Playground — Native Desktop Product & Build Roadmap
 
-**Version:** 4.3 · **Last updated:** 2026-10-07 **Basis:** Roadmap v4.2 (itself based on v4.0 and v3.0)
+**Version:** 4.4 · **Last updated:** 2026-10-07 **Basis:** Roadmap v4.3 (itself based on v4.0 and v3.0)
 
 ## 1. What changed from v3.0
 
+- **v4.4:** **Player2 is a fifth AI provider** (OpenAI-style web API, sign-in by device code instead of a pasted key, model chosen by the provider; Options flow, Stage 0). Nine accepted suggestions (S-022 to S-030) are scheduled: most of the runtime-facing ones land in milestone 0.8, their UI halves in 0.10 and the soak use in 0.11. A new open decision records the Player2 client id. No product decision or gate changed.
 - **v4.3:** Stage 0 now ends with a **launchable desktop app and graphical main menu** (new item and a new clause in "Done when"; gate 1 gains the same clause). The Stage 1 presentation work builds on that shell instead of creating it. No other product decision or gate changed.
 - **v4.2:** scheduled three more suggestions: path-search scratch buffers (0.8 profiling pass), pawn-aware routing (Stage 1) and compressed, trimmable replay logs (0.6). No product decision or gate changed.
 - **v4.1:** the developer-experience suggestions accepted during Phase 0 are scheduled where they are cheapest and most useful: reproducibility tooling and authoring aids in Stage 0, content-growth tooling in Stages 1 and 6, and polish in Stage 11 (new principle 16, extra items marked **\[DX\]** below). No product decision or gate changed.
@@ -63,7 +64,7 @@ The game talks to the machine through a small set of traits, each with an in-mem
 | Service | Needed from | Contract |
 | --- | --- | --- |
 | Storage | Stage 0 | Named blobs under the user-data folder; atomic replace (temp file, flush, rename); list, delete, free-space query |
-| Secret store | Stage 0 | Get / set / delete a provider key in the OS credential store; session-only where none exists; never exported or logged |
+| Secret store | Stage 0 | Get / set / delete a provider key in the OS credential store; session-only where none exists; never exported or logged. Keys come from a pasted value or, for Player2, a device-code sign-in whose result goes straight into the store |
 | Network (HTTPS) | Stage 0 | Request with timeout and cancel; error classification; allow-listed provider hosts |
 | Clock | Stage 0 | Monotonic time for the tick accumulator; wall clock for save metadata only |
 | Native dialogs | Stage 0 | Pick a file to read; choose where to save |
@@ -141,11 +142,11 @@ These replace the v3.0 neutrality rules.
 - [ ] Normal time: 20–30 minute game day; pause and speed controls; focus-loss pause flow. The world pauses while closed, saves, and asks before resuming.
 - [ ] Schedule reservations with the five priorities, same-day rescheduling, commitment acceptance, deterministic conflict and tie rules.
 - [ ] Pathfinding (with parallel batched solving) and occupancy rules. Tests for time wrap, schedule boundaries, blocked destinations, reservation conflicts and replay.
-- [ ] Options flow for the four AI providers: OS credential-store key storage, recommended model + optional custom ID, connection test, clear errors, non-AI fallback.
+- [ ] Options flow for the five AI providers (OpenAI, DeepSeek, Anthropic, OpenRouter, Player2): OS credential-store key storage (or device-code sign-in for Player2), recommended model + optional custom ID (Player2 chooses its own model), connection test (for Player2 a free account check that also shows remaining credits), clear errors, non-AI fallback.
 - [ ] Key sent directly to the provider per request; never logged or persisted in saves, exports or crash reports.
 - [ ] Versioned local save slots (atomic single-file generations), migrations, corruption recovery, periodic autosave, saves on focus loss / close, manual save, manual JSON world export / import.
 - [ ] **Modding spike:** pack manifest and loader; Luau host with sandbox profile, deterministic fuel and memory metering, source-only loading; typed value boundary; one end-to-end extension (a component, a system and a hook) driven by a test pack; the base content loaded through the pack loader; quarantine and safe mode.
-- [ ] **\[DX\] Reproducibility and authoring tooling, scheduled across the Stage 0 milestones:** replay diff and bisect with per-table hashes stored in logs, event filter, content-validator hints (0.4); RNG stream registry (0.5); bug bundles, compressed and trimmable replay logs, scenario-file format, canonical-JSON cross-check against RFC 8785, `pg content diff` and the load-time compatibility report (0.6); JSON Schema export for pack data, first three cookbook packs (0.9); reason-code explorer and bug-bundle button in the dev overlay (0.10); soak scenario (0.11); A* scratch-buffer optimization if the 0.8 profiling pass shows pathfinding matters.
+- [ ] **\[DX\] Reproducibility and authoring tooling, scheduled across the Stage 0 milestones:** replay diff and bisect with per-table hashes stored in logs, event filter, content-validator hints (0.4); RNG stream registry (0.5); bug bundles, compressed and trimmable replay logs, scenario-file format, canonical-JSON cross-check against RFC 8785, `pg content diff` and the load-time compatibility report (0.6); JSON Schema export for pack data, first three cookbook packs (0.9); reason-code explorer and bug-bundle button in the dev overlay (0.10); soak scenario (0.11); A* scratch-buffer optimization if the 0.8 profiling pass shows pathfinding matters; **runtime and debuggability groundwork in 0.8:** typed event catalog (S-022), row-level state hashes (S-023), save summaries in the manifest (S-024), schema-driven settings registry (S-025), string table with the reason-code sentences moved into it (S-026), automatic redacted bug bundle on a crash or divergence (S-028), keyframe snapshots (S-029) and shadow determinism verification (S-030); **UI halves in 0.10:** generated Options screen, headless UI snapshots with keyboard and accessibility tests (S-027), save thumbnails, event viewer from the catalog, time-scrub control, crash-bundle prompt; shadow verification joins the soak scenario in 0.11.
 - [ ] **Sandbox conformance and determinism tests:** hostile-pack corpus, VM-reload determinism variant, cross-OS golden hashes with a script pack loaded.
 - [ ] **Define the `ScriptVm` boundary** (Blueprint §23.15) so no other code names the binding crate, and implement it over `mlua` with the Luau backend.
 - [ ] **Answer the binding spike questions** (§12 item 1) with recorded measurements, and **decide** whether `mlua` stays, a hybrid is needed or an in-house binding is justified; set initial script budgets from the same measurements.
@@ -381,3 +382,5 @@ These are open and should be settled early; none blocks Stage 0 except the first
 5. **Workshop-style distribution:** whether to ever offer a hosted channel for packs; currently out of scope.
 6. **Minimum specification and resident cap:** set from profiling, not assumed.
 7. **Pack signing:** deferred; integrity is by content hash until there is a distribution channel.
+
+8. **Player2 client id (new in v4.4).** Player2's device-code sign-in needs a `client_id` registered with Player2 for this game. Until one exists the build uses a placeholder and the provider will likely refuse it. Needed before the Player2 option can be tried by anyone but a developer; register it by Stage 0's 0.10 checkpoint. Also confirm the API base URL (`https://api.player2.game/v1`, taken from the published OpenAPI document) and the terms at `player2.game/devtos` for a distributed game.

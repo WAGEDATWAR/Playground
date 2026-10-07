@@ -383,3 +383,49 @@ fn the_client_is_usable_from_several_threads() {
         .count();
     assert_eq!(ok, 8);
 }
+
+#[test]
+fn a_player2_connection_test_uses_the_free_account_endpoint_and_reports_credits() {
+    let r = rig();
+    KeyManager::new(r.secrets.as_ref())
+        .set_key(Provider::Player2, "p2-key-0123456789abcdef")
+        .unwrap();
+    let s = AiSettings {
+        provider: Provider::Player2,
+        enabled: false,
+        custom_model: None,
+    };
+    assert_eq!(s.effective_model(), "");
+    r.net
+        .inner()
+        .push_ok(200, r#"{"joules":420,"patron_tier":"free","user_id":"u"}"#);
+    let info = r.client.test_connection(&s, &CancelToken::new()).unwrap();
+    assert_eq!(
+        (info.credits, info.tier.as_deref()),
+        (Some(420), Some("free"))
+    );
+    let reqs = r.net.inner().requests();
+    assert_eq!(reqs.len(), 1);
+    assert!(reqs[0].url.ends_with("/account/joules") && reqs[0].body.is_none());
+    // Errors map the same way, and the key never reaches the log.
+    r.net.inner().push_ok(401, r#"{"message":"bad"}"#);
+    assert_eq!(
+        r.client.test_connection(&s, &CancelToken::new()),
+        Err(AiError::Auth)
+    );
+    r.net.inner().push_ok(402, "{}");
+    assert_eq!(
+        r.client.test_connection(&s, &CancelToken::new()),
+        Err(AiError::Quota)
+    );
+    // Generation goes to chat/completions with no model field.
+    r.net.inner().push_ok(200, OK_BODY);
+    let on = AiSettings { enabled: true, ..s };
+    assert!(r
+        .client
+        .generate(&on, &task(1), &CancelToken::new())
+        .is_ok());
+    let last = r.net.inner().requests().pop().unwrap();
+    assert!(last.url.ends_with("/chat/completions") && !last.body.unwrap().contains("\"model\""));
+    assert!(!r.log.text().contains("p2-key-0123456789abcdef"));
+}

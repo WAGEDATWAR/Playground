@@ -8,7 +8,7 @@
 
 use crate::breaker::{BreakerConfig, BreakerState, CircuitBreaker, Permit};
 use crate::error::AiError;
-use crate::provider::{adapter_for, AiTask, Provider};
+use crate::provider::{adapter_for, AiTask, ConnectionInfo, Provider};
 use crate::settings::AiSettings;
 use pg_core::canon::Canon;
 use pg_core::hash::hash_canon;
@@ -135,13 +135,55 @@ impl AiClient {
         &self,
         settings: &AiSettings,
         cancel: &CancelToken,
-    ) -> Result<(), AiError> {
+    ) -> Result<ConnectionInfo, AiError> {
         let on = AiSettings {
             enabled: true,
             ..settings.clone()
         };
+        // Providers with a free account endpoint (Player2) are checked there, without spending credits.
+        let key = self
+            .secrets
+            .get(&on.provider.secret_name())
+            .map_err(|e| AiError::KeyStore(e.to_string()))?
+            .ok_or(AiError::NoKey)?;
+        let adapter = adapter_for(on.provider);
+        if let Some(req) = adapter.connection_check(&key, self.cfg.timeout) {
+            let result = match self.net.request(&req, cancel) {
+                Ok(resp) if (200..300).contains(&resp.status) => {
+                    adapter.parse_connection_check(&resp.body)
+                }
+                Ok(resp) => Err(adapter.classify_error(&resp)),
+                Err(e) => Err(self.map_net_error(e)),
+            };
+            match &result {
+                Ok(_) => self.note(
+                    Level::Info,
+                    &format!("ai check ok provider={}", on.provider.id()),
+                ),
+                Err(e) => self.note(
+                    Level::Warn,
+                    &format!("ai check failed provider={}: {e}", on.provider.id()),
+                ),
+            }
+            return result;
+        }
         self.run(&on, &AiTask::connection_test(), cancel, false)
-            .map(|_| ())
+            .map(|_| ConnectionInfo::default())
+    }
+
+    fn map_net_error(&self, e: NetError) -> AiError {
+        match e {
+            NetError::Timeout => AiError::Timeout,
+            NetError::Offline => AiError::Offline,
+            NetError::Cancelled => AiError::Cancelled,
+            NetError::Tls(e) => {
+                AiError::Provider(format!("secure connection failed: {}", redact(&e, &[])))
+            }
+            NetError::Blocked(e) => {
+                AiError::Provider(format!("request blocked: {}", redact(&e, &[])))
+            }
+            NetError::Other(e) => AiError::Provider(redact(&e, &[]).chars().take(200).collect()),
+        }
     }
 
     /// Generates text for `task`.
@@ -285,20 +327,7 @@ impl AiClient {
                     adapter.parse_response(&resp.body, self.cfg.max_reply_chars)
                 }
                 Ok(resp) => Err(adapter.classify_error(&resp)),
-                Err(NetError::Timeout) => Err(AiError::Timeout),
-                Err(NetError::Offline) => Err(AiError::Offline),
-                Err(NetError::Cancelled) => Err(AiError::Cancelled),
-                Err(NetError::Tls(e)) => Err(AiError::Provider(format!(
-                    "secure connection failed: {}",
-                    redact(&e, &[])
-                ))),
-                Err(NetError::Blocked(e)) => Err(AiError::Provider(format!(
-                    "request blocked: {}",
-                    redact(&e, &[])
-                ))),
-                Err(NetError::Other(e)) => Err(AiError::Provider(
-                    redact(&e, &[]).chars().take(200).collect(),
-                )),
+                Err(e) => Err(self.map_net_error(e)),
             };
             match outcome {
                 Ok(text) => return Ok(text),

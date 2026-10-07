@@ -1,4 +1,5 @@
-//! The four providers and their adapters (Blueprint §10.1): OpenAI, DeepSeek, Anthropic, OpenRouter.
+//! The five providers and their adapters (Blueprint §10.1): OpenAI, DeepSeek, Anthropic, OpenRouter and
+//! Player2.
 //!
 //! An adapter is a **pure** request builder and response parser: no network, no clock, no key storage. It
 //! turns an [`AiTask`] into an [`HttpRequest`], turns a response body into clean text, and classifies error
@@ -20,14 +21,27 @@ pub enum Provider {
     DeepSeek,
     Anthropic,
     OpenRouter,
+    /// Player2's web API: OpenAI-style chat completions, a key obtained by device login, and a
+    /// provider-chosen model.
+    Player2,
+}
+
+/// How the player gets a key for a provider.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum AuthMethod {
+    /// Paste a key from the provider's dashboard.
+    PastedKey,
+    /// Sign in through the provider's website with a short code (OAuth device flow); a pasted key also works.
+    DeviceLogin,
 }
 
 impl Provider {
-    pub const ALL: [Provider; 4] = [
+    pub const ALL: [Provider; 5] = [
         Provider::OpenAi,
         Provider::DeepSeek,
         Provider::Anthropic,
         Provider::OpenRouter,
+        Provider::Player2,
     ];
 
     /// The stable id used in settings files and secret names.
@@ -37,6 +51,7 @@ impl Provider {
             Provider::DeepSeek => "deepseek",
             Provider::Anthropic => "anthropic",
             Provider::OpenRouter => "openrouter",
+            Provider::Player2 => "player2",
         }
     }
 
@@ -46,6 +61,7 @@ impl Provider {
             Provider::DeepSeek => "DeepSeek",
             Provider::Anthropic => "Anthropic",
             Provider::OpenRouter => "OpenRouter",
+            Provider::Player2 => "Player2",
         }
     }
 
@@ -60,7 +76,21 @@ impl Provider {
             Provider::DeepSeek => "api.deepseek.com",
             Provider::Anthropic => "api.anthropic.com",
             Provider::OpenRouter => "openrouter.ai",
+            Provider::Player2 => "api.player2.game",
         }
+    }
+
+    pub const fn auth_method(self) -> AuthMethod {
+        match self {
+            Provider::Player2 => AuthMethod::DeviceLogin,
+            _ => AuthMethod::PastedKey,
+        }
+    }
+
+    /// Whether the provider picks the model itself: the request carries no model id and a custom model id
+    /// is not accepted.
+    pub const fn chooses_own_model(self) -> bool {
+        matches!(self, Provider::Player2)
     }
 
     /// A reasonable cheap, fast model to start with. These are data to review as providers change their
@@ -71,6 +101,8 @@ impl Provider {
             Provider::DeepSeek => "deepseek-chat",
             Provider::Anthropic => "claude-haiku-4-5-20251001",
             Provider::OpenRouter => "openrouter/auto",
+            // Player2 chooses; the empty id means "none is sent".
+            Provider::Player2 => "",
         }
     }
 
@@ -112,6 +144,15 @@ impl AiTask {
     }
 }
 
+/// What a successful connection test can report.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ConnectionInfo {
+    /// Remaining credits, when the provider reports them (Player2 "joules").
+    pub credits: Option<i64>,
+    /// The account tier, when reported (cleaned and capped).
+    pub tier: Option<String>,
+}
+
 /// Largest provider reply body we will parse (1 MiB).
 pub const MAX_BODY_BYTES: usize = 1024 * 1024;
 /// Longest error message kept from a provider.
@@ -128,6 +169,16 @@ pub trait ProviderAdapter: Send + Sync {
     ) -> HttpRequest;
     /// The reply text from a **successful** response body, cleaned and capped at `max_chars`.
     fn parse_response(&self, body: &str, max_chars: usize) -> Result<String, AiError>;
+    /// A free request that proves the key works and reports the account (Player2: credits), if the
+    /// provider has such an endpoint. `None` means the connection test is a tiny generation instead.
+    fn connection_check(&self, _key: &Secret, _timeout: Duration) -> Option<HttpRequest> {
+        None
+    }
+
+    fn parse_connection_check(&self, _body: &str) -> Result<ConnectionInfo, AiError> {
+        Err(AiError::BadOutput)
+    }
+
     /// Classifies a non-success response.
     fn classify_error(&self, resp: &HttpResponse) -> AiError {
         classify(resp)
@@ -145,6 +196,9 @@ pub fn adapter_for(p: Provider) -> &'static dyn ProviderAdapter {
         },
         Provider::OpenRouter => &OpenAiLike {
             provider: Provider::OpenRouter,
+        },
+        Provider::Player2 => &OpenAiLike {
+            provider: Provider::Player2,
         },
         Provider::Anthropic => &AnthropicAdapter,
     }
@@ -187,13 +241,13 @@ impl ProviderAdapter for OpenAiLike {
                 "max_completion_tokens",
             ),
             Provider::DeepSeek => ("https://api.deepseek.com/chat/completions", "max_tokens"),
+            Provider::Player2 => ("https://api.player2.game/v1/chat/completions", "max_tokens"),
             _ => (
                 "https://openrouter.ai/api/v1/chat/completions",
                 "max_tokens",
             ),
         };
-        let body = Canon::map([
-            ("model", Canon::str(model)),
+        let mut fields = vec![
             (
                 "messages",
                 Canon::List(vec![
@@ -208,7 +262,12 @@ impl ProviderAdapter for OpenAiLike {
                 ]),
             ),
             (tokens_field, Canon::Int(i128::from(task.max_tokens))),
-        ]);
+        ];
+        // Player2 chooses the model itself; its request schema has no model field.
+        if !self.provider.chooses_own_model() {
+            fields.push(("model", Canon::str(model)));
+        }
+        let body = Canon::map(fields);
         json_request(
             url,
             vec![
@@ -221,6 +280,42 @@ impl ProviderAdapter for OpenAiLike {
             &body,
             timeout,
         )
+    }
+
+    fn connection_check(&self, key: &Secret, timeout: Duration) -> Option<HttpRequest> {
+        // Player2: GET /account/joules proves the key and reports credits without spending any.
+        (self.provider == Provider::Player2).then(|| HttpRequest {
+            method: Method::Get,
+            url: "https://api.player2.game/v1/account/joules".to_owned(),
+            headers: vec![
+                (
+                    "Authorization".to_owned(),
+                    format!("Bearer {}", key.expose()),
+                ),
+                ("Accept".to_owned(), "application/json".to_owned()),
+            ],
+            body: None,
+            timeout_ms: u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX),
+        })
+    }
+
+    fn parse_connection_check(&self, body: &str) -> Result<ConnectionInfo, AiError> {
+        let v = parse_json(body)?;
+        // Credits may arrive as an integer or a float; keep whole units, and refuse anything else.
+        let credits = match v.get("joules") {
+            Some(serde_json::Value::Number(n)) => n.as_i64().or_else(|| {
+                n.as_f64()
+                    .filter(|f| f.is_finite())
+                    .map(|f| f.floor() as i64)
+            }),
+            _ => return Err(AiError::BadOutput),
+        };
+        let tier = v
+            .get("patron_tier")
+            .and_then(serde_json::Value::as_str)
+            .map(|t| clean_text(t, 40))
+            .filter(|t| !t.is_empty());
+        Ok(ConnectionInfo { credits, tier })
     }
 
     fn parse_response(&self, body: &str, max_chars: usize) -> Result<String, AiError> {
