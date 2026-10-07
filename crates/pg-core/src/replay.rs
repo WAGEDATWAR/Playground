@@ -11,7 +11,9 @@
 use crate::canon::{Canon, CanonError, ToCanon};
 use crate::hash::StateHash;
 use crate::input::StampedInput;
-use crate::sim::{DayHash, Sim};
+use crate::dev;
+use crate::pipeline::Pipeline;
+use crate::sim::{DayHash, Sim, SimSnapshot};
 use crate::time::ClockOverflow;
 use crate::world::WorldState;
 use pg_content::ContentSet;
@@ -40,6 +42,16 @@ pub struct DayHashRecord {
     pub tables: Vec<(String, String)>,
 }
 
+/// Where a trimmed log starts: the world as saved at `tick` plus the inputs still queued then. A log
+/// with a start state replays from there instead of from a fresh world (suggestions S-019, S-001).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StartState {
+    pub tick: u64,
+    pub world: Canon,
+    pub pending: Vec<StampedInput>,
+    pub next_seq: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReplayLog {
     pub profile: String,
@@ -52,6 +64,8 @@ pub struct ReplayLog {
     pub day_hashes: Vec<DayHashRecord>,
     pub final_hash: String,
     pub final_tables: Vec<(String, String)>,
+    /// Present only in trimmed logs (and bug bundles); the inputs before it are gone.
+    pub start: Option<StartState>,
 }
 
 fn table_records(tables: &[(&'static str, StateHash)]) -> Vec<(String, String)> {
@@ -93,7 +107,52 @@ impl ReplayLog {
                 .collect(),
             final_hash: w.state_hash().to_hex(),
             final_tables: table_records(&w.table_hashes()),
+            start: None,
         }
+    }
+
+    /// The tick the log's run starts at (0 unless trimmed).
+    pub fn start_tick(&self) -> u64 {
+        self.start.as_ref().map_or(0, |s| s.tick)
+    }
+
+    /// Cuts the log at absolute tick `at`: everything before it is replaced by a snapshot, so the result
+    /// replays only the tail but ends at the same hashes. Day hashes at or before `at` are dropped.
+    pub fn trim(
+        &self,
+        at: u64,
+        content: Option<Arc<ContentSet>>,
+    ) -> Result<ReplayLog, ReplayError> {
+        let start = self.start_tick();
+        let rel = at
+            .checked_sub(start)
+            .filter(|r| *r <= self.ticks)
+            .ok_or_else(|| {
+                ReplayError::BadStart(format!(
+                    "tick {at} is outside the log ({start}..={})",
+                    start + self.ticks
+                ))
+            })?;
+        let mut sim = build_sim(self, content)?;
+        sim.run_ticks(rel)?;
+        let snap = sim.snapshot();
+        Ok(ReplayLog {
+            ticks: self.ticks - rel,
+            inputs: Vec::new(),
+            day_hashes: self
+                .day_hashes
+                .iter()
+                .filter(|d| d.tick > at)
+                .cloned()
+                .collect(),
+            start: Some(StartState {
+                tick: at,
+                world: snap.world.to_canon(),
+                pending: snap.pending,
+                next_seq: snap.next_seq,
+            }),
+            ..self.clone()
+        })
     }
 }
 
@@ -108,7 +167,7 @@ fn tables_canon(tables: &[(String, String)]) -> Canon {
 
 impl ToCanon for ReplayLog {
     fn to_canon(&self) -> Canon {
-        Canon::map([
+        let mut log = Canon::map([
             ("format", Canon::str(REPLAY_FORMAT)),
             ("version", REPLAY_VERSION.to_canon()),
             ("profile", self.profile.to_canon()),
@@ -157,7 +216,23 @@ impl ToCanon for ReplayLog {
             ),
             ("final_hash", self.final_hash.to_canon()),
             ("final_tables", tables_canon(&self.final_tables)),
-        ])
+        ]);
+        // Written only when present, so untrimmed logs keep their exact bytes.
+        if let (Some(start), Canon::Map(m)) = (&self.start, &mut log) {
+            m.insert(
+                "start".to_owned(),
+                Canon::map([
+                    ("tick", start.tick.to_canon()),
+                    ("world", start.world.clone()),
+                    (
+                        "pending",
+                        Canon::List(start.pending.iter().map(ToCanon::to_canon).collect()),
+                    ),
+                    ("next_seq", start.next_seq.to_canon()),
+                ]),
+            );
+        }
+        log
     }
 }
 
@@ -240,6 +315,21 @@ impl ReplayLog {
             day_hashes,
             final_hash: text(c.field("final_hash")?, "final_hash")?,
             final_tables: read_tables(c.field("final_tables")?, "final_tables")?,
+            start: match c.get("start") {
+                None | Some(Canon::Null) => None,
+                Some(s) => Some(StartState {
+                    tick: num(s.field("tick")?, "start.tick")?,
+                    world: s.field("world")?.clone(),
+                    pending: s
+                        .field("pending")?
+                        .as_list()
+                        .ok_or_else(|| CanonError::new("start.pending must be a list"))?
+                        .iter()
+                        .map(StampedInput::from_canon)
+                        .collect::<Result<Vec<_>, _>>()?,
+                    next_seq: num(s.field("next_seq")?, "start.next_seq")?,
+                }),
+            },
         })
     }
 }
@@ -276,6 +366,8 @@ pub enum ReplayError {
     MissingContent,
     /// The supplied content is not the content the log was recorded with.
     ContentMismatch(String),
+    /// The log's start state could not be restored, or a trim point is out of range.
+    BadStart(String),
     Clock,
 }
 
@@ -288,6 +380,7 @@ impl std::fmt::Display for ReplayError {
                 f.write_str("the log was recorded with content packs, but none were supplied")
             }
             ReplayError::ContentMismatch(m) => write!(f, "content differs from the recording: {m}"),
+            ReplayError::BadStart(m) => write!(f, "bad start state: {m}"),
             ReplayError::Clock => f.write_str("simulation clock overflowed"),
         }
     }
@@ -347,10 +440,26 @@ pub fn build_sim(log: &ReplayLog, content: Option<Arc<ContentSet>>) -> Result<Si
         return Err(ReplayError::UnknownProfile(log.profile.clone()));
     }
     check_content(log, content.as_deref())?;
-    let mut sim = Sim::with_dev_systems(WorldState::new(
-        log.world_name.clone(),
-        log.seed_text.clone(),
-    ));
+    let mut sim = match &log.start {
+        None => Sim::with_dev_systems(WorldState::new(
+            log.world_name.clone(),
+            log.seed_text.clone(),
+        )),
+        Some(start) => {
+            let world = WorldState::from_canon(&start.world)
+                .map_err(|e| ReplayError::BadStart(e.to_string()))?;
+            let mut pipeline = Pipeline::new();
+            dev::install(&mut pipeline);
+            Sim::restore(
+                SimSnapshot {
+                    world,
+                    pending: start.pending.clone(),
+                    next_seq: start.next_seq,
+                },
+                pipeline,
+            )
+        }
+    };
     if let Some(c) = content {
         sim = sim.with_content(c);
     }
@@ -876,5 +985,53 @@ mod tests {
             "the seed text is in the meta table: {:?}",
             r.tables
         );
+    }
+    #[test]
+    fn a_trimmed_log_replays_only_the_tail_and_reaches_the_same_hashes() {
+        let log = recorded(3);
+        let total = log.ticks;
+        for at in [0, 1, 4_999, 5_000, 14_400, 20_001, 30_000, total] {
+            let trimmed = log.trim(at, None).unwrap_or_else(|e| panic!("trim at {at}: {e}"));
+            assert_eq!(trimmed.start_tick(), at);
+            assert_eq!(trimmed.ticks, total - at);
+            assert!(trimmed.inputs.is_empty(), "everything still pending moved into the snapshot");
+            assert!(trimmed.day_hashes.iter().all(|d| d.tick > at));
+            let out = replay(&trimmed, None).unwrap();
+            assert!(out.ok(), "trim at {at}: {:?}", out.mismatches);
+            assert_eq!(out.final_hash.to_hex(), log.final_hash);
+        }
+    }
+
+    #[test]
+    fn a_trimmed_log_survives_serialization_and_can_be_trimmed_again() {
+        let log = recorded(3);
+        let once = log.trim(9_000, None).unwrap();
+        let text = once.to_canon().to_canonical_string();
+        let back = ReplayLog::from_canon(&crate::canon::json::parse(&text).unwrap()).unwrap();
+        assert_eq!(back.to_canon(), once.to_canon());
+        assert!(replay(&back, None).unwrap().ok());
+        let twice = back.trim(25_000, None).unwrap();
+        assert_eq!(twice.start_tick(), 25_000);
+        assert!(replay(&twice, None).unwrap().ok());
+        // Out of range (before the start, or beyond the end) is an error, not a panic.
+        assert!(matches!(back.trim(8_000, None), Err(ReplayError::BadStart(_))));
+        assert!(matches!(log.trim(log.ticks + 1, None), Err(ReplayError::BadStart(_))));
+    }
+
+    #[test]
+    fn untrimmed_logs_do_not_gain_a_start_field() {
+        let text = recorded(1).to_canon().to_canonical_string();
+        assert!(!text.contains("\"start\""));
+    }
+
+    #[test]
+    fn a_corrupt_start_state_is_refused() {
+        let mut log = recorded(2).trim(5_000, None).unwrap();
+        if let Some(start) = &mut log.start {
+            if let Canon::Map(m) = &mut start.world {
+                m.insert("schema".into(), Canon::Int(99));
+            }
+        }
+        assert!(matches!(replay(&log, None), Err(ReplayError::BadStart(_))));
     }
 }
