@@ -546,6 +546,14 @@ fn bench(args: &[String]) -> Result<ExitCode, String> {
             ])
         })
         .collect();
+    let first = vm
+        .call(handler, &args[0], Fuel(50_000))
+        .map_err(|e| e.to_string())?;
+    println!(
+        "  one VM: {} KiB at rest after load; the sample handler costs {} fuel per call",
+        vm.memory_used() / 1024,
+        first.fuel
+    );
     let rounds = 200u32;
     let t = Instant::now();
     for _ in 0..rounds {

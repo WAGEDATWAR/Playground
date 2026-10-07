@@ -1,4 +1,4 @@
-# Playground — Architecture Blueprint v2.7
+# Playground — Architecture Blueprint v2.8
 
 **Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.1 and Roadmap v4.2. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). It is a spec, not final source; names and signatures may shift during implementation, but the contracts and invariants may not. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
 
@@ -17,6 +17,8 @@
 **v2.6 (during Phase 0):** the Stage 0 app shell and graphical main menu are specified as a milestone of their own (§14.3 "Stage 0 scope"), and Roadmap v4.3 makes them part of the Stage 0 gate.
 
 **v2.7 (during Phase 0):** milestone 0.7 specifics (§3 services and redaction, §10 provider set, Player2 and the device-code sign-in, key and log hygiene) and the architecture additions accepted as S-022 to S-030: typed event catalog (§6.2, §20), row-level state hashes (§5.4), save summaries (§13.1), schema-driven settings (§13.1, §14.3), string tables (§14.3), automatic bug bundles, keyframe snapshots and shadow verification (§6.4, §17, §18), headless UI snapshots (§14.3).
+
+**v2.8 (during Phase 0):** milestone 0.9 (the ScriptVm spike) settled what the first implementation had to choose. §23.4: the compiler is configured so removed and replaced builtins cannot be reached through Luau's fast-call and `pairs` lowering, and string functions need no length caps because Luau's pattern matcher is interruptible by fuel. §23.5 and §23.10: pack components apply to every entity of their kinds, are stored only when written, and are hashed only when present. §23.6: quarantine from deterministic failures is world state. §23.15: `call` takes its context as data and returns buffered commands; registrations are returned rather than pushed to a registrar. See `docs/spikes/scriptvm.md` and D-031.
 
 ## 0. Architectural principles
 
@@ -1118,12 +1120,14 @@ One Luau state per pack, created and run only on the sim thread. Luau is embedde
 | Allowed libraries | `math` (restricted subset), `string` (restricted), `table`, `utf8`, `bit32`, `buffer`; pack-local `require` for its own modules |
 | Removed | `io`, `os`, `debug`, `package`, `loadstring` / `load`, `getfenv` / `setfenv`, `collectgarbage`, `coroutine`, `newproxy`, `gcinfo`, the Luau `vector` type |
 | `math` | Keep `min`, `max`, `abs`, `floor`, `ceil`, `clamp`, `sign`; remove `random`, `randomseed`, `sin`, `cos`, `tan`, `sqrt`, `exp`, `log`, `pow` family and other transcendental functions; provide `pg.math` integer and fixed-point helpers (`idiv`, `muldiv`, `isqrt`, `lerp_permille`) |
-| `string` | Keep formatting and simple operations; cap input and output lengths; wrap `find` / `match` / `gmatch` / `gsub` with length caps (built-in C functions cannot be interrupted by fuel); remove `string.dump` |
+| `string` | Keep formatting and the pattern functions; remove `string.dump` and anything not on the allow-list. No length caps are needed: Luau's pattern matcher calls the interrupt on every step, so fuel stops a catastrophic pattern, and allocation (`rep`, `..`, `format`) is bounded by the memory limit (spike findings, D-031) |
 | `pairs` / `next` | Replaced with a deterministic iterator (array part in order, then keys sorted by type and value; only string and number keys); `ipairs` unchanged |
 | `tostring` / `print` | `tostring` of tables, functions and userdata returns a type tag, never an address; `print` routes to the per-pack logger |
 | Metatables | `setmetatable` rejects `__gc` and `__mode` (no finalizers or weak tables); builtin metatables are frozen; `__metatable` is enforced |
 | Globals | Sandbox mode makes standard-library tables read-only; the only added global is `pg`; user globals are frozen after load |
 | Types | `--!strict` supported; type definitions in generated `pg.d.luau` |
+
+**Build and compiler configuration (found by the 0.9 spike, D-031).** Luau compiles direct calls to builtins (`math.sin(x)`, `setmetatable(...)`) into fast-call instructions that never read the global, and `for k, v in pairs(t)` into a direct `next` loop. Removing or replacing a global therefore does not remove the capability. The host sets the compiler's `mutable_globals` and `disabled_builtins` for every name the prelude replaces or removes, and the hostile-pack corpus calls each removed function directly. Metatables are frozen when attached (`__mode` is honoured by the collector whenever it runs, so rejecting it at attach time is not enough). Bare `for k, v in t do` and `next(t)` cannot be intercepted; they are an order-sensitive pattern that `pg pack lint` reports and the VM-reload tests catch. The vendored Luau is built without native code generation (no `luau-jit` feature, checked in CI) and with floating-point contraction off through per-target flags in `.cargo/config.toml`, verified at run time by a fused-multiply-add probe on every target.
 
 ### 23.5 Determinism contract
 
@@ -1143,6 +1147,7 @@ Rules every pack must satisfy and the host enforces or tests:
 - **Memory:** `script_memory_bytes_per_pack` via the allocator limit. Exhaustion aborts the call the same way.
 - **C-function caps:** built-in functions that run to completion without safepoints are length-capped (see §23.4) so they cannot stall the sim thread.
 - **Watchdog (backstop only):** a wall-clock watchdog protects the sim thread against a pathological hang the fuel counter cannot see. If it fires, the runtime stops the pack, records `PackQuarantined` as a `SimInput` with its tick (so replay reproduces the quarantine rather than diverging), and surfaces a notice. Normal limits are always the deterministic ones.
+- **As built (0.9):** failures that fuel and memory limits produce are deterministic, so they are counted and quarantined in `WorldState.ext` (per-pack error ticks and quarantine tick), which survives snapshots, keyframes, rewind and saves, and is hashed. Recording quarantine as a `SimInput` is needed only for the wall-clock watchdog and is deferred with it to Stage 1 (D-031).
 - **Quarantine policy:** after `script_max_errors` failures within a window, or on any load-phase failure, a pack is quarantined for the session and flagged in the world's metadata. Its components remain in the save as inert **orphan data** (§23.10) so re-enabling the pack restores them.
 - **Reporting:** errors carry pack id, script path, line, extension point, entity id and reason code, and appear in the Mods screen, the inspector and the developer log.
 
@@ -1243,7 +1248,7 @@ pg.actions.register({
 
 ### 23.10 Data model integration
 
-- **Component storage:** pack components live in `WorldState.ext`, keyed by `(EntityId, "pack.component")`, with typed fields from the declarative schema. They are included in saves, in the canonical state hash, in the inspector and in export, and are validated at load against the pack's registered schema.
+- **Component storage:** pack components live in `WorldState.ext`, keyed by component name then entity, with typed integer fields from the declarative schema. A component **applies to every entity of its declared kinds**: an entity with nothing stored has the field defaults, and only written values are stored. The store is included in saves, in the canonical form, in the state hash and in the inspector, and is validated on every write by the core (declared component, existing entity of an applicable kind, known field, value in range, requesting pack owns the component). It is **left out of the canonical form and the hash while empty**, so worlds without packs keep their hashes. Per-pack error history and quarantine live in the same store. Explicit attach and detach of components arrives with templates in Stage 1.
 - **Pack settings:** declared in the manifest, chosen at world creation, stored in `WorldSettings.mod_settings`, readable via `pg.pack.settings`.
 - **Migrations:** a component declares a `version` and a pure `migrate(from, old_fields) -> new_fields` function. The host runs the chain at load inside the sandbox; any failure refuses the load and offers safe mode.
 - **Orphans and safe mode:** if a pack is missing, disabled, quarantined or fails validation, its component values are preserved untouched in `ext` as inert orphan data and are re-attached if the pack returns. Safe mode loads the world with all scripts off, so a save is never lost to a bad pack. Because orphan data is hashed with a marker, safe-mode play is flagged as divergent for replay purposes.
@@ -1285,9 +1290,10 @@ pg.actions.register({
 trait ScriptVm {
     fn new(cfg: VmConfig) -> Result<Self, VmError> where Self: Sized;   // sandboxed state: libs, globals, limits
     fn load(&mut self, chunk: SourceChunk) -> Result<(), VmError>;      // compile from source; bytecode is rejected
-    fn run_load_phase(&mut self, registrar: &mut dyn Registrar, fuel: Fuel) -> Result<(), VmError>;
-    fn call(&mut self, handler: HandlerId, args: &ScriptArgs, ctx: &mut CallCtx, fuel: Fuel)
-        -> Result<ScriptRet, VmError>;                                  // returns typed values; commands go to ctx.cmd
+    fn run_load_phase(&mut self, entry: &str, fuel: Fuel) -> Result<Registrations, VmError>; // closes registries, freezes globals
+    fn call(&mut self, handler: HandlerId, args: &Val, fuel: Fuel) -> Result<CallResult, VmError>;
+        // `args` carries the context as plain data; the result carries the return value and the buffered commands
+    fn call_batch(&mut self, handler: HandlerId, args: &[Val], fuel: Fuel) -> Vec<Result<CallResult, VmError>>;
     fn fuel_used(&self) -> u64;                                         // deterministic units (§23.5)
     fn memory_used(&self) -> usize;
     fn set_limits(&mut self, memory_bytes: usize);
@@ -1295,6 +1301,7 @@ trait ScriptVm {
 }
 ```
 
+- **As built (0.9, D-031):** `Val` (nil, bool, integer, bounded text, list, string-keyed map) replaces `ScriptArgs`/`ScriptRet`. The context is data in the arguments and commands come back in the result, instead of a `&mut CallCtx` and a `Registrar` callback: the VM keeps no reference to the host between calls, calls are pure functions of their input (testable, batchable, replayable) and the VM is `Send`. Integer values are limited to ±2^53 and every conversion is range-checked in one place.
 - `ScriptArgs` and `ScriptRet` are plain Rust enums and structs (integers, bounded strings, ids, small tables of the same). Conversion to and from Luau values lives entirely behind the trait, so the boundary rule "integers only into the core" (§23.5) is enforced in one place.
 - Batched calls (`call_batch` over a slice of entity views) are part of the trait from the start, so a faster marshalling path can be added without touching callers.
 - A second implementation (a test double and later possibly an in-house binding) must pass the same sandbox conformance, determinism and fuel-accounting tests (§18 items 11–12).

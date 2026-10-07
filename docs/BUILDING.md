@@ -38,7 +38,7 @@ Go back to the latest work with `git checkout main`.
 cargo test --workspace
 ```
 
-The first run compiles everything (a few minutes); later runs are fast. You should see `test result: ok.` lines and no `FAILED`. At milestone 0.8 that is about 585 tests. `cargo run -p pg-cli -- check` runs every developer check in one go (18 of them). To run only one crate or a few tests:
+The first run compiles everything (a few minutes); later runs are fast. You should see `test result: ok.` lines and no `FAILED`. At milestone 0.9 that is about 660 tests (the cookbook end-to-end tests take about 40 seconds in a debug build). `cargo run -p pg-cli -- check` runs every developer check in one go (18 of them). To run only one crate or a few tests:
 
 ```bash
 cargo test -p pg-core                  # just the simulation core
@@ -151,3 +151,29 @@ If you change something and a replay no longer matches, `pg replay --diff a.json
 - **`cargo` is not recognized** → open a new terminal, or sign out and in, so `PATH` refreshes.
 - **A test fails only on your machine** → that is valuable information, especially anything about *hashes* or *replays* (they must be identical everywhere). Run `cargo test -p pg-core 2>&1` and send me the failing test names and output.
 - **Slow first build** → normal; dependencies compile once and are cached in `target/`.
+
+## Packs with scripts (0.9)
+
+```bash
+# Check a pack: manifest, data, script lint (API names, capabilities, order-sensitive loops), load in the host.
+cargo run -q -p pg-cli -- pack lint packs/cookbook/caffeine
+
+# Run it headless for three days under golden hashes, then again rebuilding every VM at each day boundary.
+cargo run -q -p pg-cli -- pack test packs/cookbook/caffeine
+# After an intended change: record new golden hashes (packs/golden/<id>.json).
+cargo run -q -p pg-cli -- pack test packs/cookbook/caffeine --update
+
+# What scripts cost (use --release for real numbers).
+cargo run -q --release -p pg-cli -- pack bench --pawns 200
+
+# The generated API reference and editor type definitions; JSON Schema for pack files.
+cargo run -q -p pg-cli -- pack docs
+cargo run -q -p pg-cli -- pack docs --luau > pg.d.luau
+cargo run -q -p pg-cli -- content schema templates
+
+# Start a new pack.
+cargo run -q -p pg-cli -- pack new my_pack packs/my_pack
+```
+
+The ScriptVm spike report with every measurement is `docs/spikes/scriptvm.md`.
+

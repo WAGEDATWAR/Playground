@@ -4,9 +4,9 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Milestone 0.9 (ScriptVm spike) in progress.** `m0.8` accepted and tagged. Done and committed (part 1): `pg-api` (surface, hook points, generators, shared hints), `ScriptVm` boundary, Luau implementation over `mlua`, sandbox prelude, 39-test hostile-pack corpus. Findings so far (for `docs/spikes/scriptvm.md`, D-031): Luau fast-calls builtins and lowers `pairs` so removed/replaced globals must also be disabled via compiler options; the pattern matcher is fuel-interruptible so no string caps are needed; mlua Integer is i64 so range checks apply; bare `for k,v in t` iteration is not interceptable (lint). Fuel for the pinned script is 145 (needs Linux/macOS CI confirmation).
+**Milestone 0.9 (ScriptVm spike): implemented, waiting for the checkpoint.** `m0.8` is tagged. 0.9 delivered: `pg-api` (surface, hook points, generators, hints), `ScriptVm` boundary and Luau implementation with the sandbox profile and a 40-test hostile-pack corpus, extension data store and hook host in the core, script host (fuel, memory, quarantine in the world, safe mode), pack scripts in the loader, `SimFactory` rebuilds every VM on restore, three cookbook packs under golden hashes with the VM-reload variant, `pg pack lint|test|docs|new|bench`, `pg content schema`, FP-contraction build flags and CI checks. 660 tests; `pg check` 26/26. Spike report: `docs/spikes/scriptvm.md`; decision D-031; Blueprint v2.8.
 
-Remaining for 0.9: core `ext` storage (hashed only when non-empty), `Command::AttachComponent`, hook host in `Services` + `movement.speed_modifier` hook, `ScriptHost`/`ScriptSystem` with quarantine state in the world, pack loader reading `scripts/`, `SimFactory` script support and safe mode, test pack under golden replay plus VM-reload variant, `pg pack lint|test|docs`, `pg content schema`, three cookbook packs, boundary-cost benchmark (200 pawns), `docs/spikes/scriptvm.md` answering the 7 questions, CI check for no `luau-jit`, FP-contraction flags in `.cargo/config.toml`, docs and D-031. Dependency rule updated (pg-core -> pg-api, pg-content -> pg-api, pg-script -> pg-content).
+**Checkpoint for you:** read `docs/spikes/scriptvm.md` (decision: `mlua` stays; known gap: bare `for k, v in t` order), try the pack commands in `docs/BUILDING.md` section "Packs with scripts", then confirm CI is green on all three OSes (the pinned fuel value 145 and the FMA probe are the cross-platform checks). After acceptance: tag `m0.9`, then 0.10.
 
 ## Blocked / waiting on user
 
@@ -14,8 +14,8 @@ Remaining for 0.9: core `ext` storage (hashed only when non-empty), `Command::At
 
 ## Next up
 
-1. Push 0.8, check CI on all three OSes (the GUI stack is new there), then tag `m0.8` on acceptance.
-2. 0.9 script spike (checkpoint), 0.10 app shell and graphical main menu (checkpoint), 0.11 Stage 0 gate.
+1. Push 0.9, check CI on all three OSes, record the Linux/macOS figures in `docs/spikes/scriptvm.md`, tag `m0.9` on acceptance.
+2. 0.10 app shell and graphical main menu (checkpoint), 0.11 Stage 0 gate.
 3. Prune dev scaffolding as real systems land (D-009).
 
 ## Shell note
@@ -49,3 +49,4 @@ Python is available for scripts (`scripts/check_deps.py`). Avoid bash heredocs c
 - 2026-10-07: **0.7 host services and AI client skeleton**: see Current focus. Findings: real providers return floats, so the AI boundary uses `serde_json` instead of the core parser; the keyring ecosystem changed shape (v4, per-platform store crates behind a `v1` feature); `webpki-roots` needs a data-license entry in `deny.toml`.
 - 2026-10-07: Accepted 0.7. Added Player2 as a provider (D-027): adapter, provider-chosen model, free credits check, device-code sign-in protocol (`pg_ai::login`), `pg ai login`; 506 tests. Accepted S-022..S-030 and placed them (D-028); specs bumped to Blueprint v2.7, Roadmap v4.4, Design Document v3.2.
 - 2026-10-07: **0.8 runtime and debuggability groundwork**: see Current focus. Findings: a persistent pool cannot host borrowed path jobs without `unsafe` (D-030); 200 pawns cost 0.10 ms per tick, so S-017 is not needed yet; the GUI stack needed three license/advisory entries in `deny.toml`.
+- 2026-10-07: **0.9 ScriptVm spike**: see Current focus. Findings: Luau fast-calls bypass removed globals (compiler options needed), the pattern matcher is fuel-interruptible, `mlua` integers are `i64`, metatables must be frozen on attach; scripts cost 12 us per handler call and 1.6% of the tick for 200 pawns. Player2 client id registered and built in.
