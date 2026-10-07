@@ -1,7 +1,17 @@
 //! Host-service traits (Storage, SecretStore, Net, Clock, Dialogs, Audio) and in-memory test doubles. Blueprint §3.
 //!
-//! Milestone 0.6 needs only [`Storage`]; the other traits arrive in 0.7. Every trait has an in-memory
+//! `Storage` arrived in 0.6; `SecretStore`, `Net`, `Clock`, `Dialogs`, `Audio` and the redaction utility in 0.7. Every trait has an in-memory
 //! double so persistence, the AI client and the simulation run headless in tests and in the CLI.
+
+pub mod redact;
+pub mod services;
+
+pub use redact::{redact, redact_plain, Secret, REDACTED};
+pub use services::{
+    https_host, AllowListNet, Audio, Bus, CancelToken, Clock, Dialogs, FixedClock, HttpRequest,
+    HttpResponse, Level, LogSink, MemLog, MemSecretStore, Method, Net, NetError, NullAudio,
+    RedactingLog, ScriptedDialogs, ScriptedNet, SecretError, SecretStore, StderrLog,
+};
 
 use std::collections::BTreeMap;
 use std::io;

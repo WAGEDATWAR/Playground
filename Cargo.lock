@@ -227,6 +227,8 @@ version = "0.0.1"
 dependencies = [
  "pg-core",
  "pg-host",
+ "proptest",
+ "serde_json",
 ]
 
 [[package]]
