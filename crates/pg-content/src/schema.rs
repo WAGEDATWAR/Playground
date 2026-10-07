@@ -13,6 +13,8 @@ use std::collections::BTreeMap;
 /// The shape of one value.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FieldSchema {
+    /// Any value (used where a field carries a structure the schema does not need to describe).
+    Any,
     /// An integer in `min..=max`.
     Int {
         min: i64,
@@ -197,6 +199,7 @@ impl FieldSchema {
     /// Validates one value against this shape (used by the settings registry for single values).
     pub fn check(&self, value: &Canon, path: &str, report: &mut ValidationReport) -> Canon {
         match self {
+            FieldSchema::Any => value.clone(),
             FieldSchema::Int { min, max } => match value.as_i128() {
                 Some(v) if v >= i128::from(*min) && v <= i128::from(*max) => value.clone(),
                 Some(v) => {

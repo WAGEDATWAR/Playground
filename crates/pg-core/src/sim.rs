@@ -176,6 +176,13 @@ impl Sim {
             self.trace,
         );
 
+        // Debug builds check every event against the catalog (S-022): a drifting emitter fails fast.
+        #[cfg(debug_assertions)]
+        {
+            let problems = crate::events::EventCatalog::shared().validate_all(&report.events);
+            debug_assert!(problems.is_empty(), "invalid events: {problems:?}");
+        }
+
         // 4. Day boundary: record the state hash.
         if flags.new_day {
             let tables = self.world.table_hashes();

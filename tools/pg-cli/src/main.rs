@@ -15,6 +15,7 @@ mod ai_cmds;
 mod args;
 mod check_cmds;
 mod content_cmds;
+mod events_cmds;
 mod map_cmds;
 mod persist_cmds;
 mod sched_cmds;
@@ -87,6 +88,7 @@ USAGE:
     pg ai test [--provider P] [--model M] [--dry-run]
         Run the connection test, or with --dry-run print the exact request (credentials hidden) without sending it.
     pg ai selfcheck                         Run the AI client with a sentinel key and scan everything for leaks.
+    pg events list [category] | show <kind> The typed event catalog: kinds, categories, fields, default visibility.
     pg settings list | get <id> | set <id> <value> | reset <id> [--dir D]
                                             The device settings registry: typed, ranged, validated (default dir ./pg-data).
     pg strings lint [pack-dir...]           Check string tables: missing, orphaned and mismatched keys, unused sentences.
@@ -123,6 +125,7 @@ fn main() -> ExitCode {
         Some("save") => persist_cmds::save_cmd(&args[1..]),
         Some("ai") => ai_cmds::ai_cmd(&args[1..]),
         Some("strings") => strings_cmds::strings_cmd(&args[1..]),
+        Some("events") => events_cmds::events_cmd(&args[1..]),
         Some("settings") => settings_cmds::settings_cmd(&args[1..]),
         Some("check") => check_cmds::check_cmd(&args[1..]),
         Some("bugbundle") => persist_cmds::bugbundle_cmd(&args[1..]),

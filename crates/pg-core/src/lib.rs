@@ -15,6 +15,7 @@ pub mod commands;
 pub mod commitment;
 pub mod containment;
 pub mod dev;
+pub mod events;
 pub mod hash;
 pub mod id;
 pub mod input;

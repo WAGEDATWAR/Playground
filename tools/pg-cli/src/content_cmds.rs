@@ -251,6 +251,7 @@ pub fn describe_field(field: &FieldSchema) -> String {
 
 fn describe(field: &FieldSchema) -> String {
     match field {
+        FieldSchema::Any => "any value".into(),
         FieldSchema::Int { min, max } => format!("int {min}..={max}"),
         FieldSchema::Bool => "bool".into(),
         FieldSchema::Text { max_len } => format!("text(<= {max_len})"),
