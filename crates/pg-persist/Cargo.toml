@@ -11,6 +11,7 @@ pg-content = { path = "../../crates/pg-content" }
 pg-host = { path = "../../crates/pg-host" }
 ruzstd = "0.9.0"
 blake3 = { version = "1.8.7", default-features = false, features = ["std", "pure"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 proptest = "1.11.0"

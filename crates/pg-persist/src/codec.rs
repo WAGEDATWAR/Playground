@@ -16,7 +16,45 @@
 use std::fmt;
 use std::io::Read;
 
-pub const MAGIC: [u8; 8] = *b"PGSAVE\0\x01";
+/// The kinds of file that share this container layout (they differ only in their magic, so one kind can
+/// never be opened as another).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Container {
+    /// A world generation (`.pgsave`).
+    Save,
+    /// A compressed replay log (`.pglog`).
+    ReplayLog,
+    /// A bug bundle (`.pgbundle`).
+    Bundle,
+}
+
+impl Container {
+    pub const ALL: [Container; 3] = [Container::Save, Container::ReplayLog, Container::Bundle];
+
+    pub const fn magic(self) -> [u8; 8] {
+        match self {
+            Container::Save => *b"PGSAVE\0\x01",
+            Container::ReplayLog => *b"PGRLOG\0\x01",
+            Container::Bundle => *b"PGBNDL\0\x01",
+        }
+    }
+
+    pub const fn extension(self) -> &'static str {
+        match self {
+            Container::Save => "pgsave",
+            Container::ReplayLog => "pglog",
+            Container::Bundle => "pgbundle",
+        }
+    }
+
+    /// Which container `bytes` start as, judged by the magic alone.
+    pub fn detect(bytes: &[u8]) -> Option<Container> {
+        let head = bytes.get(..8)?;
+        Container::ALL.into_iter().find(|c| c.magic() == head)
+    }
+}
+
+pub const MAGIC: [u8; 8] = Container::Save.magic();
 pub const HEADER_LEN: usize = 52;
 
 /// Default cap on a decompressed save (256 MiB): far above a real town, far below memory trouble.
@@ -65,7 +103,11 @@ pub struct Header {
 }
 
 pub fn parse_header(bytes: &[u8]) -> Result<Header, CodecError> {
-    if bytes.len() < HEADER_LEN || bytes.get(..8) != Some(&MAGIC[..]) {
+    parse_header_as(Container::Save, bytes)
+}
+
+pub fn parse_header_as(kind: Container, bytes: &[u8]) -> Result<Header, CodecError> {
+    if bytes.len() < HEADER_LEN || bytes.get(..8) != Some(&kind.magic()[..]) {
         return Err(CodecError::NotASave);
     }
     let schema = bytes
@@ -91,12 +133,16 @@ pub fn parse_header(bytes: &[u8]) -> Result<Header, CodecError> {
 
 /// Compresses `payload` and wraps it in the container.
 pub fn encode(schema: u32, payload: &[u8]) -> Vec<u8> {
+    encode_as(Container::Save, schema, payload)
+}
+
+pub fn encode_as(kind: Container, schema: u32, payload: &[u8]) -> Vec<u8> {
     let compressed = ruzstd::encoding::compress_to_vec(
         payload,
         ruzstd::encoding::CompressionLevel::Fastest,
     );
     let mut out = Vec::with_capacity(HEADER_LEN + compressed.len());
-    out.extend_from_slice(&MAGIC);
+    out.extend_from_slice(&kind.magic());
     out.extend_from_slice(&schema.to_le_bytes());
     out.extend_from_slice(&(payload.len() as u64).to_le_bytes());
     out.extend_from_slice(blake3::hash(payload).as_bytes());
@@ -106,7 +152,15 @@ pub fn encode(schema: u32, payload: &[u8]) -> Vec<u8> {
 
 /// Verifies and unwraps a container, returning the schema and the payload.
 pub fn decode(bytes: &[u8], max_uncompressed: u64) -> Result<(u32, Vec<u8>), CodecError> {
-    let header = parse_header(bytes)?;
+    decode_as(Container::Save, bytes, max_uncompressed)
+}
+
+pub fn decode_as(
+    kind: Container,
+    bytes: &[u8],
+    max_uncompressed: u64,
+) -> Result<(u32, Vec<u8>), CodecError> {
+    let header = parse_header_as(kind, bytes)?;
     if header.uncompressed_len > max_uncompressed {
         return Err(CodecError::TooLarge {
             declared: header.uncompressed_len,
@@ -160,6 +214,20 @@ mod tests {
             let (s, back) = decode(&encode(1, p), 1024).unwrap();
             assert_eq!((s, back.as_slice()), (1, p));
         }
+    }
+
+    #[test]
+    fn each_container_kind_refuses_the_others() {
+        for a in Container::ALL {
+            let blob = encode_as(a, 1, b"payload");
+            assert_eq!(Container::detect(&blob), Some(a));
+            for b in Container::ALL {
+                let r = decode_as(b, &blob, 1024);
+                assert_eq!(r.is_ok(), a == b, "{a:?} opened as {b:?}");
+            }
+        }
+        assert_eq!(Container::detect(b"short"), None);
+        assert_eq!(Container::detect(b"NOTMAGIC and more"), None);
     }
 
     #[test]
