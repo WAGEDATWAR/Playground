@@ -1,9 +1,10 @@
 # Playground — Native Desktop Product & Build Roadmap
 
-**Version:** 4.2 · **Last updated:** 2026-10-06 **Basis:** Roadmap v4.1 (itself based on v4.0 and v3.0)
+**Version:** 4.3 · **Last updated:** 2026-10-07 **Basis:** Roadmap v4.2 (itself based on v4.0 and v3.0)
 
 ## 1. What changed from v3.0
 
+- **v4.3:** Stage 0 now ends with a **launchable desktop app and graphical main menu** (new item and a new clause in "Done when"; gate 1 gains the same clause). The Stage 1 presentation work builds on that shell instead of creating it. No other product decision or gate changed.
 - **v4.2:** scheduled three more suggestions: path-search scratch buffers (0.8 profiling pass), pawn-aware routing (Stage 1) and compressed, trimmable replay logs (0.6). No product decision or gate changed.
 - **v4.1:** the developer-experience suggestions accepted during Phase 0 are scheduled where they are cheapest and most useful: reproducibility tooling and authoring aids in Stage 0, content-growth tooling in Stages 1 and 6, and polish in Stage 11 (new principle 16, extra items marked **\[DX\]** below). No product decision or gate changed.
 - Product decisions, stage order and gates for the *game* are unchanged. Nothing in the simulation design was reversed.
@@ -136,6 +137,7 @@ These replace the v3.0 neutrality rules.
 - [ ] Seeded random generation (independent streams per subsystem, pinned hash with test vectors) and deterministic replay from seed + Command log. Validate generated, imported, saved, script-produced and model-produced data at every boundary.
 - [ ] Extract time, schedule evaluation, movement and state transitions into testable pure simulation functions.
 - [ ] **Threading skeleton:** simulation thread, snapshot hand-off to the UI thread, worker pool with deterministic result application.
+- [ ] **Desktop shell with a graphical main menu (milestone 0.10):** the game opens a window to a main menu (Continue, New world, Saved worlds with load / export / import / delete, Options including the AI provider settings, Quit); a world loads into a minimal in-game view (map, pawns, day and time, pause and speed, save, back to the menu); the menu and screen logic live in a UI-free model crate and are tested headless; the dev overlay hangs off the same shell.
 - [ ] Normal time: 20–30 minute game day; pause and speed controls; focus-loss pause flow. The world pauses while closed, saves, and asks before resuming.
 - [ ] Schedule reservations with the five priorities, same-day rescheduling, commitment acceptance, deterministic conflict and tie rules.
 - [ ] Pathfinding (with parallel batched solving) and occupancy rules. Tests for time wrap, schedule boundaries, blocked destinations, reservation conflicts and replay.
@@ -148,7 +150,7 @@ These replace the v3.0 neutrality rules.
 - [ ] **Define the `ScriptVm` boundary** (Blueprint §23.15) so no other code names the binding crate, and implement it over `mlua` with the Luau backend.
 - [ ] **Answer the binding spike questions** (§12 item 1) with recorded measurements, and **decide** whether `mlua` stays, a hybrid is needed or an in-house binding is justified; set initial script budgets from the same measurements.
 
-**Done when:** a deterministic sample town can run, pause, save, reload, migrate and recover without losing another save; provider failure is safe; no key appears in logs, exports or crash reports; the core runs headless in tests with no platform code; replay hashes match on Windows, Linux and macOS; a test script pack runs deterministically and a hostile pack is contained without affecting the world.
+**Done when:** the app launches to a graphical main menu from which a world can be created, saved, quit and continued; a deterministic sample town can run, pause, save, reload, migrate and recover without losing another save; provider failure is safe; no key appears in logs, exports or crash reports; the core runs headless in tests with no platform code; replay hashes match on Windows, Linux and macOS; a test script pack runs deterministically and a hostile pack is contained without affecting the world.
 
 ### Stage 1 — Observation-first living-town slice
 
@@ -318,7 +320,7 @@ These replace the v3.0 neutrality rules.
 
 ## 8. Milestone gates
 
-1. **Reliable core:** deterministic clock / scheduler, stable schemas, protected AI settings, local saves and migrations, host services in place, pack loader and Luau sandbox proven by the spike, cross-OS replay hashes identical.
+1. **Reliable core:** a launchable app with a graphical main menu, deterministic clock / scheduler, stable schemas, protected AI settings, local saves and migrations, host services in place, pack loader and Luau sandbox proven by the spike, cross-OS replay hashes identical.
 2. **Observation town:** seeded 10–20-adult town in the native app; needs, moods, social memories, one affinity score; watch / pause / speed / focus / overhear; save and reload; base game running as a pack.
 3. **Autonomous social sandbox:** algorithmic free-time schedules, accepted commitments, rescheduling, deterministic conflicts.
 4. **Create and edit towns:** generator settings, starting-town editor, in-observation edits.

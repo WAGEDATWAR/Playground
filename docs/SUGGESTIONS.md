@@ -1,6 +1,6 @@
 # Suggestions
 
-Ideas that go beyond the reference specification: system additions and expansions, content, feature variations, tooling and process insights. Accepted items are scheduled in `PLAN.md` and folded into the spec documents (Blueprint v2.3, Roadmap v4.2, Design Document v3.1) at the place they belong; anything that changes the spec is also recorded in `DECISIONS.md`.
+Ideas that go beyond the reference specification: system additions and expansions, content, feature variations, tooling and process insights. Accepted items are scheduled in `PLAN.md` and folded into the spec documents (Blueprint v2.6, Roadmap v4.3, Design Document v3.1) at the place they belong; anything that changes the spec is also recorded in `DECISIONS.md`.
 
 Format: **ID — title** · area · status (`proposed` / `accepted` / `rejected` / `done`) · why · cost · **target**.
 
@@ -68,3 +68,35 @@ Ordering principle: do small, high-leverage tooling when the thing it observes i
 - **S-018 — Pawn-aware routing** · simulation · accepted · Today paths ignore other pawns, so a pawn blocked by a stationary pawn waits, sidesteps and finally fails (D-015). Treating *idle* pawns as temporary obstacles in the search (with the cache keyed accordingly), or adding a small "crowd cost" on occupied tiles, would route around standing pawns and doorway clumps. Needs care to keep results deterministic and cacheable. · Medium. · **Target: Stage 1 (when pawns stand still for real: working, sleeping, chatting).**
 - **S-019 — Replay log compression and `pg replay --trim`** · tooling · done · Long logs (many days, many pawns) get large because every input is stored as JSON. A zstd-compressed `.pgreplay` form (the persistence crate already brings zstd at 0.6) and a `--trim <tick>` to cut a log to the first N ticks would keep bug bundles (S-001) small. · Low. · **Target: 0.6 with S-001.** **Done in 0.6** (`.pglog` compressed logs, `ReplayLog::trim`, bundles).
 - **S-021 — Map region labels for instant reachability** · pathfinding · accepted · Label connected passable regions per map (flood fill, recomputed when `edit_version` changes, derived state like the path cache). "Is A reachable from B?" becomes one comparison, so a planner or the dev plan source can skip unreachable destinations, `blocked_destination` and `unreachable_or_too_far` become exact, and A\* is never run for hopeless requests (today it exhausts the expansion cap). Seen in 0.5: the dev town regularly produces unreachable pockets between buildings. · Low-medium. · **Target: 0.8 profiling pass (earlier if the failure noise becomes a problem).**
+
+## Proposed in 0.7 (awaiting your decision)
+
+An inspection pass over the code as it stands, looking for the cheapest places to buy leverage before the UI and runtime are built on top. Each has a recommended target; none is scheduled until you accept it.
+
+| ID | Item | Recommended target | Cost | Why now |
+| --- | --- | --- | --- | --- |
+| S-022 | Typed event catalog | 0.8 (debug validation), 0.10 (viewer) | Low-medium | Events are `(kind: text, detail)`; the overlay's event viewer, filters and pack events need a list of known kinds with field schemas |
+| S-023 | Row-level state hashes | 0.8 | Low-medium | Bisect names the table; a Merkle layer names the entity (`pawns: pawn_3`), which is what a person debugging actually needs |
+| S-024 | Save summaries in the manifest | 0.10 | Low | The Saved Worlds screen needs name, day, population, play time and an optional thumbnail without loading each world |
+| S-025 | Schema-driven settings | 0.7 (registry), 0.10 (generated screen) | Medium | One typed registry gives validation, defaults, `device.json`, `pg settings` and the Options screen; the AI flow in 0.7 is the first user |
+| S-026 | String table (localisation-ready UI text) | 0.10 | Low-medium | The menus are the first player-facing text; keys from the start are cheap, retrofitting is not; reason-code sentences move into the same table |
+| S-027 | Headless UI snapshots and an accessibility tree | 0.10 | Medium | Menu models emit a widget tree that tests snapshot and keyboard-navigate; egui's accessibility support then comes almost free |
+| S-028 | Automatic bug bundle on panic or divergence | 0.8 (runtime guard), 0.10 (button) | Low | A crash leaves a replayable `.pgbundle` (redacted) instead of a description |
+| S-029 | Keyframe snapshots and time scrub | 0.8 (ring), 0.10 (overlay control) | Medium | A bounded ring of snapshots lets the dev overlay step back and re-run forward deterministically; it also feeds S-028 |
+| S-030 | Shadow determinism verification | 0.8, soak in 0.11 | Medium | A worker re-simulates from a keyframe with a different thread count and compares day hashes, catching ordering bugs that unit tests miss |
+| S-031 | Reason-code coverage lint | **done in 0.7** | Tiny | Every `ReasonCode::builtin("...")` literal in the source must have a sentence template and vice versa; a ten-line test |
+| S-032 | `pg check`: one-command verification report | 0.7 | Low | Runs selftest, content lint, golden replay, scenarios and a save/verify cycle and prints one report; makes each checkpoint a single paste-able command and mirrors CI |
+
+Details:
+
+- **S-022 Typed event catalog** · tooling · proposed · Declare each event kind once (kind, category, field schema, default visibility) using the same `ParamSchema` as components. Debug builds validate every `emit`; `pg events list` and the overlay show the catalog; packs register `<pack>.<kind>`. Replay and hashing are unaffected (events are not state).
+- **S-023 Row-level state hashes** · tooling · proposed · Hash each table row (entity) and combine rows into the table hash. Memory and CPU cost are about the same as hashing the table whole. `pg replay --bisect` can then say which entity differs; day hashes in logs stay per-table, with an optional per-row dump on mismatch.
+- **S-024 Save summaries** · UX · proposed · Additive manifest fields: world name, day, population, play ticks, content packs, last-saved time, optional small thumbnail (rendered by the app). No world load is needed to draw the Saved Worlds list, and damaged slots still list.
+- **S-025 Schema-driven settings** · architecture · proposed · A registry of typed settings (id, type and range, default, label key, scope device or world, restart-required) built on `ParamSchema`. Generates the Options screen, `pg settings get/set/list`, validation and migration of `settings/device.json`, and documentation. Keys never appear in it (they stay in `SecretStore`).
+- **S-026 String table** · UX · proposed · All player-visible text comes from keyed tables (`strings/en.json` in the base pack, pack-namespaced keys for packs). Reason-code sentences, error messages and menu labels use it; a lint reports missing and unused keys; a pseudo-locale (accented, 40% longer) exposes layout problems early.
+- **S-027 Headless UI snapshots and accessibility** · testing · proposed · Screens emit a small widget tree (labels, buttons, fields, focus order). Tests snapshot the tree as text and assert keyboard-only reachability; the egui layer maps the same tree to its accessibility output. Accessibility is a Stage 11 release item in the Roadmap; this makes it incremental instead of a rewrite.
+- **S-028 Automatic bug bundle** · reliability · proposed · The runtime's last-resort guard and the divergence detector write a redacted `.pgbundle` (latest keyframe plus inputs since) to a `crash/` folder; the overlay and the next launch offer to open it.
+- **S-029 Keyframe snapshots and time scrub** · tooling · proposed · A memory-bounded ring of snapshots (for example one per simulated hour, last 24). The dev overlay can rewind to one and replay forward; a "what if" input injected after a rewind runs deterministically.
+- **S-030 Shadow determinism verification** · reliability · proposed · In dev and soak runs a worker re-runs the span between two keyframes on a different thread count and compares per-table hashes at day boundaries; a mismatch writes a bundle (S-028) and flags the system that ran last.
+- **S-031 Reason-code coverage lint** · testing · done · Implemented in 0.7 (`pg-core` test scanning the source tree).
+- **S-032 `pg check`** · tooling · proposed · One command: determinism vectors, content lint, golden replay with snapshot check, persistence scenario, a save/verify cycle and a bug-bundle round trip, with a final PASS/FAIL table. Exit code for CI; the same output is what you paste back at a checkpoint.

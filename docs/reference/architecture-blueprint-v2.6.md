@@ -1,4 +1,4 @@
-# Playground — Architecture Blueprint v2.5
+# Playground — Architecture Blueprint v2.6
 
 **Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.1 and Roadmap v4.2. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). It is a spec, not final source; names and signatures may shift during implementation, but the contracts and invariants may not. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
 
@@ -13,6 +13,8 @@
 **v2.4 (during Phase 0):** milestone 0.5 made the scheduler, commitment and action sections precise where the first implementation had to choose (§8.5 replan timing and displacement scope, §8.6 gathering radius and slot-length changes, §8.7 which parts of the action skeleton exist). No behaviour was removed.
 
 **v2.5 (during Phase 0):** milestone 0.6 made persistence precise where the first implementation had to choose: the manifest lists both generations (§13.1, §13.4), the `.pgsave`/`.pglog`/`.pgbundle` container layout, the pure-Rust zstd encoder and its single level (§13.1), what a save contains and what it deliberately does not (§13.2), replay-log trimming and bug bundles (§20), and a known difference between `Canon` and RFC 8785 key ordering (§5.4).
+
+**v2.6 (during Phase 0):** the Stage 0 app shell and graphical main menu are specified as a milestone of their own (§14.3 "Stage 0 scope"), and Roadmap v4.3 makes them part of the Stage 0 gate.
 
 ## 0. Architectural principles
 
@@ -833,6 +835,8 @@ Commands that change simulation state become `SimInput`s; view-only commands (fo
 Screens are state machines in `pg-ui-model`; `pg-app` draws them with egui (menus, inspector, editor panels, dev tools) while the world view is drawn by `pg-render`.
 
 `Boot → MainMenu → {Continue | NewWorld | SavedWorlds | TownCreation | PawnCreation | Mods | Options} → InGame → {PauseMenu | Inspector | Editor}`
+
+**Stage 0 scope (milestone 0.10).** The first graphical build ships `Boot`, `MainMenu` (Continue, New world, Saved worlds, Options, Quit), a dev-only `NewWorld` (generates the dev town from a seed and size), `SavedWorlds` (list from the slot store with load, export, import, delete and a damaged-slot indicator), `Options` (device settings and the AI provider flow from §10), `InGame` (map and pawns, day and time, pause and speed, save, menu button) and `PauseMenu` (resume, save, options, back to main menu, quit). Every screen is a pure state machine in `pg-ui-model`: it consumes `UiEvent`s and returns the next state plus `AppEffect` requests (load slot, save, spawn world, quit) that `pg-app` carries out through the runtime and host services, so the whole menu flow is unit- and scenario-tested without a window. `pg-app` accepts `--smoke` (create the window or a headless surface, run the boot sequence and a few frames, exit 0) for CI. The Stage 1 screens (inspector, town creation, mods and so on) extend the same state machines.
 
 - **InGame HUD:** time and day, speed control, pause, focus name, notices, menu button.
 - **Inspector panel:** activity, mood, needs bars, top relevant memories with reasons, relationship labels, pack-contributed sections (view-model data only; §23.7).

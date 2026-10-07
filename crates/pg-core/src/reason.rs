@@ -279,4 +279,56 @@ mod tests {
             r#"{"code":"chore_placed","params":{"slot":3,"slots":2,"urgency":1},"source":"builtin"}"#
         );
     }
+    /// S-031: every built-in reason code used in the source has a sentence, and every sentence is used
+    /// (apart from codes reserved for systems that do not exist yet).
+    #[test]
+    fn every_code_in_the_source_has_a_template_and_every_template_is_used() {
+        const RESERVED: [&str; 3] = ["precondition_failed", "unaffordable", "unauthorized"];
+        let mut used = std::collections::BTreeSet::new();
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut stack = vec![src];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    if name == "reason.rs" || name == "tests.rs" || name.ends_with("_tests.rs") {
+                        continue;
+                    }
+                    let full = std::fs::read_to_string(&path).unwrap();
+                    // Only shipped code counts, not the test fixtures below it.
+                    let text = full.split("#[cfg(test)]").next().unwrap_or("").to_owned();
+                    for marker in ["ReasonCode::builtin(", "ReasonCode::simple("] {
+                        for part in text.split(marker).skip(1) {
+                            let rest = part.trim_start();
+                            if let Some(lit) = rest.strip_prefix('"') {
+                                if let Some(end) = lit.find('"') {
+                                    used.insert(lit[..end].to_owned());
+                                }
+                            }
+                        }
+                    }
+                    // Codes passed through helpers and variables still appear as string literals somewhere.
+                    for known in ReasonCode::known_codes() {
+                        if text.contains(&format!("\"{known}\"")) {
+                            used.insert(known.to_owned());
+                        }
+                    }
+                }
+            }
+        }
+        let known: std::collections::BTreeSet<String> = ReasonCode::known_codes().map(str::to_owned).collect();
+        let missing: Vec<&String> = used
+            .iter()
+            .filter(|c| !known.contains(*c))
+            .collect();
+        assert!(missing.is_empty(), "codes used in the source but without a sentence: {missing:?}");
+        let unused: Vec<&String> = known
+            .iter()
+            .filter(|c| !used.contains(*c) && !RESERVED.contains(&c.as_str()))
+            .collect();
+        assert!(unused.is_empty(), "sentences with no code that uses them: {unused:?}");
+    }
 }
