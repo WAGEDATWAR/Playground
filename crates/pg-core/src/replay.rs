@@ -9,9 +9,9 @@
 //! data alone, and [`bisect`] re-runs both in lockstep to find the first differing *tick*.
 
 use crate::canon::{Canon, CanonError, ToCanon};
+use crate::dev;
 use crate::hash::StateHash;
 use crate::input::StampedInput;
-use crate::dev;
 use crate::pipeline::Pipeline;
 use crate::sim::{DayHash, Sim, SimSnapshot};
 use crate::time::ClockOverflow;
@@ -991,10 +991,15 @@ mod tests {
         let log = recorded(3);
         let total = log.ticks;
         for at in [0, 1, 4_999, 5_000, 14_400, 20_001, 30_000, total] {
-            let trimmed = log.trim(at, None).unwrap_or_else(|e| panic!("trim at {at}: {e}"));
+            let trimmed = log
+                .trim(at, None)
+                .unwrap_or_else(|e| panic!("trim at {at}: {e}"));
             assert_eq!(trimmed.start_tick(), at);
             assert_eq!(trimmed.ticks, total - at);
-            assert!(trimmed.inputs.is_empty(), "everything still pending moved into the snapshot");
+            assert!(
+                trimmed.inputs.is_empty(),
+                "everything still pending moved into the snapshot"
+            );
             assert!(trimmed.day_hashes.iter().all(|d| d.tick > at));
             let out = replay(&trimmed, None).unwrap();
             assert!(out.ok(), "trim at {at}: {:?}", out.mismatches);
@@ -1014,8 +1019,14 @@ mod tests {
         assert_eq!(twice.start_tick(), 25_000);
         assert!(replay(&twice, None).unwrap().ok());
         // Out of range (before the start, or beyond the end) is an error, not a panic.
-        assert!(matches!(back.trim(8_000, None), Err(ReplayError::BadStart(_))));
-        assert!(matches!(log.trim(log.ticks + 1, None), Err(ReplayError::BadStart(_))));
+        assert!(matches!(
+            back.trim(8_000, None),
+            Err(ReplayError::BadStart(_))
+        ));
+        assert!(matches!(
+            log.trim(log.ticks + 1, None),
+            Err(ReplayError::BadStart(_))
+        ));
     }
 
     #[test]

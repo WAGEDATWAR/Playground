@@ -4,21 +4,22 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Phase 0 / Milestone 0.5 — Scheduler and actions skeleton: implemented, awaiting CI + user acceptance.** Accepted and tagged: `m0.0`..`m0.4`.
+**Phase 0 / Milestone 0.6 — Persistence: implemented, CHECKPOINT: waiting for your verification.** Accepted and tagged: `m0.0`..`m0.5`.
 
-0.5 delivered: typed `Stream` enum (S-005) and `Rng::weighted_pick` (S-006); schema fields `Tile`/`EntityId`/`Optional`; `reason` (S-010 reason codes with origin and plain sentences); `schedule` (DaySchedule, five priorities, seeded duty variation, `plan_day`, `replan_from`, `insert_urgent`, `reserve_commitment`, invariants, property tests); `action` (closed `ActionRegistry`: `move_to`, `idle_at`, `meet_at`); `commitment` (state machine + atomic acceptance); `activity` (DayPlanner, ReservationActivator with replanning, TaskPlanner, ActivitySystem, CommitmentSystem, `PlanSource`); `dev::DevPlanSource` replaces DevWander (D-019); commands `DevPropose`/`DevCancelCommitment`; world schema 3 + replay v3 (D-020); Blueprint v2.4 (D-021). CLI: `pg schedule explain <pawn>`, `pg actions`, `pg sim --propose`. Golden replay regenerated; CI also runs `pg actions` and `pg schedule explain`.
+0.6 delivered: typed `Reader` + `WorldState::from_canon` (round trips at every stage of a run, corruption never panics); `pg-host` `Storage` trait with a fault-injecting `MemStorage`, `pg-host-os` `FsStorage` (temp file, fsync, rename); `pg-persist`: `.pgsave` container (header, BLAKE3, zstd), slot store (manifest with two generations, atomic save, recovery, damaged marking, per-generation verify), migrations framework, content compatibility report (S-014), world export/import pipeline, hardened archive reader, compressed logs and bug bundles (S-019, S-001), scenario runner (S-003); `ReplayLog::trim`; RFC 8785 cross-check (S-004, D-022); `pg content diff`. CLI: `pg save create/list/inspect/verify/load/export/import`, `pg bugbundle create/run`, `pg scenario run`, `pg content diff`. CI runs a save/verify cycle, the persistence scenario and a bundle round trip. Blueprint v2.5; decisions D-022..D-024.
 
-Known gaps (by design, Stage 1): needs/occupations feed the planner through `PlanSource`; no preconditions/permissions/effects; relationship hostility not yet used in acceptance; script hooks.
+Crash safety is tested by failing storage at every operation of a save; a load afterwards always returns the old or the new world.
 
 ## Blocked / waiting on user
 
-- [ ] Confirm CI for the 0.5 commit (all three OSes: new golden replay with commitments, threaded path check, `pg actions`, `pg schedule explain`) and accept 0.5. No mandatory checkpoint here; the next one is after 0.6 (saves).
+- [ ] **Checkpoint after 0.6:** confirm CI (three OSes) and try the persistence commands (see `docs/BUILDING.md` section 4). Then say "accept 0.6" so I tag `m0.6` and start 0.7.
 
 ## Next up
 
-1. After acceptance: tag `m0.5`; start 0.6 persistence (`pg-persist`: `.pgsave`, atomic write, two generations, compressed/trimmable replay logs S-019, bug bundles S-001, scenario files S-003, S-004, S-014). **Checkpoint: stop for user verification after 0.6.**
+1. After acceptance: tag `m0.6`; start 0.7 host services and AI client skeleton (`pg-host` SecretStore/Net/Clock/Dialogs doubles, `pg-host-os` implementations, `pg-ai` adapters, circuit breaker, `redact()`, sentinel-key leak test).
 2. Prune dev scaffolding as real systems land (D-009): `probe`, `DevProbeSystem`, `DevDaySystem`, `Stream::DevWander`.
-3. Performance follow-ups: S-017 (A* scratch buffers), S-018 (pawn-aware routing), S-021 (region labels).
+3. Performance follow-ups: S-017, S-018, S-021.
+4. Possible later improvement: zstd levels above "fastest" if save size ever matters (needs a different encoder).
 
 ## Shell note
 
@@ -47,3 +48,4 @@ Python is available for scripts (`scripts/check_deps.py`). Avoid bash heredocs c
 - 2026-10-06: Accepted 0.3 (`m0.3`). Scheduled all suggestions across milestones/stages and folded them into Blueprint v2.3, Roadmap v4.2 (principle 16, [DX] items), Design Document v3.1 (D-013).
 - 2026-10-06: **0.4 world state and spatial**: maps, objects + containment, pawns + occupancy, A* + cache + batch executor, MovementSystem, dev commands, replay v2 with diff/bisect, hints, ScopedThreads, `pg map` tools, golden replay v2. 160+ tests; decisions D-014..D-017; suggestions S-017..S-019.
 - 2026-10-06: **0.5 scheduler and actions skeleton**: see Current focus. Found while testing: two pawns cannot share a meeting tile (added `meet_at` + radius), the activator ends tasks at the boundary tick before the activity system runs (performing ends at `end - 1`), and a slot-length change invalidates schedules and commitments (handled). Logged D-019..D-021, S-021.
+- 2026-10-07: **0.6 persistence**: see Current focus. Findings: `Canon` key order vs RFC 8785 (D-022); only the fastest zstd level exists in the pure-Rust encoder; a replay log is tiny, so the useful compression and trimming target is the world snapshot in bundles.

@@ -43,18 +43,40 @@ impl Default for ArchiveLimits {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ArchiveError {
-    ArchiveTooLarge { bytes: u64, limit: u64 },
+    ArchiveTooLarge {
+        bytes: u64,
+        limit: u64,
+    },
     NotAnArchive(String),
-    TooManyEntries { count: usize, limit: usize },
-    BadPath { path: String, why: &'static str },
+    TooManyEntries {
+        count: usize,
+        limit: usize,
+    },
+    BadPath {
+        path: String,
+        why: &'static str,
+    },
     Symlink(String),
     Encrypted(String),
     Duplicate(String),
-    FileTooLarge { path: String, bytes: u64, limit: u64 },
-    TotalTooLarge { limit: u64 },
-    SuspiciousRatio { path: String, ratio: u64, limit: u64 },
+    FileTooLarge {
+        path: String,
+        bytes: u64,
+        limit: u64,
+    },
+    TotalTooLarge {
+        limit: u64,
+    },
+    SuspiciousRatio {
+        path: String,
+        ratio: u64,
+        limit: u64,
+    },
     /// The entry produced a different number of bytes than its header declared.
-    Corrupt { path: String, why: String },
+    Corrupt {
+        path: String,
+        why: String,
+    },
 }
 
 impl fmt::Display for ArchiveError {
@@ -68,14 +90,25 @@ impl fmt::Display for ArchiveError {
                 write!(f, "the archive has {count} entries; the limit is {limit}")
             }
             ArchiveError::BadPath { path, why } => write!(f, "unsafe path '{path}': {why}"),
-            ArchiveError::Symlink(p) => write!(f, "'{p}' is a symbolic link, which packs may not contain"),
+            ArchiveError::Symlink(p) => {
+                write!(f, "'{p}' is a symbolic link, which packs may not contain")
+            }
             ArchiveError::Encrypted(p) => write!(f, "'{p}' is encrypted, which packs may not be"),
-            ArchiveError::Duplicate(p) => write!(f, "'{p}' appears more than once (names are compared ignoring case)"),
+            ArchiveError::Duplicate(p) => write!(
+                f,
+                "'{p}' appears more than once (names are compared ignoring case)"
+            ),
             ArchiveError::FileTooLarge { path, bytes, limit } => {
-                write!(f, "'{path}' is {bytes} bytes; the per-file limit is {limit}")
+                write!(
+                    f,
+                    "'{path}' is {bytes} bytes; the per-file limit is {limit}"
+                )
             }
             ArchiveError::TotalTooLarge { limit } => {
-                write!(f, "the archive expands past the total limit of {limit} bytes")
+                write!(
+                    f,
+                    "the archive expands past the total limit of {limit} bytes"
+                )
             }
             ArchiveError::SuspiciousRatio { path, ratio, limit } => write!(
                 f,
@@ -168,7 +201,10 @@ pub fn read_archive(
         if entry.encrypted() {
             return Err(ArchiveError::Encrypted(name));
         }
-        if entry.unix_mode().is_some_and(|m| m & 0o170_000 == 0o120_000) {
+        if entry
+            .unix_mode()
+            .is_some_and(|m| m & 0o170_000 == 0o120_000)
+        {
             return Err(ArchiveError::Symlink(name));
         }
         if !seen.insert(name.trim_end_matches('/').to_ascii_lowercase()) {
@@ -289,7 +325,10 @@ mod tests {
             "",
         ] {
             let r = read(&[(bad, b"x")]);
-            assert!(matches!(r, Err(ArchiveError::BadPath { .. })), "{bad:?} -> {r:?}");
+            assert!(
+                matches!(r, Err(ArchiveError::BadPath { .. })),
+                "{bad:?} -> {r:?}"
+            );
         }
         assert!(check_path(&"a/".repeat(300), 200).is_err());
         assert!(check_path("fine/name.json", 200).is_ok());
@@ -298,15 +337,22 @@ mod tests {
 
     #[test]
     fn duplicates_including_case_variants_are_rejected() {
-        assert!(matches!(read(&[("Readme.md", b"1"), ("README.MD", b"2")]), Err(ArchiveError::Duplicate(_))));
+        assert!(matches!(
+            read(&[("Readme.md", b"1"), ("README.MD", b"2")]),
+            Err(ArchiveError::Duplicate(_))
+        ));
     }
 
     #[test]
     fn symlinks_are_rejected() {
         let mut w = ZipWriter::new(Cursor::new(Vec::new()));
-        w.add_symlink("link", "/etc/passwd", SimpleFileOptions::default()).unwrap();
+        w.add_symlink("link", "/etc/passwd", SimpleFileOptions::default())
+            .unwrap();
         let bytes = w.finish().unwrap().into_inner();
-        assert!(matches!(read_archive(&bytes, &ArchiveLimits::default()), Err(ArchiveError::Symlink(_))));
+        assert!(matches!(
+            read_archive(&bytes, &ArchiveLimits::default()),
+            Err(ArchiveError::Symlink(_))
+        ));
     }
 
     #[test]
@@ -314,32 +360,70 @@ mod tests {
         // 8 MiB of zeros deflates to a few KiB.
         let zeros = vec![0u8; 8 * 1024 * 1024];
         let r = read(&[("bomb.bin", &zeros)]);
-        assert!(matches!(r, Err(ArchiveError::SuspiciousRatio { .. })), "{r:?}");
+        assert!(
+            matches!(r, Err(ArchiveError::SuspiciousRatio { .. })),
+            "{r:?}"
+        );
         // With the ratio check relaxed, the per-file and total limits still hold.
-        let lenient = ArchiveLimits { max_ratio: u64::MAX, max_file_bytes: 1024 * 1024, ..ArchiveLimits::default() };
-        assert!(matches!(read_archive(&build(&[("bomb.bin", &zeros)]), &lenient), Err(ArchiveError::FileTooLarge { .. })));
-        let total = ArchiveLimits { max_ratio: u64::MAX, max_total_bytes: 12 * 1024 * 1024, ..ArchiveLimits::default() };
+        let lenient = ArchiveLimits {
+            max_ratio: u64::MAX,
+            max_file_bytes: 1024 * 1024,
+            ..ArchiveLimits::default()
+        };
+        assert!(matches!(
+            read_archive(&build(&[("bomb.bin", &zeros)]), &lenient),
+            Err(ArchiveError::FileTooLarge { .. })
+        ));
+        let total = ArchiveLimits {
+            max_ratio: u64::MAX,
+            max_total_bytes: 12 * 1024 * 1024,
+            ..ArchiveLimits::default()
+        };
         let two = build(&[("a.bin", &zeros), ("b.bin", &zeros)]);
-        assert!(matches!(read_archive(&two, &total), Err(ArchiveError::TotalTooLarge { .. })));
+        assert!(matches!(
+            read_archive(&two, &total),
+            Err(ArchiveError::TotalTooLarge { .. })
+        ));
     }
 
     #[test]
     fn too_many_entries_and_oversized_archives_are_rejected() {
         let names: Vec<String> = (0..60).map(|i| format!("f{i}.txt")).collect();
         let entries: Vec<(&str, &[u8])> = names.iter().map(|n| (n.as_str(), &b"x"[..])).collect();
-        let few = ArchiveLimits { max_entries: 50, ..ArchiveLimits::default() };
-        assert!(matches!(read_archive(&build(&entries), &few), Err(ArchiveError::TooManyEntries { count: 60, limit: 50 })));
-        let tiny = ArchiveLimits { max_archive_bytes: 10, ..ArchiveLimits::default() };
-        assert!(matches!(read_archive(&build(&entries), &tiny), Err(ArchiveError::ArchiveTooLarge { .. })));
+        let few = ArchiveLimits {
+            max_entries: 50,
+            ..ArchiveLimits::default()
+        };
+        assert!(matches!(
+            read_archive(&build(&entries), &few),
+            Err(ArchiveError::TooManyEntries {
+                count: 60,
+                limit: 50
+            })
+        ));
+        let tiny = ArchiveLimits {
+            max_archive_bytes: 10,
+            ..ArchiveLimits::default()
+        };
+        assert!(matches!(
+            read_archive(&build(&entries), &tiny),
+            Err(ArchiveError::ArchiveTooLarge { .. })
+        ));
     }
 
     #[test]
     fn garbage_and_truncated_archives_do_not_panic() {
-        assert!(matches!(read_archive(b"", &ArchiveLimits::default()), Err(ArchiveError::NotAnArchive(_))));
+        assert!(matches!(
+            read_archive(b"", &ArchiveLimits::default()),
+            Err(ArchiveError::NotAnArchive(_))
+        ));
         assert!(read_archive(b"PK\x03\x04 not really", &ArchiveLimits::default()).is_err());
         let good = build(&[("a.txt", b"hello world"), ("b.txt", b"more")]);
         for cut in [good.len() - 1, good.len() / 2, 30, 4] {
-            assert!(read_archive(&good[..cut], &ArchiveLimits::default()).is_err(), "cut {cut}");
+            assert!(
+                read_archive(&good[..cut], &ArchiveLimits::default()).is_err(),
+                "cut {cut}"
+            );
         }
     }
 

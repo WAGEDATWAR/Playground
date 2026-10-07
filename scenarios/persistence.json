@@ -1,0 +1,27 @@
+{
+  "format": "playground-scenario",
+  "version": 1,
+  "name": "saves survive reloads, damage and snapshots",
+  "description": "A town runs, is saved and reloaded identically, survives a damaged newest save by falling back, and snapshot/resume and export/import reproduce the same world.",
+  "world": { "name": "Scenario Town", "seed": "persistence" },
+  "steps": [
+    { "op": "create_map", "w": 40, "h": 30, "style": 1 },
+    { "op": "spawn_pawns", "count": 8 },
+    { "op": "run", "days": 1 },
+    { "op": "expect", "pawns": 8, "day": 1 },
+    { "op": "reload", "slot": "main" },
+    { "op": "run", "ticks": 5000 },
+    { "op": "fork", "ticks": 3000 },
+    { "op": "export_import" },
+    { "op": "save", "slot": "main" },
+    { "op": "run", "ticks": 4000 },
+    { "op": "save", "slot": "main" },
+    { "op": "corrupt", "slot": "main", "how": "flip" },
+    { "op": "load", "slot": "main", "expect": "fell_back" },
+    { "op": "run", "days": 1 },
+    { "op": "save", "slot": "main" },
+    { "op": "corrupt", "slot": "main", "how": "delete_manifest" },
+    { "op": "load", "slot": "main", "expect": "no_manifest" },
+    { "op": "expect", "pawns": 8 }
+  ]
+}

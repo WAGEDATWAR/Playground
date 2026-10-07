@@ -27,7 +27,7 @@ cd Playground
 To build an exact milestone, check out its tag (tags are `m0.0`, `m0.1`, …):
 
 ```bash
-git checkout m0.5
+git checkout m0.6
 ```
 
 Go back to the latest work with `git checkout main`.
@@ -38,7 +38,7 @@ Go back to the latest work with `git checkout main`.
 cargo test --workspace
 ```
 
-The first run compiles everything (a few minutes); later runs are fast. You should see `test result: ok.` lines and no `FAILED`. At milestone 0.5 that is about 330 tests. To run only one crate or a few tests:
+The first run compiles everything (a few minutes); later runs are fast. You should see `test result: ok.` lines and no `FAILED`. At milestone 0.6 that is about 430 tests. To run only one crate or a few tests:
 
 ```bash
 cargo test -p pg-core                  # just the simulation core
@@ -90,6 +90,24 @@ cargo run -q -p pg-cli -- actions
 # Watch tasks and commitments happen
 cargo run -q -p pg-cli -- sim --seed town --dev-map 48x36 --dev-pawns 4 --days 1 --events task
 
+# Saves: create a world slot, inspect and verify it, damage it on purpose, watch it recover
+cargo run -q -p pg-cli -- save create saves --world town --seed demo --dev-map 40x30 --dev-pawns 6 --days 2 --content data/base
+cargo run -q -p pg-cli -- save create saves --world town --seed demo --dev-map 40x30 --dev-pawns 6 --days 3 --content data/base
+cargo run -q -p pg-cli -- save inspect saves town
+cargo run -q -p pg-cli -- save verify saves town --content data/base
+#   (now flip a byte in saves/worlds/town/state.2.pgsave with any hex editor and run verify and load again)
+cargo run -q -p pg-cli -- save load saves town --ticks 1000
+# Export a world to a portable file and import it as a new slot
+cargo run -q -p pg-cli -- save export saves town --out town.export.json
+cargo run -q -p pg-cli -- save import saves town.export.json --world town-copy
+# Bug bundles: cut a replay log at a tick; the bundle replays on any machine
+cargo run -q -p pg-cli -- bugbundle create golden/dev-town-3days.json --at 20000 --note "demo" --out demo.pgbundle
+cargo run -q -p pg-cli -- bugbundle run demo.pgbundle
+# Scenarios: executable acceptance checks
+cargo run -q -p pg-cli -- scenario run scenarios/persistence.json
+# What changed between two content sets
+cargo run -q -p pg-cli -- content diff data/base data/base
+
 # The golden replay CI checks on every OS
 cargo run -q -p pg-cli -- replay golden/dev-town-3days.json --snapshot-at 12345
 ```
@@ -107,6 +125,8 @@ If you change something and a replay no longer matches, `pg replay --diff a.json
 | `tools/pg-cli` | The `pg` developer tool |
 | `data/base` | The base game's own content pack |
 | `golden/` | Golden replay logs checked in CI |
+| `fixtures/saves/` | Pinned save files that every build must keep loading |
+| `scenarios/` | Scenario files run by `pg scenario run` (and CI) |
 | `docs/reference/` | The binding specification (Blueprint, Design Document, Roadmap) |
 | `docs/PLAN.md`, `docs/TODO.md` | The build plan and the rolling working notes |
 

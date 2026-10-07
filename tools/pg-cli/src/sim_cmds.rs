@@ -3,7 +3,7 @@
 use crate::args::{parse, parse_size, Parsed, Spec};
 use crate::shared::{load_content, short, EventFilter, DEFAULT_CONTENT_DIR};
 use pg_content::ContentSet;
-use pg_core::canon::{Canon, ToCanon};
+use pg_core::canon::ToCanon;
 use pg_core::containment::validate_containment;
 use pg_core::id::{EntityId, Kind};
 use pg_core::input::{Command, SettingChange, SimInput};
@@ -90,6 +90,10 @@ fn cadence_name(c: Cadence) -> &'static str {
 }
 
 fn write_log(path: &str, log: &ReplayLog, pretty: bool) -> Result<(), String> {
+    if path.ends_with(".pglog") {
+        return std::fs::write(path, pg_persist::logfile::encode_log(log))
+            .map_err(|e| format!("cannot write {path}: {e}"));
+    }
     let canonical = log.to_canon().to_canonical_string();
     let text = if pretty {
         let v: serde_json::Value = serde_json::from_str(&canonical).map_err(|e| e.to_string())?;
@@ -100,10 +104,10 @@ fn write_log(path: &str, log: &ReplayLog, pretty: bool) -> Result<(), String> {
     std::fs::write(path, text + "\n").map_err(|e| format!("cannot write {path}: {e}"))
 }
 
+/// Reads a replay log in any form: plain JSON, compressed `.pglog`, or a `.pgbundle` (its trimmed log).
 fn read_log(path: &str) -> Result<ReplayLog, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"))?;
-    let canon: Canon = pg_core::canon::json::parse(&text).map_err(|e| format!("{path}: {e}"))?;
-    ReplayLog::from_canon(&canon).map_err(|e| format!("{path}: {e}"))
+    let bytes = std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?;
+    pg_persist::logfile::read_any(&bytes).map_err(|e| format!("{path}: {e}"))
 }
 
 /// Everything `sim` and `map show` need to describe a demo world, as inputs applied at tick 0.

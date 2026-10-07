@@ -103,7 +103,11 @@ impl ObjectInstance {
                     container: l.child("container")?.reader().str()?.to_owned(),
                 })
             }
-            other => return Err(kind.reader().err(format!("unknown location kind '{other}'"))),
+            other => {
+                return Err(kind
+                    .reader()
+                    .err(format!("unknown location kind '{other}'")))
+            }
         };
         let mut containers = BTreeMap::new();
         for (name, child) in r.child("containers")?.reader().entries()? {

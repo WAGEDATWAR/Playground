@@ -34,19 +34,55 @@ fn content() -> Arc<ContentSet> {
 }
 
 fn cmd(c: Command) -> SimInput {
-    SimInput::Command { actor: None, cmd: c }
+    SimInput::Command {
+        actor: None,
+        cmd: c,
+    }
 }
 
 /// A town with pawns, objects, a commitment and a mid-run slot change: every table is populated.
 fn busy_sim() -> Sim {
-    let mut sim = Sim::with_dev_systems(WorldState::new("Save Town", "save-seed")).with_content(content());
-    sim.submit(0, cmd(Command::DevCreateMap { w: 32, h: 24, style: 1 })).unwrap();
+    let mut sim =
+        Sim::with_dev_systems(WorldState::new("Save Town", "save-seed")).with_content(content());
+    sim.submit(
+        0,
+        cmd(Command::DevCreateMap {
+            w: 32,
+            h: 24,
+            style: 1,
+        }),
+    )
+    .unwrap();
     let map = EntityId::new(Kind::Map, 1);
     for i in 0..5 {
-        sim.submit(0, cmd(Command::DevSpawnPawn { map, at: None, name: format!("P{i}") })).unwrap();
+        sim.submit(
+            0,
+            cmd(Command::DevSpawnPawn {
+                map,
+                at: None,
+                name: format!("P{i}"),
+            }),
+        )
+        .unwrap();
     }
-    sim.submit(1, cmd(Command::DevSpawnObject { map, at: Tile::new(5, 5), template: "furniture.drawer".into() })).unwrap();
-    sim.submit(1, cmd(Command::DevSpawnObject { map, at: Tile::new(6, 5), template: "item.coin".into() })).unwrap();
+    sim.submit(
+        1,
+        cmd(Command::DevSpawnObject {
+            map,
+            at: Tile::new(5, 5),
+            template: "furniture.drawer".into(),
+        }),
+    )
+    .unwrap();
+    sim.submit(
+        1,
+        cmd(Command::DevSpawnObject {
+            map,
+            at: Tile::new(6, 5),
+            template: "item.coin".into(),
+        }),
+    )
+    .unwrap();
     sim.submit(
         2,
         cmd(Command::DevPutInContainer {
@@ -126,7 +162,9 @@ fn load(c: &Canon) -> Result<WorldState, RestoreError> {
 fn set(c: &mut Canon, path: &[&str], value: Canon) {
     let mut cur = c;
     for (i, key) in path.iter().enumerate() {
-        let Canon::Map(m) = cur else { panic!("not a map at {key}") };
+        let Canon::Map(m) = cur else {
+            panic!("not a map at {key}")
+        };
         if i + 1 == path.len() {
             m.insert((*key).to_owned(), value);
             return;
@@ -138,7 +176,9 @@ fn set(c: &mut Canon, path: &[&str], value: Canon) {
 fn remove(c: &mut Canon, path: &[&str]) {
     let mut cur = c;
     for (i, key) in path.iter().enumerate() {
-        let Canon::Map(m) = cur else { panic!("not a map at {key}") };
+        let Canon::Map(m) = cur else {
+            panic!("not a map at {key}")
+        };
         if i + 1 == path.len() {
             m.remove(*key);
             return;
@@ -150,10 +190,17 @@ fn remove(c: &mut Canon, path: &[&str]) {
 #[test]
 fn wrong_schema_is_refused_with_both_numbers() {
     let mut c = world_json();
-    set(&mut c, &["schema"], Canon::Int(i128::from(SCHEMA_VERSION) + 1));
+    set(
+        &mut c,
+        &["schema"],
+        Canon::Int(i128::from(SCHEMA_VERSION) + 1),
+    );
     assert_eq!(
         load(&c).unwrap_err(),
-        RestoreError::Schema { found: SCHEMA_VERSION + 1, expected: SCHEMA_VERSION }
+        RestoreError::Schema {
+            found: SCHEMA_VERSION + 1,
+            expected: SCHEMA_VERSION
+        }
     );
 }
 
@@ -162,11 +209,17 @@ fn missing_unknown_and_mistyped_fields_report_their_path() {
     let mut c = world_json();
     remove(&mut c, &["settings", "movement", "max_repaths"]);
     let e = load(&c).unwrap_err().to_string();
-    assert!(e.contains("settings.movement") && e.contains("max_repaths"), "{e}");
+    assert!(
+        e.contains("settings.movement") && e.contains("max_repaths"),
+        "{e}"
+    );
 
     let mut c = world_json();
     set(&mut c, &["extra"], Canon::Int(1));
-    assert!(load(&c).unwrap_err().to_string().contains("unknown field 'extra'"));
+    assert!(load(&c)
+        .unwrap_err()
+        .to_string()
+        .contains("unknown field 'extra'"));
 
     let mut c = world_json();
     set(&mut c, &["clock", "tick"], Canon::str("soon"));
@@ -181,23 +234,37 @@ fn missing_unknown_and_mistyped_fields_report_their_path() {
 fn table_keys_must_match_row_ids() {
     let mut c = world_json();
     let Canon::Map(top) = &mut c else { panic!() };
-    let Some(Canon::Map(pawns)) = top.get_mut("pawns") else { panic!() };
+    let Some(Canon::Map(pawns)) = top.get_mut("pawns") else {
+        panic!()
+    };
     let row = pawns.remove("pawn_1").unwrap();
     pawns.insert("pawn_9".into(), row);
-    assert!(matches!(load(&c).unwrap_err(), RestoreError::KeyMismatch { table: "pawns", .. }));
+    assert!(matches!(
+        load(&c).unwrap_err(),
+        RestoreError::KeyMismatch { table: "pawns", .. }
+    ));
 }
 
 #[test]
 fn a_corrupt_schedule_is_refused_not_loaded() {
     let mut c = world_json();
     let Canon::Map(top) = &mut c else { panic!() };
-    let Some(Canon::Map(pawns)) = top.get_mut("pawns") else { panic!() };
-    let pawn = pawns.values_mut().find(|p| !matches!(p.get("schedule"), Some(Canon::Null) | None)).unwrap();
-    let Some(Canon::Map(sched)) = pawn.get("schedule").cloned().map(|s| s) else { panic!() };
+    let Some(Canon::Map(pawns)) = top.get_mut("pawns") else {
+        panic!()
+    };
+    let pawn = pawns
+        .values_mut()
+        .find(|p| !matches!(p.get("schedule"), Some(Canon::Null) | None))
+        .unwrap();
+    let Some(Canon::Map(sched)) = pawn.get("schedule").cloned() else {
+        panic!()
+    };
     let mut sched = Canon::Map(sched);
     // Two reservations on the same slots.
     let Canon::Map(m) = &mut sched else { panic!() };
-    let Some(Canon::List(rs)) = m.get_mut("reservations") else { panic!() };
+    let Some(Canon::List(rs)) = m.get_mut("reservations") else {
+        panic!()
+    };
     assert!(!rs.is_empty());
     let mut dup = rs[0].clone();
     if let Canon::Map(d) = &mut dup {
@@ -216,7 +283,10 @@ fn map_arrays_must_match_the_declared_size() {
     let mut c = world_json();
     set(&mut c, &["maps", "map_1", "terrain"], Canon::str("00"));
     let e = load(&c).unwrap_err().to_string();
-    assert!(e.contains("maps.map_1.terrain") && e.contains("hex characters"), "{e}");
+    assert!(
+        e.contains("maps.map_1.terrain") && e.contains("hex characters"),
+        "{e}"
+    );
     // A huge declared size is refused before anything is allocated.
     let mut c = world_json();
     set(&mut c, &["maps", "map_1", "w"], Canon::Int(1_000_000));
@@ -248,5 +318,6 @@ proptest! {
 fn world_json_text() -> String {
     use std::sync::OnceLock;
     static TEXT: OnceLock<String> = OnceLock::new();
-    TEXT.get_or_init(|| world_json().to_canonical_string()).clone()
+    TEXT.get_or_init(|| world_json().to_canonical_string())
+        .clone()
 }

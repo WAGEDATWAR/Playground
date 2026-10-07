@@ -114,33 +114,65 @@ fn well_known_rfc_examples() {
     let mut m = BTreeMap::new();
     m.insert("\u{20ac}".to_owned(), Canon::str("Euro Sign")); // U+20AC
     m.insert("\r".to_owned(), Canon::str("Carriage Return"));
-    m.insert("\u{fb33}".to_owned(), Canon::str("Hebrew Letter Dalet With Dagesh")); // U+FB33
+    m.insert(
+        "\u{fb33}".to_owned(),
+        Canon::str("Hebrew Letter Dalet With Dagesh"),
+    ); // U+FB33
     m.insert("1".to_owned(), Canon::str("One"));
     m.insert("\u{1f600}".to_owned(), Canon::str("Emoji: Grinning Face")); // U+1F600
     m.insert("\u{80}".to_owned(), Canon::str("Control"));
-    m.insert("\u{f6}".to_owned(), Canon::str("Latin Small Letter O With Diaeresis"));
-    let expected_order = ["\r", "1", "\u{80}", "\u{f6}", "\u{20ac}", "\u{1f600}", "\u{fb33}"];
+    m.insert(
+        "\u{f6}".to_owned(),
+        Canon::str("Latin Small Letter O With Diaeresis"),
+    );
+    let expected_order = [
+        "\r",
+        "1",
+        "\u{80}",
+        "\u{f6}",
+        "\u{20ac}",
+        "\u{1f600}",
+        "\u{fb33}",
+    ];
     // The RFC lists the emoji (U+1F600, surrogates D83D DE00) before U+FB33; code-point order does not.
     let jcs_text = jcs(&Canon::Map(m.clone()));
     let positions: Vec<usize> = expected_order
         .iter()
         .map(|k| jcs_text.find(&jcs_string(k)).unwrap())
         .collect();
-    assert!(positions.windows(2).all(|w| w[0] < w[1]), "the reference follows the RFC order");
+    assert!(
+        positions.windows(2).all(|w| w[0] < w[1]),
+        "the reference follows the RFC order"
+    );
     // Our canonical form differs here, and only here: this pins the known deviation (D-022).
     let ours = Canon::Map(m).to_canonical_string();
     let emoji = ours.find(&jcs_string("\u{1f600}")).unwrap();
     let dalet = ours.find(&jcs_string("\u{fb33}")).unwrap();
-    assert!(dalet < emoji, "Canon orders by code point, so U+FB33 comes before U+1F600");
+    assert!(
+        dalet < emoji,
+        "Canon orders by code point, so U+FB33 comes before U+1F600"
+    );
 }
 
 #[test]
 fn escaping_matches_the_rfc_for_every_control_character() {
     for c in 0u32..0x20 {
         let s = char::from_u32(c).unwrap().to_string();
-        assert_eq!(Canon::Str(s.clone()).to_canonical_string(), jcs_string(&s), "U+{c:04X}");
+        assert_eq!(
+            Canon::Str(s.clone()).to_canonical_string(),
+            jcs_string(&s),
+            "U+{c:04X}"
+        );
     }
-    for s in ["\"", "\\", "/", "\u{7f}", "\u{2028}", "\u{feff}", "\u{1f600}"] {
+    for s in [
+        "\"",
+        "\\",
+        "/",
+        "\u{7f}",
+        "\u{2028}",
+        "\u{feff}",
+        "\u{1f600}",
+    ] {
         assert_eq!(Canon::str(s).to_canonical_string(), jcs_string(s), "{s:?}");
     }
 }

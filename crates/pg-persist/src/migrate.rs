@@ -62,7 +62,11 @@ impl Migrations {
         for (i, pair) in steps.windows(2).enumerate() {
             if let [a, b] = pair {
                 if b.from != a.from + 1 {
-                    return Err(format!("migration {i} ({}) is not followed by {}", a.from, a.from + 1));
+                    return Err(format!(
+                        "migration {i} ({}) is not followed by {}",
+                        a.from,
+                        a.from + 1
+                    ));
                 }
             }
         }
@@ -156,8 +160,16 @@ mod tests {
         Migrations::new(
             3,
             vec![
-                Migration { from: 1, describe: "add a field", apply: add_field },
-                Migration { from: 2, describe: "rename it", apply: rename_field },
+                Migration {
+                    from: 1,
+                    describe: "add a field",
+                    apply: add_field,
+                },
+                Migration {
+                    from: 2,
+                    describe: "rename it",
+                    apply: rename_field,
+                },
             ],
         )
         .unwrap()
@@ -186,25 +198,52 @@ mod tests {
     #[test]
     fn newer_and_too_old_saves_are_refused_with_clear_messages() {
         let e = chain().migrate(doc(4), 4).unwrap_err();
-        assert_eq!(e, MigrateError::Newer { found: 4, current: 3 });
+        assert_eq!(
+            e,
+            MigrateError::Newer {
+                found: 4,
+                current: 3
+            }
+        );
         assert!(e.to_string().contains("newer version"));
         let e = chain().migrate(doc(0), 0).unwrap_err();
-        assert_eq!(e, MigrateError::TooOld { found: 0, oldest: 1 });
+        assert_eq!(
+            e,
+            MigrateError::TooOld {
+                found: 0,
+                oldest: 1
+            }
+        );
         assert!(e.to_string().contains("too old"));
     }
 
     #[test]
     fn a_failing_step_refuses_the_load() {
-        let m = Migrations::new(2, vec![Migration { from: 1, describe: "bad", apply: explode }]).unwrap();
+        let m = Migrations::new(
+            2,
+            vec![Migration {
+                from: 1,
+                describe: "bad",
+                apply: explode,
+            }],
+        )
+        .unwrap();
         assert_eq!(
             m.migrate(doc(1), 1).unwrap_err(),
-            MigrateError::Failed { from: 1, message: "boom".into() }
+            MigrateError::Failed {
+                from: 1,
+                message: "boom".into()
+            }
         );
     }
 
     #[test]
     fn chains_must_be_contiguous_and_end_at_the_current_schema() {
-        let m = |from| Migration { from, describe: "", apply: add_field };
+        let m = |from| Migration {
+            from,
+            describe: "",
+            apply: add_field,
+        };
         assert!(Migrations::new(4, vec![m(1), m(3)]).is_err());
         assert!(Migrations::new(5, vec![m(1), m(2)]).is_err());
         assert!(Migrations::new(3, vec![m(1), m(2)]).is_ok());

@@ -232,7 +232,12 @@ mod tests {
         assert_eq!(s.read("a/b").unwrap().unwrap(), b"one");
         s.write_atomic("a/b", b"uno").unwrap();
         assert_eq!(s.read("a/b").unwrap().unwrap(), b"uno");
-        let names: Vec<_> = s.list("a/").unwrap().into_iter().map(|b| (b.name, b.size)).collect();
+        let names: Vec<_> = s
+            .list("a/")
+            .unwrap()
+            .into_iter()
+            .map(|b| (b.name, b.size))
+            .collect();
         assert_eq!(names, [("a/b".to_owned(), 3), ("a/c".to_owned(), 5)]);
         s.delete("a/b").unwrap();
         s.delete("a/b").unwrap(); // deleting twice is fine
@@ -243,19 +248,29 @@ mod tests {
     #[test]
     fn a_crash_stops_everything_from_that_operation_on() {
         let s = MemStorage::new();
-        s.set_faults(Faults { fail_from_op: Some(2), ..Faults::default() });
+        s.set_faults(Faults {
+            fail_from_op: Some(2),
+            ..Faults::default()
+        });
         s.write_atomic("a", b"1").unwrap(); // op 0
         s.write_atomic("b", b"2").unwrap(); // op 1
         assert!(s.write_atomic("c", b"3").is_err()); // op 2
         assert!(s.read("a").is_err()); // op 3: still crashed
         s.set_faults(Faults::default());
-        assert_eq!(s.names(), ["a", "b"], "the failed write left nothing behind");
+        assert_eq!(
+            s.names(),
+            ["a", "b"],
+            "the failed write left nothing behind"
+        );
     }
 
     #[test]
     fn a_torn_write_leaves_half_a_blob_and_an_error() {
         let s = MemStorage::new();
-        s.set_faults(Faults { torn_write: Some(1), ..Faults::default() });
+        s.set_faults(Faults {
+            torn_write: Some(1),
+            ..Faults::default()
+        });
         s.write_atomic("a", b"abcdef").unwrap();
         assert!(s.write_atomic("b", b"abcdef").is_err());
         assert_eq!(s.get_raw("b").unwrap(), b"abc");
@@ -266,7 +281,10 @@ mod tests {
     fn disk_full_fails_writes_but_not_reads() {
         let s = MemStorage::new();
         s.write_atomic("a", b"1").unwrap();
-        s.set_faults(Faults { disk_full: true, ..Faults::default() });
+        s.set_faults(Faults {
+            disk_full: true,
+            ..Faults::default()
+        });
         assert!(s.write_atomic("a", b"2").is_err());
         assert_eq!(s.read("a").unwrap().unwrap(), b"1");
     }

@@ -80,11 +80,52 @@ pub fn content_cmd(args: &[String]) -> Result<ExitCode, String> {
         Some("list") => list(&args[1..]),
         Some("resolve") => resolve(&args[1..]),
         Some("components") => Ok(components()),
+        Some("diff") => diff(&args[1..]),
         Some(other) => Err(format!(
             "unknown content command '{other}' (try lint, list, resolve, components)"
         )),
         None => Err("content needs a command: lint, list, resolve, components".into()),
     }
+}
+
+/// `pg content diff <packs-a> <packs-b>`: each side is one or more pack directories, comma-separated.
+fn diff(args: &[String]) -> Result<ExitCode, String> {
+    let [a, b] = args else {
+        return Err(
+            "usage: pg content diff <pack-dirs-a> <pack-dirs-b> (each side: dir[,dir...])".into(),
+        );
+    };
+    let side = |text: &str| -> Result<std::sync::Arc<pg_content::ContentSet>, String> {
+        crate::shared::load_content(&text.split(',').map(str::to_owned).collect::<Vec<_>>())
+    };
+    let (old, new) = (side(a)?, side(b)?);
+    let d = pg_content::diff::diff(&old, &new);
+    if d.is_empty() {
+        println!("no differences");
+        return Ok(ExitCode::SUCCESS);
+    }
+    for line in &d.packs {
+        println!("pack {line}");
+    }
+    for id in &d.added {
+        println!("+ {id}");
+    }
+    for id in &d.removed {
+        println!("- {id}");
+    }
+    for (id, lines) in &d.changed {
+        println!("~ {id}");
+        for l in lines {
+            println!("    {l}");
+        }
+    }
+    println!(
+        "{} added, {} removed, {} changed",
+        d.added.len(),
+        d.removed.len(),
+        d.changed.len()
+    );
+    Ok(ExitCode::FAILURE) // like diff(1): non-zero when the sets differ
 }
 
 fn lint(args: &[String]) -> Result<ExitCode, String> {

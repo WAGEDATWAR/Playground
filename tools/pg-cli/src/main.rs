@@ -2,7 +2,8 @@
 //!
 //! Commands so far: `selftest`, `rand`, `hash`, `id` (0.1); `sim`, `replay`, `time`, `pipeline` (0.2);
 //! `content` (0.3); `map`, plus replay `--diff` / `--bisect` and event filters (0.4); `schedule explain`,
-//! `actions` (0.5). Later milestones add `save`, `pack`, `bench`.
+//! `actions` (0.5); `save`, `bugbundle`, `scenario`, `content diff` (0.6). Later milestones add
+//! `pack`, `bench`.
 
 use pg_core::hash::hash_canon;
 use pg_core::id::{EntityId, Kind};
@@ -13,6 +14,7 @@ use std::process::ExitCode;
 mod args;
 mod content_cmds;
 mod map_cmds;
+mod persist_cmds;
 mod sched_cmds;
 mod shared;
 mod sim_cmds;
@@ -58,6 +60,22 @@ USAGE:
         the pawn's day: every reservation with its priority and the plain-sentence reason it is there,
         open time, what could not be placed and why, and the pawn's commitments.
     pg actions                List the closed action registry: ids, parameters, steps.
+    pg save create <dir> [--world <id>] --seed <text> [--days <n> | --ticks <n>] [sim flags]
+        Run the dev simulation and save it as a world slot (two generations, atomic writes).
+    pg save list <dir>                      List the worlds in a save directory.
+    pg save inspect <dir> <world>           Manifest, generations, file headers.
+    pg save verify <dir> <world> [--content <pack-dir>]...
+        Check every generation (checksum, decode, hash, containment) and the load path. Exit 1 if the
+        newest generation is not clean.
+    pg save load <dir> <world> [--ticks <n>] [--content <pack-dir>]...
+        Load a world (recovering from damage if needed) and optionally keep running it.
+    pg save export <dir> <world> --out <file>     Write a portable export.
+    pg save import <dir> <file> --world <new-id> [--overwrite]   Validate an export and write it as a new slot.
+    pg bugbundle create <log> --at <tick> --out <file.pgbundle> [--note <text>]
+        Cut a replay log at a tick: a snapshot plus the tail, small enough to attach to a bug report.
+    pg bugbundle run <file.pgbundle>        Replay a bundle and verify its hashes.
+    pg scenario run <file.json>...          Run scenario files (build, run, save, reload, damage, recover, assert).
+    pg content diff <packs-a> <packs-b>     Compare two content sets (comma-separated pack dirs each).
     pg time <tick> [--slot-minutes <m>]    Show day / clock time / slot / boundary flags for a tick.
     pg pipeline               Show the tick pipeline: systems in execution order and their cadence.
     pg content lint [pack-dir...]         Load and validate packs (default: data/base). Exit 1 on errors.
@@ -84,6 +102,9 @@ fn main() -> ExitCode {
         Some("time") => sim_cmds::time_cmd(&args[1..]),
         Some("pipeline") => Ok(sim_cmds::pipeline_cmd()),
         Some("schedule") => sched_cmds::schedule_cmd(&args[1..]),
+        Some("save") => persist_cmds::save_cmd(&args[1..]),
+        Some("bugbundle") => persist_cmds::bugbundle_cmd(&args[1..]),
+        Some("scenario") => persist_cmds::scenario_cmd(&args[1..]),
         Some("actions") => Ok(sched_cmds::actions_cmd()),
         Some("version" | "--version" | "-V") => {
             println!("pg {}", env!("CARGO_PKG_VERSION"));

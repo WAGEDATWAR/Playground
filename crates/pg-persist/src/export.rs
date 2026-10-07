@@ -60,7 +60,10 @@ pub fn export_world(
 
 #[derive(Debug)]
 pub enum ImportError {
-    TooLarge { bytes: usize, limit: usize },
+    TooLarge {
+        bytes: usize,
+        limit: usize,
+    },
     NotJson(String),
     /// Not an export file, or an export of a kind this build does not import.
     WrongFormat(String),
@@ -80,15 +83,24 @@ impl fmt::Display for ImportError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ImportError::TooLarge { bytes, limit } => {
-                write!(f, "the file is {bytes} bytes; imports are limited to {limit}")
+                write!(
+                    f,
+                    "the file is {bytes} bytes; imports are limited to {limit}"
+                )
             }
             ImportError::NotJson(e) => write!(f, "the file is not valid export data: {e}"),
             ImportError::WrongFormat(e) => write!(f, "{e}"),
-            ImportError::HashMismatch => write!(f, "the file's contents do not match its hash; it was damaged or edited"),
+            ImportError::HashMismatch => write!(
+                f,
+                "the file's contents do not match its hash; it was damaged or edited"
+            ),
             ImportError::Migrate(e) => write!(f, "{e}"),
             ImportError::Invalid(e) => write!(f, "the world data is invalid: {e}"),
             ImportError::Rejected(r) => write!(f, "the world failed validation:\n{r}"),
-            ImportError::SlotExists(id) => write!(f, "a world named '{id}' already exists; choose another name or overwrite explicitly"),
+            ImportError::SlotExists(id) => write!(
+                f,
+                "a world named '{id}' already exists; choose another name or overwrite explicitly"
+            ),
             ImportError::BadWorldId(id) => write!(f, "'{id}' is not a valid world id"),
             ImportError::Save(e) => write!(f, "{e}"),
         }
@@ -139,7 +151,8 @@ pub fn import_world(bytes: &[u8], opts: &ImportOptions<'_>) -> Result<ImportPlan
             limit: opts.max_bytes,
         });
     }
-    let text = std::str::from_utf8(bytes).map_err(|_| ImportError::NotJson("not UTF-8".to_owned()))?;
+    let text =
+        std::str::from_utf8(bytes).map_err(|_| ImportError::NotJson("not UTF-8".to_owned()))?;
     let doc = json::parse(text).map_err(|e| ImportError::NotJson(e.to_string()))?;
     let root = Root::new(doc);
     let r = root.reader();
@@ -154,9 +167,14 @@ pub fn import_world(bytes: &[u8], opts: &ImportOptions<'_>) -> Result<ImportPlan
         "hash",
     ])
     .map_err(|e| ImportError::WrongFormat(e.to_string()))?;
-    let field = |name: &str| r.child(name).map_err(|e| ImportError::WrongFormat(e.to_string()));
+    let field = |name: &str| {
+        r.child(name)
+            .map_err(|e| ImportError::WrongFormat(e.to_string()))
+    };
     if field("format")?.reader().str().map_err(invalid)? != EXPORT_FORMAT {
-        return Err(ImportError::WrongFormat("this is not a Playground export file".to_owned()));
+        return Err(ImportError::WrongFormat(
+            "this is not a Playground export file".to_owned(),
+        ));
     }
     let kind = field("kind")?;
     if kind.reader().str().map_err(invalid)? != BundleKind::World.name() {
@@ -177,7 +195,8 @@ pub fn import_world(bytes: &[u8], opts: &ImportOptions<'_>) -> Result<ImportPlan
         .migrations
         .migrate(payload.reader().value().clone(), schema)
         .map_err(ImportError::Migrate)?;
-    let world = WorldState::from_canon(&migrated).map_err(|e| ImportError::Invalid(e.to_string()))?;
+    let world =
+        WorldState::from_canon(&migrated).map_err(|e| ImportError::Invalid(e.to_string()))?;
     let content_refs = refs_from_reader(field("content_refs")?.reader()).map_err(invalid)?;
     let mut report = ValidationReport::new();
     if let Some(content) = opts.content {
@@ -192,8 +211,16 @@ pub fn import_world(bytes: &[u8], opts: &ImportOptions<'_>) -> Result<ImportPlan
         .map(|installed| compat::compare(&content_refs, installed));
     Ok(ImportPlan {
         world,
-        app_version: field("app_version")?.reader().str().map_err(invalid)?.to_owned(),
-        created_iso: field("created_iso")?.reader().str().map_err(invalid)?.to_owned(),
+        app_version: field("app_version")?
+            .reader()
+            .str()
+            .map_err(invalid)?
+            .to_owned(),
+        created_iso: field("created_iso")?
+            .reader()
+            .str()
+            .map_err(invalid)?
+            .to_owned(),
         content_refs,
         migrated_from: (schema != opts.migrations.current()).then_some(schema),
         report,
@@ -212,7 +239,11 @@ pub fn commit_import(
     if !valid_world_id(world_id) {
         return Err(ImportError::BadWorldId(world_id.to_owned()));
     }
-    if !overwrite && store.list_worlds().map_or(false, |w| w.iter().any(|x| x == world_id)) {
+    if !overwrite
+        && store
+            .list_worlds()
+            .is_ok_and(|w| w.iter().any(|x| x == world_id))
+    {
         return Err(ImportError::SlotExists(world_id.to_owned()));
     }
     store

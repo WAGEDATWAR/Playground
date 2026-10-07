@@ -7,7 +7,7 @@
 //!   whoever made it. `pg bugbundle run` replays it on any machine and says whether the hashes match, so a
 //!   bug report is one small file instead of a description.
 
-use crate::codec::{self, Container, CodecError};
+use crate::codec::{self, CodecError, Container};
 use pg_content::ContentSet;
 use pg_core::canon::{json, Canon, ToCanon};
 use pg_core::replay::{ReplayError, ReplayLog};
@@ -32,7 +32,9 @@ impl fmt::Display for LogFileError {
             LogFileError::Codec(e) => write!(f, "{e}"),
             LogFileError::Parse(e) => write!(f, "{e}"),
             LogFileError::Replay(e) => write!(f, "{e}"),
-            LogFileError::Unrecognised => write!(f, "not a replay log, compressed log or bug bundle"),
+            LogFileError::Unrecognised => {
+                write!(f, "not a replay log, compressed log or bug bundle")
+            }
         }
     }
 }
@@ -55,7 +57,8 @@ pub fn encode_log(log: &ReplayLog) -> Vec<u8> {
 }
 
 fn parse_log(payload: &[u8]) -> Result<ReplayLog, LogFileError> {
-    let text = std::str::from_utf8(payload).map_err(|_| LogFileError::Parse("not UTF-8".to_owned()))?;
+    let text =
+        std::str::from_utf8(payload).map_err(|_| LogFileError::Parse("not UTF-8".to_owned()))?;
     let canon = json::parse(text).map_err(|e| LogFileError::Parse(e.to_string()))?;
     ReplayLog::from_canon(&canon).map_err(|e| LogFileError::Parse(e.to_string()))
 }
@@ -109,12 +112,10 @@ impl Bundle {
 
     pub fn decode(bytes: &[u8]) -> Result<Bundle, LogFileError> {
         let (_, payload) = codec::decode_as(Container::Bundle, bytes, LIMIT)?;
-        let text = std::str::from_utf8(&payload).map_err(|_| LogFileError::Parse("not UTF-8".to_owned()))?;
+        let text = std::str::from_utf8(&payload)
+            .map_err(|_| LogFileError::Parse("not UTF-8".to_owned()))?;
         let doc = json::parse(text).map_err(|e| LogFileError::Parse(e.to_string()))?;
-        let field = |k: &str| {
-            doc.field(k)
-                .map_err(|e| LogFileError::Parse(e.to_string()))
-        };
+        let field = |k: &str| doc.field(k).map_err(|e| LogFileError::Parse(e.to_string()));
         if field("format")?.as_str() != Some(BUNDLE_FORMAT) {
             return Err(LogFileError::Parse("not a bug bundle".to_owned()));
         }
@@ -161,7 +162,12 @@ mod tests {
         let l = log(30_000);
         let plain = l.to_canon().to_canonical_string();
         let packed = encode_log(&l);
-        assert!(packed.len() * 2 < plain.len(), "{} vs {}", packed.len(), plain.len());
+        assert!(
+            packed.len() * 2 < plain.len(),
+            "{} vs {}",
+            packed.len(),
+            plain.len()
+        );
         let back = decode_log(&packed).unwrap();
         assert_eq!(back, l);
         assert!(replay(&back, None).unwrap().ok());
@@ -170,7 +176,15 @@ mod tests {
     #[test]
     fn a_bundle_replays_the_tail_and_matches_the_original_end_state() {
         let l = log(40_000);
-        let b = Bundle::make(&l, 20_000, None, "pawns stuck at noon", "2026-10-06T00:00:00Z", "0.0.1").unwrap();
+        let b = Bundle::make(
+            &l,
+            20_000,
+            None,
+            "pawns stuck at noon",
+            "2026-10-06T00:00:00Z",
+            "0.0.1",
+        )
+        .unwrap();
         let bytes = b.encode();
         let back = Bundle::decode(&bytes).unwrap();
         assert_eq!(back, b);
@@ -180,7 +194,11 @@ mod tests {
         assert_eq!(out.final_hash.to_hex(), l.final_hash);
         // A bundle carries a world snapshot, so it is bigger than a bare log but still compressed.
         let plain_bundle = back.log.to_canon().to_canonical_string().len();
-        assert!(bytes.len() * 2 < plain_bundle, "{} vs {plain_bundle}", bytes.len());
+        assert!(
+            bytes.len() * 2 < plain_bundle,
+            "{} vs {plain_bundle}",
+            bytes.len()
+        );
     }
 
     #[test]
@@ -188,7 +206,9 @@ mod tests {
         let l = log(2_000);
         let packed = encode_log(&l);
         assert!(Bundle::decode(&packed).is_err());
-        let bundle = Bundle::make(&l, 1_000, None, "n", "t", "v").unwrap().encode();
+        let bundle = Bundle::make(&l, 1_000, None, "n", "t", "v")
+            .unwrap()
+            .encode();
         assert!(decode_log(&bundle).is_err());
     }
 
@@ -200,7 +220,10 @@ mod tests {
         assert_eq!(read_any(&encode_log(&l)).unwrap(), l);
         let b = Bundle::make(&l, 1_500, None, "n", "t", "v").unwrap();
         assert_eq!(read_any(&b.encode()).unwrap(), b.log);
-        assert!(matches!(read_any(b"hello"), Err(LogFileError::Unrecognised)));
+        assert!(matches!(
+            read_any(b"hello"),
+            Err(LogFileError::Unrecognised)
+        ));
         assert!(matches!(
             read_any(&codec::encode(3, b"{}")),
             Err(LogFileError::Unrecognised)
@@ -214,7 +237,9 @@ mod tests {
         let mid = packed.len() / 2;
         packed[mid] ^= 0xFF;
         assert!(decode_log(&packed).is_err());
-        let mut bundle = Bundle::make(&l, 1_000, None, "n", "t", "v").unwrap().encode();
+        let mut bundle = Bundle::make(&l, 1_000, None, "n", "t", "v")
+            .unwrap()
+            .encode();
         bundle.truncate(bundle.len() - 10);
         assert!(Bundle::decode(&bundle).is_err());
     }

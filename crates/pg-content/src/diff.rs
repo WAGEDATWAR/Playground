@@ -48,8 +48,12 @@ fn value_diff(path: &str, old: &Canon, new: &Canon, out: &mut Vec<String>) {
                 };
                 match (a.get(k), b.get(k)) {
                     (Some(x), Some(y)) => value_diff(&p, x, y, out),
-                    (Some(x), None) => out.push(format!("{p}: removed (was {})", x.to_canonical_string())),
-                    (None, Some(y)) => out.push(format!("{p}: added ({})", y.to_canonical_string())),
+                    (Some(x), None) => {
+                        out.push(format!("{p}: removed (was {})", x.to_canonical_string()))
+                    }
+                    (None, Some(y)) => {
+                        out.push(format!("{p}: added ({})", y.to_canonical_string()))
+                    }
                     (None, None) => {}
                 }
             }
@@ -90,16 +94,31 @@ pub fn diff(old: &ContentSet, new: &ContentSet) -> ContentDiff {
     }
     let old_ids: BTreeSet<&TemplateId> = old.ids().collect();
     let new_ids: BTreeSet<&TemplateId> = new.ids().collect();
-    d.added = new_ids.difference(&old_ids).map(|id| (*id).clone()).collect();
-    d.removed = old_ids.difference(&new_ids).map(|id| (*id).clone()).collect();
+    d.added = new_ids
+        .difference(&old_ids)
+        .map(|id| (*id).clone())
+        .collect();
+    d.removed = old_ids
+        .difference(&new_ids)
+        .map(|id| (*id).clone())
+        .collect();
     for id in old_ids.intersection(&new_ids) {
         let (Some(a), Some(b)) = (old.get(id), new.get(id)) else {
             continue;
         };
         let mut lines = Vec::new();
         if a.chain() != b.chain() {
-            let chain = |c: &[TemplateId]| c.iter().map(ToString::to_string).collect::<Vec<_>>().join(" > ");
-            lines.push(format!("extends: {} -> {}", chain(a.chain()), chain(b.chain())));
+            let chain = |c: &[TemplateId]| {
+                c.iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(" > ")
+            };
+            lines.push(format!(
+                "extends: {} -> {}",
+                chain(a.chain()),
+                chain(b.chain())
+            ));
         }
         for t in a.tags().difference(b.tags()) {
             lines.push(format!("tag removed: {t}"));
@@ -108,8 +127,18 @@ pub fn diff(old: &ContentSet, new: &ContentSet) -> ContentDiff {
             lines.push(format!("tag added: {t}"));
         }
         let (ca, cb) = (
-            Canon::Map(a.components().iter().map(|(k, v)| (k.to_string(), v.clone())).collect()),
-            Canon::Map(b.components().iter().map(|(k, v)| (k.to_string(), v.clone())).collect()),
+            Canon::Map(
+                a.components()
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.clone()))
+                    .collect(),
+            ),
+            Canon::Map(
+                b.components()
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.clone()))
+                    .collect(),
+            ),
         );
         value_diff("", &ca, &cb, &mut lines);
         if !lines.is_empty() {
@@ -157,8 +186,17 @@ mod tests {
             {"id":"item.ruby","schema":1,"extends":"base.item"}]"#;
         let d = diff(&set("0.1.0", BASE), &set("0.2.0", new));
         assert_eq!(d.packs, ["~ base: version 0.1.0 -> 0.2.0"]);
-        assert_eq!(d.added.iter().map(ToString::to_string).collect::<Vec<_>>(), ["item.ruby"]);
-        assert_eq!(d.removed.iter().map(ToString::to_string).collect::<Vec<_>>(), ["item.gem"]);
+        assert_eq!(
+            d.added.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            ["item.ruby"]
+        );
+        assert_eq!(
+            d.removed
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            ["item.gem"]
+        );
         // The parent's new tag shows up on the parent and on its surviving child.
         let changed: Vec<String> = d.changed.iter().map(|(id, _)| id.to_string()).collect();
         assert_eq!(changed, ["base.item", "item.coin"]);
@@ -173,7 +211,11 @@ mod tests {
         let d = diff(&set("0.1.0", a), &set("0.1.0", &b));
         assert_eq!(d.changed.len(), 1);
         assert_eq!(d.changed[0].1, ["physical.weight: 5 -> 9"]);
-        assert_eq!(d.packs.len(), 1, "same version, different hash is called out");
+        assert_eq!(
+            d.packs.len(),
+            1,
+            "same version, different hash is called out"
+        );
         assert!(d.packs[0].contains("content changed"));
     }
 }

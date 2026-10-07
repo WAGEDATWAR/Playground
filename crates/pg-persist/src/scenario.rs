@@ -39,16 +39,36 @@ pub const SCENARIO_FORMAT: &str = "playground-scenario";
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Step {
-    CreateMap { w: i32, h: i32, style: u8 },
-    SpawnPawns { count: u32 },
+    CreateMap {
+        w: i32,
+        h: i32,
+        style: u8,
+    },
+    SpawnPawns {
+        count: u32,
+    },
     Command(Command),
-    Run { ticks: u64 },
-    Save { slot: String },
-    Load { slot: String, expect: Option<String> },
-    Reload { slot: String },
-    Corrupt { slot: String, how: String },
+    Run {
+        ticks: u64,
+    },
+    Save {
+        slot: String,
+    },
+    Load {
+        slot: String,
+        expect: Option<String>,
+    },
+    Reload {
+        slot: String,
+    },
+    Corrupt {
+        slot: String,
+        how: String,
+    },
     ExportImport,
-    Fork { ticks: u64 },
+    Fork {
+        ticks: u64,
+    },
     Expect(Expectation),
 }
 
@@ -103,7 +123,9 @@ fn parse_step(r: Reader<'_>) -> Result<Step, ReadError> {
         "run" => {
             r.only(&["op", "ticks", "days"])?;
             match (r.maybe("ticks")?, r.maybe("days")?) {
-                (Some(t), None) => Ok(Step::Run { ticks: t.reader().u64()? }),
+                (Some(t), None) => Ok(Step::Run {
+                    ticks: t.reader().u64()?,
+                }),
                 (None, Some(d)) => Ok(Step::Run {
                     ticks: d
                         .reader()
@@ -137,7 +159,9 @@ fn parse_step(r: Reader<'_>) -> Result<Step, ReadError> {
             let how = r.child("how")?;
             let h = how.reader().str()?;
             if !["flip", "truncate", "garbage", "delete", "delete_manifest"].contains(&h) {
-                return Err(how.reader().err("expected flip, truncate, garbage, delete or delete_manifest"));
+                return Err(how
+                    .reader()
+                    .err("expected flip, truncate, garbage, delete or delete_manifest"));
             }
             Ok(Step::Corrupt {
                 slot: slot(&r)?,
@@ -275,7 +299,10 @@ fn restore(world: WorldState) -> Sim {
 }
 
 fn command_input(c: Command) -> SimInput {
-    SimInput::Command { actor: None, cmd: c }
+    SimInput::Command {
+        actor: None,
+        cmd: c,
+    }
 }
 
 struct Runner {
@@ -288,7 +315,11 @@ impl Runner {
         match step {
             Step::CreateMap { w, h, style } => {
                 self.sim
-                    .submit_now(command_input(Command::DevCreateMap { w: *w, h: *h, style: *style }))
+                    .submit_now(command_input(Command::DevCreateMap {
+                        w: *w,
+                        h: *h,
+                        style: *style,
+                    }))
                     .map_err(|e| e.to_string())?;
                 self.sim.run_ticks(1).map_err(|e| e.to_string())?;
                 Ok(format!("map {w}x{h}"))
@@ -297,14 +328,20 @@ impl Runner {
                 let map = EntityId::new(Kind::Map, 1);
                 for i in 0..*count {
                     self.sim
-                        .submit_now(command_input(Command::DevSpawnPawn { map, at: None, name: format!("P{i}") }))
+                        .submit_now(command_input(Command::DevSpawnPawn {
+                            map,
+                            at: None,
+                            name: format!("P{i}"),
+                        }))
                         .map_err(|e| e.to_string())?;
                 }
                 self.sim.run_ticks(1).map_err(|e| e.to_string())?;
                 Ok(format!("{} pawn(s) now", self.sim.world().pawns.len()))
             }
             Step::Command(c) => {
-                self.sim.submit_now(command_input(c.clone())).map_err(|e| e.to_string())?;
+                self.sim
+                    .submit_now(command_input(c.clone()))
+                    .map_err(|e| e.to_string())?;
                 self.sim.run_ticks(1).map_err(|e| e.to_string())?;
                 Ok("applied".to_owned())
             }
@@ -331,7 +368,8 @@ impl Runner {
             Step::ExportImport => {
                 let w = self.sim.world();
                 let bytes = export_world(w, &[], "scenario", "");
-                let plan = import_world(&bytes, &ImportOptions::default()).map_err(|e| e.to_string())?;
+                let plan =
+                    import_world(&bytes, &ImportOptions::default()).map_err(|e| e.to_string())?;
                 if plan.world.state_hash() != w.state_hash() {
                     return Err("the imported world differs from the exported one".to_owned());
                 }
@@ -358,7 +396,11 @@ impl Runner {
                     }
                 };
                 check("pawns", e.pawns.map(|v| v as u64), w.pawns.len() as u64);
-                check("commitments", e.commitments.map(|v| v as u64), w.commitments.len() as u64);
+                check(
+                    "commitments",
+                    e.commitments.map(|v| v as u64),
+                    w.commitments.len() as u64,
+                );
                 check("tick", e.tick, w.clock.tick());
                 check("day", e.day, w.clock.day());
                 if problems.is_empty() {
@@ -382,7 +424,10 @@ impl Runner {
         let r = store
             .save(&Self::slot_id(slot), self.sim.world(), &[], "scenario")
             .map_err(|e| e.to_string())?;
-        Ok(format!("generation {} ({} -> {} bytes)", r.generation, r.uncompressed_bytes, r.compressed_bytes))
+        Ok(format!(
+            "generation {} ({} -> {} bytes)",
+            r.generation, r.uncompressed_bytes, r.compressed_bytes
+        ))
     }
 
     fn load(&mut self, slot: &str, expect: Option<&str>) -> Result<String, String> {
@@ -419,11 +464,20 @@ impl Runner {
     fn corrupt(&mut self, slot: &str, how: &str) -> Result<String, String> {
         let id = Self::slot_id(slot);
         let store = SlotStore::new(&self.mem);
-        let manifest = store.manifest(&id).ok_or("the slot has no manifest to find its newest generation")?;
-        let newest = manifest.current().map(|g| g.generation).ok_or("no generations")?;
+        let manifest = store
+            .manifest(&id)
+            .ok_or("the slot has no manifest to find its newest generation")?;
+        let newest = manifest
+            .current()
+            .map(|g| g.generation)
+            .ok_or("no generations")?;
         let state = format!("worlds/{id}/state.{newest}.pgsave");
         let manifest_name = format!("worlds/{id}/manifest.json");
-        let bytes = self.mem.read(&state).map_err(|e| e.to_string())?.ok_or("the newest generation file is missing")?;
+        let bytes = self
+            .mem
+            .read(&state)
+            .map_err(|e| e.to_string())?
+            .ok_or("the newest generation file is missing")?;
         match how {
             "flip" => {
                 let mut b = bytes;
@@ -445,7 +499,10 @@ impl Runner {
 /// Runs a scenario against a fresh world and an in-memory store. Stops at the first failing step.
 pub fn run(scenario: &Scenario) -> ScenarioReport {
     let mut runner = Runner {
-        sim: Sim::with_dev_systems(WorldState::new(scenario.world_name.clone(), scenario.seed.clone())),
+        sim: Sim::with_dev_systems(WorldState::new(
+            scenario.world_name.clone(),
+            scenario.seed.clone(),
+        )),
         mem: MemStorage::new(),
     };
     let mut outcomes = Vec::new();
@@ -480,13 +537,15 @@ pub fn run_text(text: &str) -> Result<ScenarioReport, String> {
 mod tests {
     use super::*;
 
-    const HEAD: &str = r#""format":"playground-scenario","version":1,"name":"t","world":{"name":"T","seed":"s"}"#;
+    const HEAD: &str =
+        r#""format":"playground-scenario","version":1,"name":"t","world":{"name":"T","seed":"s"}"#;
 
     fn scenario(steps: &str) -> String {
         format!(r#"{{{HEAD},"steps":[{steps}]}}"#)
     }
 
-    const BUILD: &str = r#"{"op":"create_map","w":24,"h":18,"style":1},{"op":"spawn_pawns","count":5},"#;
+    const BUILD: &str =
+        r#"{"op":"create_map","w":24,"h":18,"style":1},{"op":"spawn_pawns","count":5},"#;
 
     #[test]
     fn a_save_reload_scenario_passes_and_is_deterministic() {
@@ -534,14 +593,25 @@ mod tests {
 
     #[test]
     fn a_failing_expectation_stops_the_run_with_a_reason() {
-        let text = scenario(&format!(r#"{BUILD}{{"op":"expect","pawns":99}},{{"op":"run","ticks":10}}"#));
+        let text = scenario(&format!(
+            r#"{BUILD}{{"op":"expect","pawns":99}},{{"op":"run","ticks":10}}"#
+        ));
         let r = run_text(&text).unwrap();
         assert!(!r.ok());
-        assert_eq!(r.outcomes.len(), 3, "the step after the failure did not run");
+        assert_eq!(
+            r.outcomes.len(),
+            3,
+            "the step after the failure did not run"
+        );
         let last = r.outcomes.last().unwrap();
-        assert!(!last.ok && last.message.contains("expected 99, found 5"), "{last:?}");
+        assert!(
+            !last.ok && last.message.contains("expected 99, found 5"),
+            "{last:?}"
+        );
         // A wrong expectation about a load is a failure too.
-        let t = scenario(&format!(r#"{BUILD}{{"op":"save","slot":"a"}},{{"op":"load","slot":"a","expect":"damaged"}}"#));
+        let t = scenario(&format!(
+            r#"{BUILD}{{"op":"save","slot":"a"}},{{"op":"load","slot":"a","expect":"damaged"}}"#
+        ));
         assert!(!run_text(&t).unwrap().ok());
     }
 
@@ -552,10 +622,19 @@ mod tests {
             ("not json", ""),
             (&scenario(r#"{"op":"dance"}"#), "unknown step 'dance'"),
             (&scenario(r#"{"op":"run"}"#), "exactly one of"),
-            (&scenario(r#"{"op":"run","ticks":1,"days":1}"#), "exactly one of"),
-            (&scenario(r#"{"op":"corrupt","slot":"a","how":"melt"}"#), "expected flip"),
+            (
+                &scenario(r#"{"op":"run","ticks":1,"days":1}"#),
+                "exactly one of",
+            ),
+            (
+                &scenario(r#"{"op":"corrupt","slot":"a","how":"melt"}"#),
+                "expected flip",
+            ),
             (&scenario(r#"{"op":"save"}"#), "missing field 'slot'"),
-            (&scenario(r#"{"op":"command","cmd":{"type":"nope"}}"#), "unknown command"),
+            (
+                &scenario(r#"{"op":"command","cmd":{"type":"nope"}}"#),
+                "unknown command",
+            ),
             (&scenario(r#"{"op":"expect","pawns":-1}"#), "non-negative"),
         ] {
             let e = Scenario::parse(text).unwrap_err();

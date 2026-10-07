@@ -934,7 +934,14 @@ impl DaySchedule {
     /// Decodes and re-validates a schedule: ranges, overlaps and ids are all checked, so a corrupt save is
     /// refused rather than loaded into an inconsistent state.
     pub fn from_reader(r: Reader<'_>) -> Result<DaySchedule, ReadError> {
-        r.only(&["day", "slots", "reservations", "next_id", "notes", "dropped"])?;
+        r.only(&[
+            "day",
+            "slots",
+            "reservations",
+            "next_id",
+            "notes",
+            "dropped",
+        ])?;
         let day = r.child("day")?.reader().u64()?;
         let slots = r.child("slots")?.reader().u32()?;
         if slots == 0 || slots > MAX_SLOTS {

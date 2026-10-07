@@ -11,4 +11,6 @@ pub mod scenario;
 pub mod store;
 
 #[cfg(test)]
+mod fixtures;
+#[cfg(test)]
 mod testkit;

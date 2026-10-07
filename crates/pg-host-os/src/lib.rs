@@ -63,10 +63,7 @@ impl Storage for FsStorage {
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no parent directory"))?;
         fs::create_dir_all(dir)?;
         let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let file_name = dest
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or("blob");
+        let file_name = dest.file_name().and_then(|f| f.to_str()).unwrap_or("blob");
         let temp = dir.join(format!(".{file_name}.{}.{n}.tmp", std::process::id()));
         let result = (|| {
             let mut f = fs::File::create(&temp)?;
@@ -142,7 +139,11 @@ mod tests {
 
     fn temp_root(tag: &str) -> PathBuf {
         let mut p = std::env::temp_dir();
-        p.push(format!("pg-fs-test-{tag}-{}-{}", std::process::id(), TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)));
+        p.push(format!(
+            "pg-fs-test-{tag}-{}-{}",
+            std::process::id(),
+            TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
         p
     }
 

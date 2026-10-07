@@ -256,7 +256,9 @@ version = "0.0.1"
 dependencies = [
  "pg-content",
  "pg-core",
+ "pg-host",
  "pg-host-os",
+ "pg-persist",
  "pg-runtime",
  "serde_json",
 ]

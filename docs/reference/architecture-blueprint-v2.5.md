@@ -1,4 +1,4 @@
-# Playground — Architecture Blueprint v2.4
+# Playground — Architecture Blueprint v2.5
 
 **Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.1 and Roadmap v4.2. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). It is a spec, not final source; names and signatures may shift during implementation, but the contracts and invariants may not. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
 
@@ -11,6 +11,8 @@
 **v2.3 (during Phase 0):** scheduled three performance and simulation suggestions: path-search scratch buffers (§19), pawn-aware routing (§7.3, Stage 1) and compressed, trimmable replay logs (§20, milestone 0.6).
 
 **v2.4 (during Phase 0):** milestone 0.5 made the scheduler, commitment and action sections precise where the first implementation had to choose (§8.5 replan timing and displacement scope, §8.6 gathering radius and slot-length changes, §8.7 which parts of the action skeleton exist). No behaviour was removed.
+
+**v2.5 (during Phase 0):** milestone 0.6 made persistence precise where the first implementation had to choose: the manifest lists both generations (§13.1, §13.4), the `.pgsave`/`.pglog`/`.pgbundle` container layout, the pure-Rust zstd encoder and its single level (§13.1), what a save contains and what it deliberately does not (§13.2), replay-log trimming and bug bundles (§20), and a known difference between `Canon` and RFC 8785 key ordering (§5.4).
 
 ## 0. Architectural principles
 
@@ -316,6 +318,8 @@ AI text is nondeterministic, so its **result is recorded as an input** and repla
 ### 5.4 State hashing
 
 `hash_state(world)` = `blake3` over the canonical serialization (sorted keys, no whitespace, integers only), computed per table and combined. This includes pack component tables (`ext`). The runtime computes and logs a hash at every day boundary in debug and test builds, and stores the latest in each save for integrity checks.
+
+**Known difference from RFC 8785 (0.6, D-022):** `Canon` writes object members in Unicode code point order (UTF-8 byte order); RFC 8785 sorts by UTF-16 code units. They agree except when keys mix characters from U+E000-U+FFFF with supplementary-plane characters. Engine keys are ASCII, so hashes and saves are unaffected and remain deterministic; the difference is pinned by a test and matters only if canonical JSON is ever handed to an external RFC 8785 verifier with such keys.
 
 ## 6. Simulation loop and time \[S0\]
 
@@ -746,6 +750,8 @@ User-data directory: `%APPDATA%\Playground` (Windows), `~/Library/Application Su
 
 A failure at any step leaves the previous manifest and generation intact.
 
+**Implementation notes (0.6):** (a) The manifest lists **both** retained generations, newest first, each with its own state hash, tick, day and time, so a fallback load can report how much play was lost and can verify the older file against its own hash. (b) Each `.pgsave` is `magic "PGSAVE\0\1"` + schema (u32) + uncompressed length (u64) + BLAKE3 (32 bytes) + one zstd frame; `.pglog` and `.pgbundle` use the same layout with their own magic, so one kind can never be opened as another. Decoding checks the header, caps the declared length, stops decompressing at that length and verifies the checksum last. (c) Compression uses `ruzstd` (pure Rust, no C build); its encoder implements one level ("fastest", roughly zstd level 1), which is enough for a town save; any standard zstd decoder reads the result. (d) A save is the world state at a tick boundary. Inputs queued for **future** ticks are not part of it: the runtime applies player commands at the next tick, so the queue is empty at a save. (e) Crash safety is tested by failing the storage at every operation of a save and requiring that a load afterwards returns the old or the new world, never a third state and never "damaged".
+
 ### 13.3 Save triggers
 
 | Trigger | Behavior |
@@ -762,6 +768,7 @@ A failure at any step leaves the previous manifest and generation intact.
 1. Read the manifest; if missing or invalid, scan for the newest valid generation.
 2. Verify the checksum; if it fails, load the previous generation and tell the player (with the time difference).
 3. Validate against the schema; verify `content_refs` against installed packs; run migrations (including pack data migrations, §23.10); run `validate_containment` and the town validator.
+3a. Every generation is also checked against the hash the manifest recorded for it, so a file swapped or restored from the wrong place is rejected even when its checksum is valid.
 4. If everything fails, mark the slot **damaged**, keep its files, offer export-for-support, and never touch other slots.
 
 ### 13.5 Migrations
@@ -961,6 +968,8 @@ A `DevToolRegistry` exposes tools as Commands marked developer-only, requiring a
 | Content | Template resolver viewer, pack validator, save inspector |
 | Scripting | Pack inspector (registered components, systems, hooks, actions; per-system fuel and time; errors and quarantine status), script console (runs in the sandbox with the `dev` capability, logged as a `SimInput`), hot reload of a pack at a tick boundary (recorded as `ScriptReload`), `print` / log viewer per pack |
 | Reproducibility | Replay **diff** (`pg replay --diff a b`: first differing day and table, from per-table hashes stored in replay logs) and **bisect** (`--bisect`: first differing tick) \[S0, 0.4\]; **bug bundle** (`pg bugbundle`, overlay button): snapshot + input log + content refs + tick-hash trail, replayable headlessly \[S0, 0.6\]; **scenario runner** (`pg scenario run`); replay logs compress to `.pgreplay` (zstd) and `pg replay --trim <tick>` cuts a log to its first N ticks, keeping bug bundles small \[S0, 0.6\] |
+
+**Implementation notes (0.6):** a replay log may carry an optional `start` state (the world as of tick *T* plus the inputs still queued then); `ReplayLog::trim(T)` produces one, replaying it reaches the same hashes as the full log, and untrimmed logs are byte-identical to before. A bug bundle (`.pgbundle`) is a trimmed log plus a note, version and time in the compressed container; `pg bugbundle run` replays it anywhere. Scenario files (`playground-scenario`, version 1) drive build/run/save/reload/damage/recover/assert steps; `pg scenario run` executes them and CI runs `scenarios/persistence.json`.
 | Explainability | Event viewer with kind-prefix and tick-range filters (`pg sim --events <prefix> --since --until`) \[S0, 0.4\]; **reason-code explorer**: filterable timeline of decisions with their origin ("why did pawn_1a skip lunch?"): `pg schedule explain` at 0.5, overlay panel at 0.10 |
 | Content authoring | `pg content tree` (inheritance forest) \[Stage 1\]; `pg content diff` and the load-time compatibility report \[0.6\]; `pg content schema` (JSON Schema export) \[0.9\]; "did you mean…?" hints in every validation message \[0.4, extended 0.9\] |
 

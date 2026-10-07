@@ -324,10 +324,16 @@ impl ToCanon for WorldState {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RestoreError {
     /// The save was written by a different schema than this build reads (migrate it first).
-    Schema { found: u32, expected: u32 },
+    Schema {
+        found: u32,
+        expected: u32,
+    },
     Read(ReadError),
     /// A table key does not match the id inside the row.
-    KeyMismatch { table: &'static str, key: String },
+    KeyMismatch {
+        table: &'static str,
+        key: String,
+    },
 }
 
 impl fmt::Display for RestoreError {

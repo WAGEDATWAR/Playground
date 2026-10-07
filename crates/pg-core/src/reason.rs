@@ -172,7 +172,9 @@ impl ReasonCode {
         } else if let Some(pack) = text.strip_prefix("pack:") {
             Source::Pack(pack.to_owned())
         } else {
-            return Err(source_child.reader().err("expected 'builtin' or 'pack:<id>'"));
+            return Err(source_child
+                .reader()
+                .err("expected 'builtin' or 'pack:<id>'"));
         };
         let params_child = r.child("params")?;
         let params = match params_child.reader().value() {

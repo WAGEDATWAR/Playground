@@ -108,9 +108,10 @@ fn wrong_files_are_refused_with_plain_messages() {
         assert!(e.contains(needle), "{e}");
     }
     let (_, bytes) = export(10);
-    let text = String::from_utf8(bytes)
-        .unwrap()
-        .replacen("\"kind\":\"world\"", "\"kind\":\"pack\"", 1);
+    let text =
+        String::from_utf8(bytes)
+            .unwrap()
+            .replacen("\"kind\":\"world\"", "\"kind\":\"pack\"", 1);
     let e = import_world(text.as_bytes(), &opts)
         .err()
         .unwrap()

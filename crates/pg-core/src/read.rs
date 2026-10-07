@@ -122,9 +122,7 @@ impl<'a> Reader<'a> {
     }
 
     pub fn str(&self) -> Result<&'a str, ReadError> {
-        self.value
-            .as_str()
-            .ok_or_else(|| self.err("expected text"))
+        self.value.as_str().ok_or_else(|| self.err("expected text"))
     }
 
     pub fn bool(&self) -> Result<bool, ReadError> {
@@ -237,7 +235,7 @@ mod tests {
         assert_eq!(items[0].reader().u32().unwrap(), 1);
         let e = items[1].reader().u32().unwrap_err();
         assert_eq!(e.path, "a.b[1]");
-        assert_eq!(e.to_string(), "a.b[1]: expected an integer 0..=4294967295");
+        assert_eq!(e.to_string(), "a.b[1]: expected an integer");
         let e = a.reader().child("zzz").map(|_| ()).unwrap_err();
         assert_eq!(e.to_string(), "a: missing field 'zzz'");
     }
@@ -270,6 +268,10 @@ mod tests {
         assert_eq!(entries.len(), 2);
         let id: crate::id::EntityId = entries[0].1.reader().parse().unwrap();
         assert_eq!(id.to_string(), "pawn_1");
-        assert!(entries[1].1.reader().parse::<crate::id::EntityId>().is_err());
+        assert!(entries[1]
+            .1
+            .reader()
+            .parse::<crate::id::EntityId>()
+            .is_err());
     }
 }

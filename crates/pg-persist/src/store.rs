@@ -110,7 +110,14 @@ impl ToCanon for Manifest {
 
 impl Manifest {
     pub fn from_reader(r: Reader<'_>) -> Result<Manifest, ReadError> {
-        r.only(&["format", "name", "seed_text", "schema", "content_refs", "generations"])?;
+        r.only(&[
+            "format",
+            "name",
+            "seed_text",
+            "schema",
+            "content_refs",
+            "generations",
+        ])?;
         if r.child("format")?.reader().str()? != MANIFEST_FORMAT {
             return Err(r.err("not a world manifest"));
         }
@@ -153,7 +160,9 @@ pub enum SaveError {
 impl fmt::Display for SaveError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SaveError::BadWorldId(id) => write!(f, "'{id}' is not a valid world id (a-z, 0-9, _ and -)"),
+            SaveError::BadWorldId(id) => {
+                write!(f, "'{id}' is not a valid world id (a-z, 0-9, _ and -)")
+            }
             SaveError::Io(e) => write!(f, "could not save: {e}"),
         }
     }
@@ -225,6 +234,9 @@ impl fmt::Display for LoadError {
 }
 
 impl std::error::Error for LoadError {}
+
+/// The outcome of checking one generation file: its number and either success or the reason it failed.
+pub type GenerationCheck = (u64, Result<(), String>);
 
 /// What loading needs besides the storage.
 pub struct LoadOptions<'a> {
@@ -311,7 +323,9 @@ impl<'a> SlotStore<'a> {
         let payload = world.to_canon().to_canonical_string().into_bytes();
         let blob = codec::encode(world.schema, &payload);
         // 1. The new generation, atomically.
-        io(self.storage.write_atomic(&state_name(world_id, generation), &blob))?;
+        io(self
+            .storage
+            .write_atomic(&state_name(world_id, generation), &blob))?;
         // 2. The manifest: the commit point. It keeps the previous generation as the fallback.
         let info = GenerationInfo {
             generation,
@@ -373,7 +387,15 @@ impl<'a> SlotStore<'a> {
             .storage
             .list("worlds/")?
             .into_iter()
-            .filter_map(|b| Some(b.name.strip_prefix("worlds/")?.split('/').next()?.to_owned()))
+            .filter_map(|b| {
+                Some(
+                    b.name
+                        .strip_prefix("worlds/")?
+                        .split('/')
+                        .next()?
+                        .to_owned(),
+                )
+            })
             .collect();
         ids.sort();
         ids.dedup();
@@ -390,7 +412,8 @@ impl<'a> SlotStore<'a> {
             return Err(LoadError::NotFound);
         }
         let manifest = read_manifest(self.storage, world_id);
-        let on_disk = generations_on_disk(self.storage, world_id).map_err(|e| LoadError::Io(e.to_string()))?;
+        let on_disk = generations_on_disk(self.storage, world_id)
+            .map_err(|e| LoadError::Io(e.to_string()))?;
         if manifest.is_none() && on_disk.is_empty() {
             return Err(LoadError::NotFound);
         }
@@ -429,7 +452,9 @@ impl<'a> SlotStore<'a> {
                         (Some(_), None) => Recovery::Clean,
                     };
                     let compat = match (&manifest, &opts.installed_refs) {
-                        (Some(m), Some(installed)) => Some(compat::compare(&m.content_refs, installed)),
+                        (Some(m), Some(installed)) => {
+                            Some(compat::compare(&m.content_refs, installed))
+                        }
                         _ => None,
                     };
                     return Ok(Loaded {
@@ -442,7 +467,9 @@ impl<'a> SlotStore<'a> {
                     });
                 }
                 Err(Attempt::Newer(e)) => return Err(LoadError::Newer(e)),
-                Err(Attempt::Failed(why)) => attempts.push(format!("generation {generation}: {why}")),
+                Err(Attempt::Failed(why)) => {
+                    attempts.push(format!("generation {generation}: {why}"))
+                }
             }
         }
         // Nothing worked: keep every file, note the damage, never touch other slots.
@@ -450,10 +477,40 @@ impl<'a> SlotStore<'a> {
             "attempts",
             Canon::List(attempts.iter().cloned().map(Canon::Str).collect()),
         )]);
-        let _ = self
-            .storage
-            .write_atomic(&damaged_name(world_id), marker.to_canonical_string().as_bytes());
+        let _ = self.storage.write_atomic(
+            &damaged_name(world_id),
+            marker.to_canonical_string().as_bytes(),
+        );
         Err(LoadError::Damaged(attempts))
+    }
+
+    /// Checks every generation file the slot has, without loading anything into a sim: for each (newest
+    /// first), whether it decodes, migrates, validates and matches its manifest hash.
+    pub fn verify(
+        &self,
+        world_id: &str,
+        opts: &LoadOptions<'_>,
+    ) -> Result<Vec<GenerationCheck>, LoadError> {
+        if !valid_world_id(world_id) {
+            return Err(LoadError::NotFound);
+        }
+        let manifest = read_manifest(self.storage, world_id);
+        let on_disk = generations_on_disk(self.storage, world_id)
+            .map_err(|e| LoadError::Io(e.to_string()))?;
+        if manifest.is_none() && on_disk.is_empty() {
+            return Err(LoadError::NotFound);
+        }
+        Ok(on_disk
+            .into_iter()
+            .map(|g| {
+                let result = match self.try_generation(world_id, g, manifest.as_ref(), opts) {
+                    Ok(_) => Ok(()),
+                    Err(Attempt::Failed(why)) => Err(why),
+                    Err(Attempt::Newer(e)) => Err(e.to_string()),
+                };
+                (g, result)
+            })
+            .collect())
     }
 
     fn try_generation(
@@ -471,8 +528,10 @@ impl<'a> SlotStore<'a> {
             .ok_or_else(|| Attempt::Failed("the file is missing".to_owned()))?;
         let (schema, payload) = codec::decode(&bytes, opts.max_uncompressed)
             .map_err(|e: CodecError| Attempt::Failed(e.to_string()))?;
-        let text = String::from_utf8(payload).map_err(|_| Attempt::Failed("the data is not UTF-8".to_owned()))?;
-        let raw = json::parse(&text).map_err(|e| Attempt::Failed(format!("not valid JSON: {e}")))?;
+        let text = String::from_utf8(payload)
+            .map_err(|_| Attempt::Failed("the data is not UTF-8".to_owned()))?;
+        let raw =
+            json::parse(&text).map_err(|e| Attempt::Failed(format!("not valid JSON: {e}")))?;
         let inner_schema = raw
             .get("schema")
             .and_then(Canon::as_i64)
@@ -486,10 +545,13 @@ impl<'a> SlotStore<'a> {
             e @ MigrateError::Newer { .. } => Attempt::Newer(e),
             other => Attempt::Failed(other.to_string()),
         })?;
-        let world = WorldState::from_canon(&migrated).map_err(|e| Attempt::Failed(e.to_string()))?;
+        let world =
+            WorldState::from_canon(&migrated).map_err(|e| Attempt::Failed(e.to_string()))?;
         if schema == opts.migrations.current() {
             // The recorded hash must match what we decoded (catches decoder bugs and wrong-file mixups).
-            if let Some(info) = manifest.and_then(|m| m.generations.iter().find(|g| g.generation == generation)) {
+            if let Some(info) =
+                manifest.and_then(|m| m.generations.iter().find(|g| g.generation == generation))
+            {
                 if !info.state_hash.is_empty() && info.state_hash != world.state_hash().to_hex() {
                     return Err(Attempt::Failed(
                         "the loaded state's hash does not match the manifest".to_owned(),
@@ -506,7 +568,10 @@ impl<'a> SlotStore<'a> {
                 )));
             }
         }
-        Ok((world, (schema != opts.migrations.current()).then_some(schema)))
+        Ok((
+            world,
+            (schema != opts.migrations.current()).then_some(schema),
+        ))
     }
 }
 

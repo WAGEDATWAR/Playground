@@ -5,8 +5,8 @@
 //! of the authoritative (hashed) state: they are derived bookkeeping.
 
 use crate::canon::{Canon, ToCanon};
-use crate::read::{ReadError, Reader};
 use crate::id::EntityId;
+use crate::read::{ReadError, Reader};
 use std::collections::BTreeSet;
 use std::fmt;
 
@@ -60,7 +60,8 @@ impl ToCanon for Tile {
 
 impl Tile {
     pub fn from_reader(r: Reader<'_>) -> Result<Tile, ReadError> {
-        Tile::from_canon(r.value()).ok_or_else(|| r.err("expected a tile [x, y] of 32-bit integers"))
+        Tile::from_canon(r.value())
+            .ok_or_else(|| r.err("expected a tile [x, y] of 32-bit integers"))
     }
 
     pub fn from_canon(c: &Canon) -> Option<Tile> {
@@ -448,7 +449,11 @@ impl MapData {
         let kind = match kind_child.reader().str()? {
             "overworld" => MapKind::Overworld,
             "interior" => MapKind::Interior,
-            other => return Err(kind_child.reader().err(format!("unknown map kind '{other}'"))),
+            other => {
+                return Err(kind_child
+                    .reader()
+                    .err(format!("unknown map kind '{other}'")))
+            }
         };
         let (w, h) = (r.child("w")?.reader().i32()?, r.child("h")?.reader().i32()?);
         let mut m = MapData::new(id, kind, w, h).map_err(|e| r.err(e.to_string()))?;

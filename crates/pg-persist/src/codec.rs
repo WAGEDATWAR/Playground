@@ -137,10 +137,8 @@ pub fn encode(schema: u32, payload: &[u8]) -> Vec<u8> {
 }
 
 pub fn encode_as(kind: Container, schema: u32, payload: &[u8]) -> Vec<u8> {
-    let compressed = ruzstd::encoding::compress_to_vec(
-        payload,
-        ruzstd::encoding::CompressionLevel::Fastest,
-    );
+    let compressed =
+        ruzstd::encoding::compress_to_vec(payload, ruzstd::encoding::CompressionLevel::Fastest);
     let mut out = Vec::with_capacity(HEADER_LEN + compressed.len());
     out.extend_from_slice(&kind.magic());
     out.extend_from_slice(&schema.to_le_bytes());
@@ -201,7 +199,10 @@ mod tests {
     fn round_trip_and_compression() {
         let payload = sample();
         let blob = encode(3, &payload);
-        assert!(blob.len() < payload.len() / 4, "repetitive JSON compresses well");
+        assert!(
+            blob.len() < payload.len() / 4,
+            "repetitive JSON compresses well"
+        );
         let (schema, back) = decode(&blob, DEFAULT_MAX_UNCOMPRESSED).unwrap();
         assert_eq!((schema, back), (3, payload));
         let h = parse_header(&blob).unwrap();
@@ -252,24 +253,37 @@ mod tests {
                 Err(_) => caught += 1,
                 // Some bits (the schema field, unused frame bits) change nothing about the payload; what
                 // must never happen is a different payload being accepted.
-                Ok((_, p)) => assert_eq!(p, payload, "byte {i} flipped and a wrong payload was accepted"),
+                Ok((_, p)) => assert_eq!(
+                    p, payload,
+                    "byte {i} flipped and a wrong payload was accepted"
+                ),
             }
         }
-        assert!(caught * 10 > blob.len() * 9, "almost every flip is detected: {caught}/{}", blob.len());
+        assert!(
+            caught * 10 > blob.len() * 9,
+            "almost every flip is detected: {caught}/{}",
+            blob.len()
+        );
     }
 
     #[test]
     fn truncation_is_detected() {
         let blob = encode(2, &sample());
         for cut in [HEADER_LEN, HEADER_LEN + 1, blob.len() / 2, blob.len() - 1] {
-            assert!(decode(&blob[..cut], DEFAULT_MAX_UNCOMPRESSED).is_err(), "cut at {cut}");
+            assert!(
+                decode(&blob[..cut], DEFAULT_MAX_UNCOMPRESSED).is_err(),
+                "cut at {cut}"
+            );
         }
     }
 
     #[test]
     fn a_declared_size_over_the_limit_is_refused_before_decompressing() {
         let blob = encode(1, &sample());
-        assert!(matches!(decode(&blob, 100), Err(CodecError::TooLarge { .. })));
+        assert!(matches!(
+            decode(&blob, 100),
+            Err(CodecError::TooLarge { .. })
+        ));
     }
 
     #[test]
@@ -279,11 +293,17 @@ mod tests {
         // Claims less than the real size: the stream is longer than announced.
         let mut small = blob.clone();
         small[12..20].copy_from_slice(&10u64.to_le_bytes());
-        assert!(matches!(decode(&small, 1 << 20), Err(CodecError::LengthMismatch { .. })));
+        assert!(matches!(
+            decode(&small, 1 << 20),
+            Err(CodecError::LengthMismatch { .. })
+        ));
         // Claims more: the stream ends early.
         let mut big = blob;
         big[12..20].copy_from_slice(&(payload.len() as u64 + 5).to_le_bytes());
-        assert!(matches!(decode(&big, 1 << 20), Err(CodecError::LengthMismatch { .. })));
+        assert!(matches!(
+            decode(&big, 1 << 20),
+            Err(CodecError::LengthMismatch { .. })
+        ));
     }
 
     proptest! {

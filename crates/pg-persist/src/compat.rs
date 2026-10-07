@@ -10,15 +10,29 @@ pub use pg_core::replay::ContentRefRecord;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CompatEntry {
-    Same { pack: String },
+    Same {
+        pack: String,
+    },
     /// The version differs (the hash may too).
-    VersionChanged { pack: String, recorded: String, installed: String },
+    VersionChanged {
+        pack: String,
+        recorded: String,
+        installed: String,
+    },
     /// Same version, different content hash: the pack was edited without a version bump.
-    ContentChanged { pack: String, recorded: String, installed: String },
+    ContentChanged {
+        pack: String,
+        recorded: String,
+        installed: String,
+    },
     /// The save needs a pack that is not installed.
-    Missing { pack: String },
+    Missing {
+        pack: String,
+    },
     /// A pack is installed that the save did not use (harmless, but it changes new content).
-    Extra { pack: String },
+    Extra {
+        pack: String,
+    },
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -35,7 +49,9 @@ pub fn compare(recorded: &[ContentRefRecord], installed: &[ContentRefRecord]) ->
     let mut entries = Vec::new();
     for want in recorded {
         let entry = match installed.iter().find(|h| h.pack_id == want.pack_id) {
-            None => CompatEntry::Missing { pack: want.pack_id.clone() },
+            None => CompatEntry::Missing {
+                pack: want.pack_id.clone(),
+            },
             Some(h) if h.version != want.version => CompatEntry::VersionChanged {
                 pack: want.pack_id.clone(),
                 recorded: want.version.clone(),
@@ -46,13 +62,17 @@ pub fn compare(recorded: &[ContentRefRecord], installed: &[ContentRefRecord]) ->
                 recorded: short(&want.hash),
                 installed: short(&h.hash),
             },
-            Some(_) => CompatEntry::Same { pack: want.pack_id.clone() },
+            Some(_) => CompatEntry::Same {
+                pack: want.pack_id.clone(),
+            },
         };
         entries.push(entry);
     }
     for h in installed {
         if !recorded.iter().any(|w| w.pack_id == h.pack_id) {
-            entries.push(CompatEntry::Extra { pack: h.pack_id.clone() });
+            entries.push(CompatEntry::Extra {
+                pack: h.pack_id.clone(),
+            });
         }
     }
     CompatReport { entries }
@@ -61,12 +81,16 @@ pub fn compare(recorded: &[ContentRefRecord], installed: &[ContentRefRecord]) ->
 impl CompatReport {
     /// Everything matches exactly.
     pub fn is_exact(&self) -> bool {
-        self.entries.iter().all(|e| matches!(e, CompatEntry::Same { .. }))
+        self.entries
+            .iter()
+            .all(|e| matches!(e, CompatEntry::Same { .. }))
     }
 
     /// The world cannot be loaded faithfully: a required pack is missing.
     pub fn is_blocking(&self) -> bool {
-        self.entries.iter().any(|e| matches!(e, CompatEntry::Missing { .. }))
+        self.entries
+            .iter()
+            .any(|e| matches!(e, CompatEntry::Missing { .. }))
     }
 
     /// One plain sentence per difference (nothing for exact matches).
@@ -128,12 +152,19 @@ mod tests {
     use super::*;
 
     fn r(id: &str, v: &str, h: &str) -> ContentRefRecord {
-        ContentRefRecord { pack_id: id.into(), version: v.into(), hash: h.into() }
+        ContentRefRecord {
+            pack_id: id.into(),
+            version: v.into(),
+            hash: h.into(),
+        }
     }
 
     #[test]
     fn identical_content_is_exact_and_silent() {
-        let a = vec![r("base", "0.1.0", "aaaaaaaaaa"), r("coffee", "1.0.0", "bbbbbbbbbb")];
+        let a = vec![
+            r("base", "0.1.0", "aaaaaaaaaa"),
+            r("coffee", "1.0.0", "bbbbbbbbbb"),
+        ];
         let rep = compare(&a, &a);
         assert!(rep.is_exact() && !rep.is_blocking());
         assert!(rep.explain().is_empty());
