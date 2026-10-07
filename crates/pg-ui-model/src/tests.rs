@@ -123,24 +123,45 @@ fn snap(m: &AppModel) -> String {
 fn in_world() -> AppModel {
     let mut m = boot(vec![world("w1", "Town", 3, false)], None);
     click(&mut m, "main.continue");
-    m.update(UiEvent::WorldOpened { name: "Town".into() });
+    m.update(UiEvent::WorldOpened {
+        name: "Town".into(),
+    });
     assert!(m.in_world() && matches!(m.screen(), Screen::InGame));
     m
 }
 
 #[test]
 fn booting_leads_to_the_main_menu_with_continue_pointing_at_the_newest_world() {
-    let m = boot(vec![world("w2", "Newer", 9, false), world("w1", "Older", 2, false)], None);
+    let m = boot(
+        vec![
+            world("w2", "Newer", 9, false),
+            world("w1", "Older", 2, false),
+        ],
+        None,
+    );
     assert!(matches!(m.screen(), Screen::MainMenu));
     let s = snap(&m);
-    assert!(s.contains("ui.main.continue_named{name=Newer,day=9}"), "{s}");
-    assert_eq!(m.focus(), Some("main.continue"), "focus starts on the first action");
+    assert!(
+        s.contains("ui.main.continue_named{name=Newer,day=9}"),
+        "{s}"
+    );
+    assert_eq!(
+        m.focus(),
+        Some("main.continue"),
+        "focus starts on the first action"
+    );
     // With nothing saved, Continue is disabled and focus starts on New world.
     let m = boot(Vec::new(), None);
     assert!(snap(&m).contains("(disabled)"));
     assert_eq!(m.focus(), Some("main.new"));
     // A damaged newest world is skipped for Continue.
-    let m = boot(vec![world("w2", "Broken", 9, true), world("w1", "Fine", 2, false)], None);
+    let m = boot(
+        vec![
+            world("w2", "Broken", 9, true),
+            world("w1", "Fine", 2, false),
+        ],
+        None,
+    );
     assert!(snap(&m).contains("name=Fine"));
 }
 
@@ -190,7 +211,9 @@ fn keyboard_only_new_world_flow_creates_a_world() {
             residents: 15,
         }]
     );
-    m.update(UiEvent::WorldOpened { name: "Maple Creek".into() });
+    m.update(UiEvent::WorldOpened {
+        name: "Maple Creek".into(),
+    });
     assert!(matches!(m.screen(), Screen::InGame));
 }
 
@@ -213,17 +236,32 @@ fn new_world_validates_names_and_seeds_and_escape_goes_back() {
 
 #[test]
 fn saved_worlds_select_load_export_delete_import() {
-    let mut m = boot(vec![world("a", "Alpha", 1, false), world("b", "Beta", 4, true)], None);
+    let mut m = boot(
+        vec![world("a", "Alpha", 1, false), world("b", "Beta", 4, true)],
+        None,
+    );
     let fx = click(&mut m, "main.saved");
     assert_eq!(fx, vec![AppEffect::ListWorlds]);
     let s = snap(&m);
-    assert!(s.contains("ui.saved.damaged_suffix"), "damaged slots are marked: {s}");
-    assert!(s.contains("(disabled)"), "no actions until a world is selected");
+    assert!(
+        s.contains("ui.saved.damaged_suffix"),
+        "damaged slots are marked: {s}"
+    );
+    assert!(
+        s.contains("(disabled)"),
+        "no actions until a world is selected"
+    );
     assert!(click(&mut m, "saved.load").is_empty());
     click(&mut m, "saved.row.a");
     assert!(snap(&m).contains("ui.saved.details"));
-    assert_eq!(click(&mut m, "saved.load"), vec![AppEffect::LoadWorld("a".into())]);
-    assert_eq!(click(&mut m, "saved.export"), vec![AppEffect::ExportWorld("a".into())]);
+    assert_eq!(
+        click(&mut m, "saved.load"),
+        vec![AppEffect::LoadWorld("a".into())]
+    );
+    assert_eq!(
+        click(&mut m, "saved.export"),
+        vec![AppEffect::ExportWorld("a".into())]
+    );
     // Delete asks first, and Escape cancels the question instead of leaving the screen.
     assert!(click(&mut m, "saved.delete").is_empty());
     assert!(snap(&m).contains("ui.saved.confirm_delete{name=Alpha}"));
@@ -231,7 +269,10 @@ fn saved_worlds_select_load_export_delete_import() {
     assert!(matches!(m.screen(), Screen::SavedWorlds(_)));
     assert!(!snap(&m).contains("confirm_delete"));
     click(&mut m, "saved.delete");
-    assert_eq!(click(&mut m, "saved.confirm_yes"), vec![AppEffect::DeleteWorld("a".into())]);
+    assert_eq!(
+        click(&mut m, "saved.confirm_yes"),
+        vec![AppEffect::DeleteWorld("a".into())]
+    );
     m.update(UiEvent::WorldsListed(vec![world("b", "Beta", 4, true)]));
     assert!(!snap(&m).contains("Alpha"));
     assert_eq!(click(&mut m, "saved.import"), vec![AppEffect::ImportWorld]);
@@ -239,7 +280,10 @@ fn saved_worlds_select_load_export_delete_import() {
         m.update(UiEvent::Imported("Gamma".into())),
         vec![AppEffect::ListWorlds]
     );
-    assert!(matches!(m.notice(), Some(crate::app::Notice::Key("ui.notice.imported", _))));
+    assert!(matches!(
+        m.notice(),
+        Some(crate::app::Notice::Key("ui.notice.imported", _))
+    ));
     click(&mut m, "saved.back");
     assert!(matches!(m.screen(), Screen::MainMenu));
 }
@@ -263,33 +307,72 @@ fn the_options_screen_is_generated_from_the_settings() {
     assert!(s.contains("== ui.options.group.time =="), "{s}");
     assert!(s.contains("setting.ui.scale_percent: 100 (50..300)"), "{s}");
     assert!(s.contains("< ui.window.windowed >"), "{s}");
-    assert!(s.contains("ui.options.restart"), "restart-required settings say so: {s}");
-    assert!(!s.contains("setting.ai.provider"), "AI settings have their own screen: {s}");
+    assert!(
+        s.contains("ui.options.restart"),
+        "restart-required settings say so: {s}"
+    );
+    assert!(
+        !s.contains("setting.ai.provider"),
+        "AI settings have their own screen: {s}"
+    );
     // Each kind of change becomes a SetSetting effect and updates the shown value.
     assert_eq!(
         m.update(UiEvent::Slide("setting.ui.scale_percent".into(), 150)),
-        vec![AppEffect::SetSetting { id: "ui.scale_percent".into(), value: SettingValue::Int(150) }]
+        vec![AppEffect::SetSetting {
+            id: "ui.scale_percent".into(),
+            value: SettingValue::Int(150)
+        }]
     );
     assert_eq!(
-        m.update(UiEvent::Choose("setting.ui.window_mode".into(), "fullscreen".into())),
-        vec![AppEffect::SetSetting { id: "ui.window_mode".into(), value: SettingValue::Text("fullscreen".into()) }]
+        m.update(UiEvent::Choose(
+            "setting.ui.window_mode".into(),
+            "fullscreen".into()
+        )),
+        vec![AppEffect::SetSetting {
+            id: "ui.window_mode".into(),
+            value: SettingValue::Text("fullscreen".into())
+        }]
     );
     assert_eq!(
-        m.update(UiEvent::Toggle("setting.time.pause_on_focus_loss".into(), false)),
-        vec![AppEffect::SetSetting { id: "time.pause_on_focus_loss".into(), value: SettingValue::Bool(false) }]
+        m.update(UiEvent::Toggle(
+            "setting.time.pause_on_focus_loss".into(),
+            false
+        )),
+        vec![AppEffect::SetSetting {
+            id: "time.pause_on_focus_loss".into(),
+            value: SettingValue::Bool(false)
+        }]
     );
     let s = snap(&m);
-    assert!(s.contains("150 (50..300)") && s.contains("< ui.window.fullscreen >") && s.contains("[ ] setting.time"), "{s}");
+    assert!(
+        s.contains("150 (50..300)")
+            && s.contains("< ui.window.fullscreen >")
+            && s.contains("[ ] setting.time"),
+        "{s}"
+    );
     // Out-of-range or unknown values are not forwarded.
-    assert!(m.update(UiEvent::Slide("setting.ui.scale_percent".into(), 9999)).is_empty());
-    assert!(m.update(UiEvent::Choose("setting.ui.window_mode".into(), "nonsense".into())).is_empty());
-    assert!(m.update(UiEvent::Toggle("setting.nothing".into(), true)).is_empty());
+    assert!(m
+        .update(UiEvent::Slide("setting.ui.scale_percent".into(), 9999))
+        .is_empty());
+    assert!(m
+        .update(UiEvent::Choose(
+            "setting.ui.window_mode".into(),
+            "nonsense".into()
+        ))
+        .is_empty());
+    assert!(m
+        .update(UiEvent::Toggle("setting.nothing".into(), true))
+        .is_empty());
     // Keyboard: arrows adjust the focused slider.
     while m.focus() != Some("setting.ui.scale_percent") {
         press(&mut m, Key::Tab);
     }
     press(&mut m, Key::Left);
-    assert!(snap(&m).contains("setting.ui.scale_percent: 145"), "{}", snap(&m));
+    assert!(
+        snap(&m).contains("setting.ui.scale_percent: 145"),
+        "{}",
+        snap(&m)
+    );
     press(&mut m, Key::Escape);
     assert!(matches!(m.screen(), Screen::MainMenu));
 }
@@ -302,15 +385,24 @@ fn pasting_a_key_never_shows_it_or_prints_it() {
     assert!(matches!(m.screen(), Screen::AiOptions(_)));
     let secret = "sk-test-0123456789abcdef";
     let ev = UiEvent::Text("ai.key".into(), secret.into());
-    assert!(!format!("{ev:?}").contains(secret), "events print only a length");
+    assert!(
+        !format!("{ev:?}").contains(secret),
+        "events print only a length"
+    );
     m.update(ev);
     let s = snap(&m);
     assert!(!s.contains(secret) && s.contains("\u{2022}"), "{s}");
     let fx = click(&mut m, "ai.save_key");
-    assert!(!format!("{fx:?}").contains(secret), "effects redact keys: {fx:?}");
+    assert!(
+        !format!("{fx:?}").contains(secret),
+        "effects redact keys: {fx:?}"
+    );
     assert_eq!(
         fx,
-        vec![AppEffect::SetKey { provider: "openai".into(), key: Secret::new("anything") }],
+        vec![AppEffect::SetKey {
+            provider: "openai".into(),
+            key: Secret::new("anything")
+        }],
         "equality compares the redacted form"
     );
     match fx.first() {
@@ -335,13 +427,29 @@ fn the_player2_sign_in_flow_shows_the_code_and_can_be_cancelled() {
         vec![AppEffect::SelectProvider("player2".into())]
     );
     let s = snap(&m);
-    assert!(s.contains("ai.signin") && s.contains("ui.ai.model_fixed"), "{s}");
-    assert!(s.contains("ai.test") && s.contains("(disabled)"), "no key, no test: {s}");
-    assert_eq!(click(&mut m, "ai.signin"), vec![AppEffect::StartLogin("player2".into())]);
+    assert!(
+        s.contains("ai.signin") && s.contains("ui.ai.model_fixed"),
+        "{s}"
+    );
+    assert!(
+        s.contains("ai.test") && s.contains("(disabled)"),
+        "no key, no test: {s}"
+    );
+    assert_eq!(
+        click(&mut m, "ai.signin"),
+        vec![AppEffect::StartLogin("player2".into())]
+    );
     assert!(snap(&m).contains("ui.ai.login.contacting"));
-    m.update(UiEvent::LoginPrompt { code: "ABCD-1234".into(), url: "https://player2.game/link".into() });
+    m.update(UiEvent::LoginPrompt {
+        code: "ABCD-1234".into(),
+        url: "https://player2.game/link".into(),
+    });
     let s = snap(&m);
-    assert!(s.contains("ui.ai.login.enter_code{code=ABCD-1234}") && s.contains("https://player2.game/link"), "{s}");
+    assert!(
+        s.contains("ui.ai.login.enter_code{code=ABCD-1234}")
+            && s.contains("https://player2.game/link"),
+        "{s}"
+    );
     assert_eq!(
         click(&mut m, "ai.open_browser"),
         vec![AppEffect::OpenUrl("https://player2.game/link".into())]
@@ -361,13 +469,19 @@ fn sign_in_failures_and_success_and_the_connection_test() {
     click(&mut m, "ai.signin");
     m.update(UiEvent::LoginFinished(Err("expired".into())));
     let s = snap(&m);
-    assert!(s.contains("ui.ai.login.failed{reason=expired}") && s.contains("ai.signin"), "retry is offered: {s}");
+    assert!(
+        s.contains("ui.ai.login.failed{reason=expired}") && s.contains("ai.signin"),
+        "retry is offered: {s}"
+    );
     click(&mut m, "ai.signin");
     click(&mut m, "ai.cancel_login");
     assert!(snap(&m).contains("ai.signin"));
     // Success: the app reloads the AI state with a key present.
     click(&mut m, "ai.signin");
-    m.update(UiEvent::LoginPrompt { code: "X".into(), url: "u".into() });
+    m.update(UiEvent::LoginPrompt {
+        code: "X".into(),
+        url: "u".into(),
+    });
     m.update(UiEvent::LoginFinished(Ok(())));
     let mut ai = providers();
     ai.selected = "player2".into();
@@ -376,15 +490,24 @@ fn sign_in_failures_and_success_and_the_connection_test() {
     }
     m.update(UiEvent::AiLoaded(ai));
     let s = snap(&m);
-    assert!(s.contains("ui.ai.login.signed_in") && s.contains("ui.ai.sign_out"), "{s}");
-    assert_eq!(click(&mut m, "ai.test"), vec![AppEffect::TestConnection("player2".into())]);
+    assert!(
+        s.contains("ui.ai.login.signed_in") && s.contains("ui.ai.sign_out"),
+        "{s}"
+    );
+    assert_eq!(
+        click(&mut m, "ai.test"),
+        vec![AppEffect::TestConnection("player2".into())]
+    );
     assert!(snap(&m).contains("ui.ai.testing"));
     m.update(UiEvent::ConnectionResult(Ok("12 credits".into())));
     assert!(snap(&m).contains("ui.ai.test_ok{detail=12 credits}"));
     click(&mut m, "ai.test");
     m.update(UiEvent::ConnectionResult(Err("offline".into())));
     assert!(snap(&m).contains("ui.ai.test_failed{reason=offline}"));
-    assert_eq!(click(&mut m, "ai.clear_key"), vec![AppEffect::ClearKey("player2".into())]);
+    assert_eq!(
+        click(&mut m, "ai.clear_key"),
+        vec![AppEffect::ClearKey("player2".into())]
+    );
     assert!(matches!(m.screen(), Screen::AiOptions(f) if f.login == LoginUi::Idle));
 }
 
@@ -396,12 +519,24 @@ fn model_and_provider_choices_become_effects() {
     m.update(UiEvent::Text("ai.model".into(), " gpt-x ".into()));
     assert_eq!(
         click(&mut m, "ai.save_model"),
-        vec![AppEffect::SetModel { provider: "openai".into(), model: "gpt-x".into() }]
+        vec![AppEffect::SetModel {
+            provider: "openai".into(),
+            model: "gpt-x".into()
+        }]
     );
-    assert!(m.update(UiEvent::Choose("ai.provider".into(), "nope".into())).is_empty());
+    assert!(m
+        .update(UiEvent::Choose("ai.provider".into(), "nope".into()))
+        .is_empty());
     m.update(UiEvent::Choose("ai.provider".into(), "anthropic".into()));
-    assert!(snap(&m).contains("ai.clear_key"), "a provider with a key offers to clear it");
-    assert!(snap(&m).contains("hint") || snap(&m).contains("<rec>"), "{}", snap(&m));
+    assert!(
+        snap(&m).contains("ai.clear_key"),
+        "a provider with a key offers to clear it"
+    );
+    assert!(
+        snap(&m).contains("hint") || snap(&m).contains("<rec>"),
+        "{}",
+        snap(&m)
+    );
 }
 
 #[test]
@@ -419,10 +554,23 @@ fn in_game_controls_and_the_pause_menu() {
         status: String::new(),
     }));
     let s = snap(&m);
-    assert!(s.contains("ui.hud.time{day=0,time=02:30}") && s.contains("ui.hud.speed{speed=3x}"), "{s}");
-    assert_eq!(click(&mut m, "hud.pause"), vec![AppEffect::SetRunning(false)]);
-    assert_eq!(press(&mut m, Key::Space), vec![AppEffect::SetRunning(false)], "space toggles whatever has focus");
-    assert_eq!(click(&mut m, "hud.speed.9x"), vec![AppEffect::SetSpeed("9x".into())]);
+    assert!(
+        s.contains("ui.hud.time{day=0,time=02:30}") && s.contains("ui.hud.speed{speed=3x}"),
+        "{s}"
+    );
+    assert_eq!(
+        click(&mut m, "hud.pause"),
+        vec![AppEffect::SetRunning(false)]
+    );
+    assert_eq!(
+        press(&mut m, Key::Space),
+        vec![AppEffect::SetRunning(false)],
+        "space toggles whatever has focus"
+    );
+    assert_eq!(
+        click(&mut m, "hud.speed.9x"),
+        vec![AppEffect::SetSpeed("9x".into())]
+    );
     assert_eq!(click(&mut m, "hud.save"), vec![AppEffect::SaveNow]);
     // Escape opens the pause menu and closes it again.
     assert!(press(&mut m, Key::Escape).is_empty());
@@ -437,7 +585,14 @@ fn in_game_controls_and_the_pause_menu() {
     assert!(matches!(m.screen(), Screen::Pause));
     assert_eq!(click(&mut m, "pause.save"), vec![AppEffect::SaveNow]);
     let fx = click(&mut m, "pause.menu");
-    assert_eq!(fx, vec![AppEffect::SaveNow, AppEffect::LeaveWorld, AppEffect::ListWorlds]);
+    assert_eq!(
+        fx,
+        vec![
+            AppEffect::SaveNow,
+            AppEffect::LeaveWorld,
+            AppEffect::ListWorlds
+        ]
+    );
     assert!(matches!(m.screen(), Screen::MainMenu) && !m.in_world());
 }
 
@@ -445,9 +600,15 @@ fn in_game_controls_and_the_pause_menu() {
 fn quitting_and_closing_the_window_save_a_running_world() {
     let mut m = in_world();
     press(&mut m, Key::Escape);
-    assert_eq!(click(&mut m, "pause.quit"), vec![AppEffect::SaveNow, AppEffect::Quit]);
+    assert_eq!(
+        click(&mut m, "pause.quit"),
+        vec![AppEffect::SaveNow, AppEffect::Quit]
+    );
     let mut m = in_world();
-    assert_eq!(m.update(UiEvent::CloseRequested), vec![AppEffect::SaveNow, AppEffect::Quit]);
+    assert_eq!(
+        m.update(UiEvent::CloseRequested),
+        vec![AppEffect::SaveNow, AppEffect::Quit]
+    );
     let mut m = boot(Vec::new(), None);
     assert_eq!(m.update(UiEvent::CloseRequested), vec![AppEffect::Quit]);
     assert_eq!(click(&mut m, "main.quit"), vec![AppEffect::Quit]);
@@ -456,14 +617,26 @@ fn quitting_and_closing_the_window_save_a_running_world() {
 #[test]
 fn losing_focus_in_a_world_asks_for_the_pause_flow_and_waits_for_the_player() {
     let mut m = in_world();
-    assert_eq!(m.update(UiEvent::FocusLost), vec![AppEffect::WindowFocus(false)]);
-    assert_eq!(m.update(UiEvent::FocusGained), vec![AppEffect::WindowFocus(true)]);
+    assert_eq!(
+        m.update(UiEvent::FocusLost),
+        vec![AppEffect::WindowFocus(false)]
+    );
+    assert_eq!(
+        m.update(UiEvent::FocusGained),
+        vec![AppEffect::WindowFocus(true)]
+    );
     let mut h = m.hud().clone();
     h.suspended = true;
     m.update(UiEvent::Hud(h));
     let s = snap(&m);
-    assert!(s.contains("ui.hud.suspended") && s.contains("hud.resume"), "{s}");
-    assert_eq!(click(&mut m, "hud.resume"), vec![AppEffect::SetRunning(true)]);
+    assert!(
+        s.contains("ui.hud.suspended") && s.contains("hud.resume"),
+        "{s}"
+    );
+    assert_eq!(
+        click(&mut m, "hud.resume"),
+        vec![AppEffect::SetRunning(true)]
+    );
     // In the menus focus changes mean nothing.
     let mut m = boot(Vec::new(), None);
     assert!(m.update(UiEvent::FocusLost).is_empty());
@@ -471,10 +644,16 @@ fn losing_focus_in_a_world_asks_for_the_pause_flow_and_waits_for_the_player() {
 
 #[test]
 fn a_crash_bundle_is_offered_once_at_launch() {
-    let mut m = boot(vec![world("w1", "Town", 3, false)], Some("crash/crash-1.pgbundle"));
+    let mut m = boot(
+        vec![world("w1", "Town", 3, false)],
+        Some("crash/crash-1.pgbundle"),
+    );
     assert!(matches!(m.screen(), Screen::CrashPrompt { .. }));
     assert!(snap(&m).contains("crash/crash-1.pgbundle"));
-    assert_eq!(click(&mut m, "crash.reveal"), vec![AppEffect::RevealPath("crash/crash-1.pgbundle".into())]);
+    assert_eq!(
+        click(&mut m, "crash.reveal"),
+        vec![AppEffect::RevealPath("crash/crash-1.pgbundle".into())]
+    );
     assert_eq!(press(&mut m, Key::Escape), vec![AppEffect::DismissCrash]);
     assert!(matches!(m.screen(), Screen::MainMenu));
 }
@@ -502,7 +681,10 @@ fn the_overlay_toggles_with_f3_and_its_clicks_become_effects() {
     m.update(UiEvent::Text("overlay.filter".into(), "move".into()));
     assert_eq!(m.overlay().filter(), "move");
     assert_eq!(click(&mut m, "overlay.bundle"), vec![AppEffect::CutBundle]);
-    assert_eq!(click(&mut m, "overlay.scrub.1800"), vec![AppEffect::Rewind { tick: 1800 }]);
+    assert_eq!(
+        click(&mut m, "overlay.scrub.1800"),
+        vec![AppEffect::Rewind { tick: 1800 }]
+    );
     press(&mut m, Key::F3);
     assert!(m.overlay_tree(&show).is_none());
 }
@@ -513,9 +695,17 @@ fn the_overlay_toggles_with_f3_and_its_clicks_become_effects() {
 fn respond(m: &mut AppModel, fx: &[AppEffect]) {
     for e in fx {
         let replies: Vec<UiEvent> = match e {
-            AppEffect::ListWorlds => vec![UiEvent::WorldsListed(vec![world("w1", "Town", 3, false), world("w2", "Old", 1, true)])],
-            AppEffect::LoadWorld(_) | AppEffect::CreateWorld { .. } => vec![UiEvent::WorldOpened { name: "Town".into() }],
-            AppEffect::StartLogin(_) => vec![UiEvent::LoginPrompt { code: "C".into(), url: "u".into() }],
+            AppEffect::ListWorlds => vec![UiEvent::WorldsListed(vec![
+                world("w1", "Town", 3, false),
+                world("w2", "Old", 1, true),
+            ])],
+            AppEffect::LoadWorld(_) | AppEffect::CreateWorld { .. } => vec![UiEvent::WorldOpened {
+                name: "Town".into(),
+            }],
+            AppEffect::StartLogin(_) => vec![UiEvent::LoginPrompt {
+                code: "C".into(),
+                url: "u".into(),
+            }],
             AppEffect::TestConnection(_) => vec![UiEvent::ConnectionResult(Ok("ok".into()))],
             AppEffect::ImportWorld => vec![UiEvent::Imported("X".into())],
             AppEffect::ExportWorld(_) => vec![UiEvent::Exported("p".into())],
@@ -529,9 +719,18 @@ fn respond(m: &mut AppModel, fx: &[AppEffect]) {
 }
 
 /// Every widget id on screen, activated one at a time from the same starting point.
-fn explore(start: &AppModel, depth: usize, seen: &mut std::collections::BTreeSet<String>, walk: &dyn Fn(&AppModel)) {
+fn explore(
+    start: &AppModel,
+    depth: usize,
+    seen: &mut std::collections::BTreeSet<String>,
+    walk: &dyn Fn(&AppModel),
+) {
     let tree = start.tree(&show);
-    let key = format!("{:?}|{}", std::mem::discriminant(start.screen()), tree.snapshot(None));
+    let key = format!(
+        "{:?}|{}",
+        std::mem::discriminant(start.screen()),
+        tree.snapshot(None)
+    );
     if !seen.insert(key) || depth == 0 {
         return;
     }
@@ -541,13 +740,24 @@ fn explore(start: &AppModel, depth: usize, seen: &mut std::collections::BTreeSet
         let widget = tree.find(id).cloned();
         let fx = match widget {
             Some(Widget::Button { .. }) => next.update(UiEvent::Click(id.to_owned())),
-            Some(Widget::Toggle { value, .. }) => next.update(UiEvent::Toggle(id.to_owned(), !value)),
+            Some(Widget::Toggle { value, .. }) => {
+                next.update(UiEvent::Toggle(id.to_owned(), !value))
+            }
             Some(Widget::Choice { options, value, .. }) => {
-                let other = options.iter().find(|(v, _)| *v != value).map(|(v, _)| v.clone()).unwrap_or(value);
+                let other = options
+                    .iter()
+                    .find(|(v, _)| *v != value)
+                    .map(|(v, _)| v.clone())
+                    .unwrap_or(value);
                 next.update(UiEvent::Choose(id.to_owned(), other))
             }
-            Some(Widget::Slider { min, value, .. }) => next.update(UiEvent::Slide(id.to_owned(), if value == min { min + 1 } else { min })),
-            Some(Widget::TextField { .. }) => next.update(UiEvent::Text(id.to_owned(), "abc".into())),
+            Some(Widget::Slider { min, value, .. }) => next.update(UiEvent::Slide(
+                id.to_owned(),
+                if value == min { min + 1 } else { min },
+            )),
+            Some(Widget::TextField { .. }) => {
+                next.update(UiEvent::Text(id.to_owned(), "abc".into()))
+            }
             _ => Vec::new(),
         };
         if fx.iter().any(|e| matches!(e, AppEffect::Quit)) {
@@ -590,20 +800,40 @@ fn escapes_to_main_menu(start: &AppModel) -> bool {
 
 #[test]
 fn every_reachable_screen_has_focusable_widgets_unique_ids_and_a_way_back() {
-    let start = boot(vec![world("w1", "Town", 3, false), world("w2", "Old", 1, true)], None);
+    let start = boot(
+        vec![world("w1", "Town", 3, false), world("w2", "Old", 1, true)],
+        None,
+    );
     let mut seen = std::collections::BTreeSet::new();
     let mut checked = 0;
     let walk = |m: &AppModel| {
         let tree = m.tree(&show);
         let order = tree.focus_order();
-        assert!(!order.is_empty(), "a screen with nothing focusable is a dead end:\n{}", tree.snapshot(m.focus()));
+        assert!(
+            !order.is_empty(),
+            "a screen with nothing focusable is a dead end:\n{}",
+            tree.snapshot(m.focus())
+        );
         let mut ids: Vec<&str> = order.clone();
         ids.sort_unstable();
         let n = ids.len();
         ids.dedup();
-        assert_eq!(ids.len(), n, "duplicate widget ids:\n{}", tree.snapshot(m.focus()));
-        assert!(m.focus().is_some_and(|f| order.contains(&f)), "focus is on a real widget:\n{}", tree.snapshot(m.focus()));
-        assert!(escapes_to_main_menu(m), "no keyboard way back from:\n{}", tree.snapshot(m.focus()));
+        assert_eq!(
+            ids.len(),
+            n,
+            "duplicate widget ids:\n{}",
+            tree.snapshot(m.focus())
+        );
+        assert!(
+            m.focus().is_some_and(|f| order.contains(&f)),
+            "focus is on a real widget:\n{}",
+            tree.snapshot(m.focus())
+        );
+        assert!(
+            escapes_to_main_menu(m),
+            "no keyboard way back from:\n{}",
+            tree.snapshot(m.focus())
+        );
         // Tab visits every focusable widget and comes back round.
         let mut walker = m.clone();
         let mut visited = std::collections::BTreeSet::new();
@@ -613,7 +843,12 @@ fn every_reachable_screen_has_focusable_widgets_unique_ids_and_a_way_back() {
             }
             press(&mut walker, Key::Tab);
         }
-        assert_eq!(visited.len(), order.len(), "Tab must reach every widget:\n{}", tree.snapshot(m.focus()));
+        assert_eq!(
+            visited.len(),
+            order.len(),
+            "Tab must reach every widget:\n{}",
+            tree.snapshot(m.focus())
+        );
     };
     // Counted through a cell so the closure can stay `Fn`.
     let counter = std::cell::Cell::new(0);
@@ -623,7 +858,10 @@ fn every_reachable_screen_has_focusable_widgets_unique_ids_and_a_way_back() {
     };
     explore(&start, 6, &mut seen, &counted);
     checked += counter.get();
-    assert!(checked > 25, "the exploration reached only {checked} states");
+    assert!(
+        checked > 25,
+        "the exploration reached only {checked} states"
+    );
 }
 
 #[test]
@@ -635,7 +873,10 @@ fn the_pseudo_text_of_every_screen_is_not_empty() {
     let tree = m.tree(&blank);
     for w in tree.walk() {
         if let Widget::Button { label, .. } = w {
-            assert!(label.is_empty(), "button text must come from the string table: {label}");
+            assert!(
+                label.is_empty(),
+                "button text must come from the string table: {label}"
+            );
         }
     }
 }

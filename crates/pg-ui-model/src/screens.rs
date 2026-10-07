@@ -15,7 +15,10 @@ fn hhmm(minute_of_day: u32) -> String {
 
 /// The world the Continue button opens: the first (newest) one that is not damaged, else the first.
 fn continue_target(worlds: &[WorldEntry]) -> Option<&WorldEntry> {
-    worlds.iter().find(|w| !w.damaged).or_else(|| worlds.first())
+    worlds
+        .iter()
+        .find(|w| !w.damaged)
+        .or_else(|| worlds.first())
 }
 
 pub(crate) fn build(m: &AppModel, t: Text) -> Tree {
@@ -23,7 +26,10 @@ pub(crate) fn build(m: &AppModel, t: Text) -> Tree {
     match st.screen {
         Screen::Boot => Tree::new(
             t("ui.boot.title", &[]),
-            vec![Widget::Heading(t("ui.boot.title", &[])), Widget::Note(t("ui.boot.loading", &[]))],
+            vec![
+                Widget::Heading(t("ui.boot.title", &[])),
+                Widget::Note(t("ui.boot.loading", &[])),
+            ],
         ),
         Screen::CrashPrompt { path } => Tree::new(
             t("ui.crash.title", &[]),
@@ -49,7 +55,10 @@ fn main_menu(worlds: &[WorldEntry], t: Text) -> Tree {
     let cont = match continue_target(worlds) {
         Some(w) => Widget::button(
             "main.continue",
-            t("ui.main.continue_named", &[("name", &w.name), ("day", &w.day.to_string())]),
+            t(
+                "ui.main.continue_named",
+                &[("name", &w.name), ("day", &w.day.to_string())],
+            ),
         ),
         None => Widget::disabled_button("main.continue", t("ui.main.continue", &[])),
     };
@@ -154,8 +163,14 @@ fn saved_worlds(worlds: &[WorldEntry], f: &SavedForm, t: Text) -> Tree {
         .and_then(|id| worlds.iter().find(|e| &e.id == id));
     if f.confirm_delete {
         if let Some(e) = selected {
-            w.push(Widget::Label(t("ui.saved.confirm_delete", &[("name", &e.name)])));
-            w.push(Widget::button("saved.confirm_yes", t("ui.saved.delete_yes", &[])));
+            w.push(Widget::Label(t(
+                "ui.saved.confirm_delete",
+                &[("name", &e.name)],
+            )));
+            w.push(Widget::button(
+                "saved.confirm_yes",
+                t("ui.saved.delete_yes", &[]),
+            ));
             w.push(Widget::button("saved.cancel", t("ui.cancel", &[])));
         }
     } else {
@@ -187,7 +202,11 @@ fn options(items: &[SettingItem], t: Text) -> Tree {
         let label = t(&item.label_key, &[]);
         let id = format!("setting.{}", item.id);
         let widget = match (&item.kind, &item.value) {
-            (SettingKind::Bool, SettingValue::Bool(v)) => Widget::Toggle { id, label, value: *v },
+            (SettingKind::Bool, SettingValue::Bool(v)) => Widget::Toggle {
+                id,
+                label,
+                value: *v,
+            },
             (SettingKind::Int { min, max }, SettingValue::Int(v)) => Widget::Slider {
                 id,
                 label,
@@ -198,7 +217,10 @@ fn options(items: &[SettingItem], t: Text) -> Tree {
             (SettingKind::Enum(options), SettingValue::Text(v)) => Widget::Choice {
                 id,
                 label,
-                options: options.iter().map(|(v, k)| (v.clone(), t(k, &[]))).collect(),
+                options: options
+                    .iter()
+                    .map(|(v, k)| (v.clone(), t(k, &[])))
+                    .collect(),
                 value: v.clone(),
             },
             (SettingKind::Text { .. }, SettingValue::Text(v)) => Widget::TextField {
@@ -243,7 +265,11 @@ fn ai_options(ai: &AiState, f: &AiForm, t: Text) -> Tree {
         Widget::Choice {
             id: "ai.provider".into(),
             label: t("ui.ai.provider", &[]),
-            options: ai.providers.iter().map(|p| (p.id.clone(), p.label.clone())).collect(),
+            options: ai
+                .providers
+                .iter()
+                .map(|p| (p.id.clone(), p.label.clone()))
+                .collect(),
             value: ai.selected.clone(),
         },
     ];
@@ -254,7 +280,11 @@ fn ai_options(ai: &AiState, f: &AiForm, t: Text) -> Tree {
     match p.auth {
         Auth::PasteKey => {
             w.push(Widget::Note(t(
-                if ai.persistent_keys { "ui.ai.key_stored_os" } else { "ui.ai.key_session_only" },
+                if ai.persistent_keys {
+                    "ui.ai.key_stored_os"
+                } else {
+                    "ui.ai.key_session_only"
+                },
                 &[],
             )));
             w.push(Widget::TextField {
@@ -292,10 +322,16 @@ fn ai_options(ai: &AiState, f: &AiForm, t: Text) -> Tree {
                 w.push(Widget::button("ai.cancel_login", t("ui.cancel", &[])));
             }
             LoginUi::Prompt { code, url } => {
-                w.push(Widget::Label(t("ui.ai.login.enter_code", &[("code", code)])));
+                w.push(Widget::Label(t(
+                    "ui.ai.login.enter_code",
+                    &[("code", code)],
+                )));
                 w.push(Widget::Note(url.clone()));
                 w.push(Widget::Note(t("ui.ai.login.waiting", &[])));
-                w.push(Widget::button("ai.open_browser", t("ui.ai.login.open", &[])));
+                w.push(Widget::button(
+                    "ai.open_browser",
+                    t("ui.ai.login.open", &[]),
+                ));
                 w.push(Widget::button("ai.cancel_login", t("ui.cancel", &[])));
             }
         },
@@ -303,11 +339,21 @@ fn ai_options(ai: &AiState, f: &AiForm, t: Text) -> Tree {
     if p.has_key {
         w.push(Widget::button(
             "ai.clear_key",
-            t(if p.auth == Auth::DeviceCode { "ui.ai.sign_out" } else { "ui.ai.clear_key" }, &[]),
+            t(
+                if p.auth == Auth::DeviceCode {
+                    "ui.ai.sign_out"
+                } else {
+                    "ui.ai.clear_key"
+                },
+                &[],
+            ),
         ));
     }
     if p.model_fixed {
-        w.push(Widget::Note(t("ui.ai.model_fixed", &[("provider", &p.label)])));
+        w.push(Widget::Note(t(
+            "ui.ai.model_fixed",
+            &[("provider", &p.label)],
+        )));
     } else {
         w.push(Widget::TextField {
             id: "ai.model".into(),
@@ -338,7 +384,10 @@ fn in_game(h: &HudInfo, t: Text) -> Tree {
         Widget::Label(h.world_name.clone()),
         Widget::Label(t(
             "ui.hud.time",
-            &[("day", &h.day.to_string()), ("time", &hhmm(h.minute_of_day))],
+            &[
+                ("day", &h.day.to_string()),
+                ("time", &hhmm(h.minute_of_day)),
+            ],
         )),
         Widget::Label(if h.running {
             t("ui.hud.speed", &[("speed", &h.speed)])
@@ -353,7 +402,14 @@ fn in_game(h: &HudInfo, t: Text) -> Tree {
     }
     let mut controls = vec![Widget::button(
         "hud.pause",
-        t(if h.running { "ui.hud.pause" } else { "ui.hud.play" }, &[]),
+        t(
+            if h.running {
+                "ui.hud.pause"
+            } else {
+                "ui.hud.play"
+            },
+            &[],
+        ),
     )];
     for s in ["1x", "3x", "9x", "27x"] {
         controls.push(Widget::button(&format!("hud.speed.{s}"), s));
@@ -459,7 +515,11 @@ pub(crate) fn activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
         ("pause", "pause.save") => vec![AppEffect::SaveNow],
         ("pause", "pause.menu") => {
             m.leave_world();
-            vec![AppEffect::SaveNow, AppEffect::LeaveWorld, AppEffect::ListWorlds]
+            vec![
+                AppEffect::SaveNow,
+                AppEffect::LeaveWorld,
+                AppEffect::ListWorlds,
+            ]
         }
         ("pause", "pause.quit") => vec![AppEffect::SaveNow, AppEffect::Quit],
         _ => Vec::new(),
@@ -539,7 +599,10 @@ fn ai_activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
     };
     match id {
         "ai.save_key" => match f.key_input.take() {
-            Some(key) if !key.is_empty() => vec![AppEffect::SetKey { provider: p.id, key }],
+            Some(key) if !key.is_empty() => vec![AppEffect::SetKey {
+                provider: p.id,
+                key,
+            }],
             other => {
                 f.key_input = other;
                 Vec::new()

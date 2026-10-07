@@ -82,11 +82,22 @@ pub fn content_cmd(args: &[String]) -> Result<ExitCode, String> {
         Some("components") => Ok(components()),
         Some("diff") => diff(&args[1..]),
         Some("schema") => crate::pack_cmds::schema_cmd(&args[1..]),
+        Some("hash") => hash(&args[1..]),
         Some(other) => Err(format!(
             "unknown content command '{other}' (try lint, list, resolve, components)"
         )),
         None => Err("content needs a command: lint, list, resolve, components".into()),
     }
+}
+
+/// `pg content hash [pack-dir...]`: each pack's id, version and full content hash (what a replay or save
+/// records as the content it was made with). Used when a golden log must be re-pinned after a pack changed.
+fn hash(args: &[String]) -> Result<ExitCode, String> {
+    let set = build(&pack_dirs(args))?;
+    for r in set.refs() {
+        println!("{} {} {}", r.pack_id, r.version, r.hash);
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 /// `pg content diff <packs-a> <packs-b>`: each side is one or more pack directories, comma-separated.

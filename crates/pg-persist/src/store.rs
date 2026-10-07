@@ -493,6 +493,20 @@ impl<'a> SlotStore<'a> {
         Ok(ids)
     }
 
+    /// Deletes a world slot: every file under it (generations, manifest, thumbnails, damage marker).
+    /// Returns how many files were removed. A world that does not exist removes nothing.
+    pub fn delete_world(&self, world_id: &str) -> Result<usize, std::io::Error> {
+        if !valid_world_id(world_id) {
+            return Ok(0);
+        }
+        let mut removed = 0;
+        for blob in self.storage.list(&format!("worlds/{world_id}/"))? {
+            self.storage.delete(&blob.name)?;
+            removed += 1;
+        }
+        Ok(removed)
+    }
+
     pub fn is_marked_damaged(&self, world_id: &str) -> bool {
         matches!(self.storage.read(&damaged_name(world_id)), Ok(Some(_)))
     }

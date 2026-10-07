@@ -105,7 +105,59 @@ struct PendingError {
     message: String,
 }
 
+/// What one handler has cost so far (suggestion S-036): calls, fuel and errors, for the overlay.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MeterRow {
+    pub calls: u64,
+    pub fuel: u64,
+    pub errors: u32,
+}
+
+/// Collects [`MeterRow`]s per `(pack, point)`. Shared between every host a factory builds, so the numbers
+/// keep accumulating when the VMs are rebuilt. Development statistics only: nothing here is world state.
+#[derive(Default)]
+pub struct ScriptMeter {
+    rows: Mutex<BTreeMap<(String, String), MeterRow>>,
+}
+
+impl ScriptMeter {
+    pub fn new() -> ScriptMeter {
+        ScriptMeter::default()
+    }
+
+    fn with_row(&self, pack: &str, point: &str, f: impl FnOnce(&mut MeterRow)) {
+        let mut rows = self.rows.lock().unwrap_or_else(|e| e.into_inner());
+        f(rows.entry((pack.to_owned(), point.to_owned())).or_default());
+    }
+
+    pub fn record_call(&self, pack: &str, point: &str, fuel: u64) {
+        self.with_row(pack, point, |r| {
+            r.calls += 1;
+            r.fuel += fuel;
+        });
+    }
+
+    pub fn record_error(&self, pack: &str, point: &str) {
+        self.with_row(pack, point, |r| r.errors += 1);
+    }
+
+    /// `(pack, point, row)` in a stable order.
+    pub fn rows(&self) -> Vec<(String, String, MeterRow)> {
+        self.rows
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .map(|((p, q), r)| (p.clone(), q.clone(), r.clone()))
+            .collect()
+    }
+
+    pub fn reset(&self) {
+        self.rows.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+}
+
 pub struct ScriptHost {
+    meter: Option<Arc<ScriptMeter>>,
     packs: Vec<Loaded>,
     schemas: ExtSchemas,
     failures: Vec<LoadFailure>,
@@ -199,6 +251,7 @@ impl ScriptHost {
         factory: &VmFactory,
     ) -> ScriptHost {
         let mut host = ScriptHost {
+            meter: None,
             packs: Vec::new(),
             schemas: ExtSchemas::new(),
             failures: Vec::new(),
@@ -277,6 +330,11 @@ impl ScriptHost {
             reg,
         });
         Ok(())
+    }
+
+    /// Records what every handler costs into `meter` from now on.
+    pub fn set_meter(&mut self, meter: Option<Arc<ScriptMeter>>) {
+        self.meter = meter;
     }
 
     pub fn schemas(&self) -> &ExtSchemas {
@@ -371,6 +429,9 @@ impl ScriptHost {
         message: &str,
         immediate: bool,
     ) {
+        if let Some(m) = &self.meter {
+            m.record_error(pack, point);
+        }
         let tick = ctx.flags.tick;
         ctx.emit(
             "script.error",
@@ -458,6 +519,9 @@ impl ScriptHost {
             let budget = per_call.min(per_tick - self.tick_fuel);
             match pack.vm.call(spec.handler, a, Fuel(budget)) {
                 Ok(r) => {
+                    if let Some(m) = &self.meter {
+                        m.record_call(&pack_id, &point, r.fuel);
+                    }
                     self.tick_fuel += r.fuel;
                     buffered.push((*entity, r.commands));
                 }
@@ -568,18 +632,25 @@ impl ScriptHost {
             };
             for h in handlers {
                 match pack.vm.call(h, &args, Fuel(per_call)) {
-                    Ok(r) => match r.value {
-                        Val::Int(v) => answers.push(v),
-                        other => {
-                            self.pending.push(PendingError {
-                                pack: pack_id.clone(),
-                                point: format!("hook {}", point.id),
-                                message: format!("a hook must return an integer, not {other:?}"),
-                            });
-                            self.failed_now.push(pack_id.clone());
-                            break;
+                    Ok(r) => {
+                        if let Some(m) = &self.meter {
+                            m.record_call(&pack_id, &format!("hook {}", point.id), r.fuel);
                         }
-                    },
+                        match r.value {
+                            Val::Int(v) => answers.push(v),
+                            other => {
+                                self.pending.push(PendingError {
+                                    pack: pack_id.clone(),
+                                    point: format!("hook {}", point.id),
+                                    message: format!(
+                                        "a hook must return an integer, not {other:?}"
+                                    ),
+                                });
+                                self.failed_now.push(pack_id.clone());
+                                break;
+                            }
+                        }
+                    }
                     Err(e) => {
                         self.pending.push(PendingError {
                             pack: pack_id.clone(),
@@ -712,7 +783,20 @@ pub fn attach(
     limits: ScriptLimits,
     pipeline: &mut Pipeline,
 ) -> Result<(Arc<Mutex<ScriptHost>>, HostHooks), String> {
-    let host = Arc::new(Mutex::new(ScriptHost::new(packs, seed, limits)));
+    attach_with_meter(packs, seed, limits, None, pipeline)
+}
+
+/// Like [`attach`], also recording handler costs into `meter` (suggestion S-036).
+pub fn attach_with_meter(
+    packs: &[ScriptPackInput],
+    seed: u64,
+    limits: ScriptLimits,
+    meter: Option<Arc<ScriptMeter>>,
+    pipeline: &mut Pipeline,
+) -> Result<(Arc<Mutex<ScriptHost>>, HostHooks), String> {
+    let mut h = ScriptHost::new(packs, seed, limits);
+    h.set_meter(meter);
+    let host = Arc::new(Mutex::new(h));
     let hooks = install(&host, pipeline)?;
     Ok((host, hooks))
 }

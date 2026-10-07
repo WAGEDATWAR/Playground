@@ -32,6 +32,7 @@ pub struct SimFactory {
     /// Script packs to run, taken from the content; `None` when there are none or safe mode is on.
     scripts: Option<Arc<Vec<pg_script::host::ScriptPackInput>>>,
     script_limits: pg_script::host::ScriptLimits,
+    meter: Option<Arc<pg_script::host::ScriptMeter>>,
 }
 
 impl SimFactory {
@@ -68,6 +69,15 @@ impl SimFactory {
             profiler: None,
             scripts,
             script_limits: pg_script::host::ScriptLimits::default(),
+            meter: None,
+        }
+    }
+
+    /// The same factory with every script host it builds recording handler costs into `meter`.
+    pub fn with_meter(&self, meter: Option<Arc<pg_script::host::ScriptMeter>>) -> SimFactory {
+        SimFactory {
+            meter,
+            ..self.clone()
         }
     }
 
@@ -105,9 +115,15 @@ impl SimFactory {
     fn build_pipeline(&self, seed: u64) -> (Pipeline, Option<pg_script::host::HostHooks>) {
         let mut p = (self.pipeline)();
         let hooks = self.scripts.as_ref().and_then(|packs| {
-            pg_script::host::attach(packs, seed, self.script_limits.clone(), &mut p)
-                .ok()
-                .map(|(_, h)| h)
+            pg_script::host::attach_with_meter(
+                packs,
+                seed,
+                self.script_limits.clone(),
+                self.meter.clone(),
+                &mut p,
+            )
+            .ok()
+            .map(|(_, h)| h)
         });
         if let Some(prof) = &self.profiler {
             p.set_probe(Some(prof.probe()));

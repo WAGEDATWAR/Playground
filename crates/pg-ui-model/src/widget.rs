@@ -199,7 +199,11 @@ fn snapshot_widget(out: &mut String, w: &Widget, depth: usize, focus: Option<&st
             } else {
                 value.clone()
             };
-            let shown = if shown.is_empty() { format!("<{hint}>") } else { shown };
+            let shown = if shown.is_empty() {
+                format!("<{hint}>")
+            } else {
+                shown
+            };
             let _ = writeln!(out, "{pad}{}{label}: [{shown}] <{id}>", mark(id));
         }
         Widget::Toggle { id, label, value } => {
@@ -229,7 +233,11 @@ fn snapshot_widget(out: &mut String, w: &Widget, depth: usize, focus: Option<&st
             max,
             value,
         } => {
-            let _ = writeln!(out, "{pad}{}{label}: {value} ({min}..{max}) <{id}>", mark(id));
+            let _ = writeln!(
+                out,
+                "{pad}{}{label}: {value} ({min}..{max}) <{id}>",
+                mark(id)
+            );
         }
         Widget::Progress { label, permille } => {
             let _ = writeln!(out, "{pad}{label}: {}%", permille / 10);
@@ -265,7 +273,11 @@ mod tests {
                 Widget::Group {
                     title: "G".into(),
                     children: vec![
-                        Widget::Toggle { id: "t".into(), label: "T".into(), value: true },
+                        Widget::Toggle {
+                            id: "t".into(),
+                            label: "T".into(),
+                            value: true,
+                        },
                         Widget::TextField {
                             id: "k".into(),
                             label: "Key".into(),
@@ -292,7 +304,10 @@ mod tests {
         assert!(s.contains(">[x] T <t>"), "{s}");
         assert!(s.contains("[A] <a>"), "{s}");
         assert!(s.contains("(disabled)"), "{s}");
-        assert!(s.contains("Key: [\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}]"), "{s}");
+        assert!(
+            s.contains("Key: [\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}]"),
+            "{s}"
+        );
         assert!(!s.contains("secret"), "{s}");
     }
 }

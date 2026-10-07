@@ -192,7 +192,11 @@ impl Overlay {
                     let label = t(&format!("ui.overlay.tab.{}", tab.id()), &[]);
                     Widget::button(
                         &format!("overlay.tab.{}", tab.id()),
-                        if *tab == self.tab { format!("[{label}]") } else { label },
+                        if *tab == self.tab {
+                            format!("[{label}]")
+                        } else {
+                            label
+                        },
                     )
                 })
                 .chain([Widget::button("overlay.close", t("ui.overlay.close", &[]))])
@@ -202,11 +206,18 @@ impl Overlay {
             Tab::Time => {
                 w.push(Widget::Label(t(
                     "ui.overlay.time",
-                    &[("tick", &d.tick.to_string()), ("day", &d.day.to_string()), ("state", &d.state)],
+                    &[
+                        ("tick", &d.tick.to_string()),
+                        ("day", &d.day.to_string()),
+                        ("state", &d.state),
+                    ],
                 )));
                 w.push(Widget::Label(t("ui.overlay.hash", &[("hash", &d.hash)])));
                 if !d.shadow.is_empty() {
-                    w.push(Widget::Label(t("ui.overlay.shadow", &[("status", &d.shadow)])));
+                    w.push(Widget::Label(t(
+                        "ui.overlay.shadow",
+                        &[("status", &d.shadow)],
+                    )));
                 }
                 w.push(Widget::Heading(t("ui.overlay.keyframes", &[])));
                 w.push(Widget::Row(
@@ -217,7 +228,10 @@ impl Overlay {
                         .map(|k| Widget::button(&format!("overlay.scrub.{k}"), k.to_string()))
                         .collect(),
                 ));
-                w.push(Widget::button("overlay.bundle", t("ui.overlay.bundle", &[])));
+                w.push(Widget::button(
+                    "overlay.bundle",
+                    t("ui.overlay.bundle", &[]),
+                ));
             }
             Tab::Systems => {
                 for s in &d.systems {
@@ -227,7 +241,10 @@ impl Overlay {
                             ("name", &s.name),
                             ("avg", &s.avg_micros.to_string()),
                             ("calls", &s.calls.to_string()),
-                            ("share", &format!("{}.{}", s.share_permille / 10, s.share_permille % 10)),
+                            (
+                                "share",
+                                &format!("{}.{}", s.share_permille / 10, s.share_permille % 10),
+                            ),
                         ],
                     )));
                 }
@@ -240,7 +257,10 @@ impl Overlay {
                     secret: false,
                     hint: t("ui.overlay.filter_hint", &[]),
                 });
-                w.push(Widget::button("overlay.filter_clear", t("ui.overlay.filter_clear", &[])));
+                w.push(Widget::button(
+                    "overlay.filter_clear",
+                    t("ui.overlay.filter_clear", &[]),
+                ));
                 for e in self.filtered_events() {
                     w.push(Widget::Label(format!("{}  {}  {}", e.tick, e.kind, e.text)));
                 }
@@ -252,7 +272,10 @@ impl Overlay {
             }
             Tab::Packs => {
                 for p in &d.packs {
-                    w.push(Widget::Label(format!("{} {}  {}", p.id, p.version, p.status)));
+                    w.push(Widget::Label(format!(
+                        "{} {}  {}",
+                        p.id, p.version, p.status
+                    )));
                 }
             }
             Tab::Scripts => {
@@ -288,15 +311,25 @@ mod tests {
         let events: Vec<EventRow> = (0..100)
             .map(|i| EventRow {
                 tick: i,
-                kind: if i % 2 == 0 { "move.arrived".into() } else { "commitment.accepted".into() },
+                kind: if i % 2 == 0 {
+                    "move.arrived".into()
+                } else {
+                    "commitment.accepted".into()
+                },
                 text: String::new(),
             })
             .collect();
-        o.set_data(OverlayData { events, ..OverlayData::default() });
+        o.set_data(OverlayData {
+            events,
+            ..OverlayData::default()
+        });
         assert_eq!(o.filtered_events().len(), MAX_EVENT_ROWS);
         assert_eq!(o.filtered_events().last().unwrap().tick, 99);
         o.text("overlay.filter", "move".into());
-        assert!(o.filtered_events().iter().all(|e| e.kind.starts_with("move")));
+        assert!(o
+            .filtered_events()
+            .iter()
+            .all(|e| e.kind.starts_with("move")));
         assert_eq!(o.filtered_events().len(), 40);
         o.text("overlay.filter", "zzz".into());
         assert!(o.filtered_events().is_empty());
@@ -314,7 +347,10 @@ mod tests {
             assert_eq!(o.tab(), t);
             assert!(!o.tree(&plain).widgets.is_empty());
         }
-        assert_eq!(o.click("overlay.scrub.1800"), vec![AppEffect::Rewind { tick: 1800 }]);
+        assert_eq!(
+            o.click("overlay.scrub.1800"),
+            vec![AppEffect::Rewind { tick: 1800 }]
+        );
         assert!(o.click("overlay.scrub.abc").is_empty());
         assert_eq!(o.click("overlay.bundle"), vec![AppEffect::CutBundle]);
         o.click("overlay.close");
@@ -325,7 +361,13 @@ mod tests {
     fn script_cost_rows_are_shown() {
         let mut o = Overlay::default();
         o.set_data(OverlayData {
-            scripts: vec![ScriptRow { pack: "caffeine".into(), point: "system decay".into(), calls: 12, fuel: 300, errors: 0 }],
+            scripts: vec![ScriptRow {
+                pack: "caffeine".into(),
+                point: "system decay".into(),
+                calls: 12,
+                fuel: 300,
+                errors: 0,
+            }],
             ..OverlayData::default()
         });
         o.click("overlay.tab.scripts");

@@ -66,10 +66,15 @@ pub enum SettingValue {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SettingKind {
     Bool,
-    Int { min: i64, max: i64 },
+    Int {
+        min: i64,
+        max: i64,
+    },
     /// `(value, label key)`.
     Enum(Vec<(String, String)>),
-    Text { max_len: usize },
+    Text {
+        max_len: usize,
+    },
 }
 
 /// One entry of the generated Options screen (suggestion S-025): the registry's setting with its current

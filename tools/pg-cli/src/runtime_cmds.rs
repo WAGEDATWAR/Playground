@@ -194,6 +194,7 @@ pub fn run_cmd(args: &[String]) -> Result<ExitCode, String> {
         storage: storage.clone(),
         log: Arc::new(RedactingLog::new(StderrLog)),
         pool: Arc::new(WorkerPool::new(2)),
+        thumbnailer: None,
     };
     let mut cfg = LoopConfig::new(world_id);
     cfg.shadow_threads = p.parse::<usize>("shadow")?;

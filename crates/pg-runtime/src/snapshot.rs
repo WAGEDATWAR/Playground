@@ -40,6 +40,10 @@ pub struct RenderSnapshot {
     pub recent_events: Vec<Event>,
     /// First 8 hex characters of the state hash at the last day boundary, for the overlay.
     pub day_hash: String,
+    /// Ticks of the keyframes the runtime holds, oldest first (the overlay's time scrub).
+    pub keyframes: Vec<u64>,
+    /// The newest keyframe's state hash, first 8 hex characters.
+    pub keyframe_hash: String,
 }
 
 /// How many recent events a snapshot carries.
@@ -101,6 +105,8 @@ impl RenderSnapshot {
             maps,
             recent_events: recent,
             day_hash: day_hash.to_owned(),
+            keyframes: prev.map_or_else(Vec::new, |p| p.keyframes.clone()),
+            keyframe_hash: prev.map_or_else(String::new, |p| p.keyframe_hash.clone()),
         }
     }
 }

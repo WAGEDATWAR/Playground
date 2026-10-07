@@ -31,7 +31,12 @@ pub struct LoopServices {
     pub storage: Arc<dyn Storage>,
     pub log: Arc<dyn LogSink>,
     pub pool: Arc<WorkerPool>,
+    /// Makes the small picture saved with each generation (suggestion S-024); `None` saves without one.
+    pub thumbnailer: Option<Thumbnailer>,
 }
+
+/// Renders a world to PNG bytes for the Saved Worlds list.
+pub type Thumbnailer = Arc<dyn Fn(&pg_core::world::WorldState) -> Option<Vec<u8>> + Send + Sync>;
 
 #[derive(Clone, Debug)]
 pub struct LoopConfig {
@@ -71,6 +76,8 @@ pub enum Control {
     /// Time scrub: rebuild the world as it was at this tick (the future is discarded).
     RewindTo(u64),
     SetAutosaveMinutes(u64),
+    /// Writes a bug bundle of the running world now (suggestion S-001).
+    CutBundle,
 }
 
 /// What happened, for the UI and the dev overlay.
@@ -102,6 +109,8 @@ pub enum LoopEvent {
     Rewound {
         to: u64,
     },
+    /// A bundle was written (name in storage), or could not be.
+    BundleWritten(Option<String>),
     Refused(String),
 }
 
@@ -206,6 +215,14 @@ impl SimLoop {
             Control::SaveNow => self.start_save(false),
             Control::RewindTo(t) => self.rewind_to(t, &mut out),
             Control::SetAutosaveMinutes(m) => self.autosave.set_interval_minutes(m),
+            Control::CutBundle => {
+                let name = self.ring.latest().cloned().and_then(|kf| {
+                    let log = self.log.clone();
+                    let until = self.sim.world().clock.tick();
+                    self.write_bundle(&kf, &log, until, "bundle cut by the developer overlay")
+                });
+                out.push(LoopEvent::BundleWritten(name));
+            }
         }
         out
     }
@@ -228,14 +245,16 @@ impl SimLoop {
         let world = self.sim.world().clone();
         let tick = world.clock.tick();
         let storage = Arc::clone(&self.services.storage);
+        let thumbnailer = self.services.thumbnailer.clone();
         let (id, refs, iso) = (
             self.cfg.world_id.clone(),
             self.cfg.content_refs.clone(),
             self.services.clock.wall_clock_iso(),
         );
         let job = self.services.pool.submit(move || {
+            let thumb = thumbnailer.as_ref().and_then(|f| f(&world));
             SlotStore::new(storage.as_ref())
-                .save(&id, &world, &refs, &iso)
+                .save_with(&id, &world, &refs, &iso, thumb.as_deref())
                 .map_err(|e| e.to_string())
         });
         self.saves.push((job, tick, autosave));
@@ -578,13 +597,19 @@ impl SimLoop {
 
         if self.dirty || !events.is_empty() {
             let prev = self.publisher.latest();
-            self.publisher.publish(RenderSnapshot::build(
+            let mut snap = RenderSnapshot::build(
                 self.sim.world(),
                 self.state,
                 Some(&prev),
                 &events,
                 &self.day_hash,
-            ));
+            );
+            snap.keyframes = self.ring.ticks();
+            snap.keyframe_hash = self
+                .ring
+                .latest()
+                .map_or_else(String::new, |k| k.hash.short());
+            self.publisher.publish(snap);
             self.dirty = false;
         }
         out

@@ -10,6 +10,7 @@
 
 pub mod app;
 pub mod overlay;
+pub mod palette;
 mod screens;
 pub mod types;
 pub mod widget;

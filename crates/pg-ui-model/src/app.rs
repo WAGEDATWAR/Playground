@@ -246,10 +246,7 @@ impl AppModel {
     fn fix_focus(&mut self) {
         let tree = self.tree(&plain);
         let order = tree.focus_order();
-        let valid = self
-            .focus
-            .as_deref()
-            .is_some_and(|f| order.contains(&f));
+        let valid = self.focus.as_deref().is_some_and(|f| order.contains(&f));
         if !valid {
             self.focus = order.first().map(|s| (*s).to_owned());
         }
@@ -276,7 +273,12 @@ impl AppModel {
     pub fn update(&mut self, ev: UiEvent) -> Vec<AppEffect> {
         if matches!(
             ev,
-            UiEvent::Key(_) | UiEvent::Click(_) | UiEvent::Text(..) | UiEvent::Toggle(..) | UiEvent::Choose(..) | UiEvent::Slide(..)
+            UiEvent::Key(_)
+                | UiEvent::Click(_)
+                | UiEvent::Text(..)
+                | UiEvent::Toggle(..)
+                | UiEvent::Choose(..)
+                | UiEvent::Slide(..)
         ) {
             self.notice = None;
         }
@@ -334,7 +336,10 @@ impl AppModel {
             UiEvent::WorldsListed(list) => {
                 self.worlds = list;
                 if let Screen::SavedWorlds(f) = &mut self.screen {
-                    if f.selected.as_ref().is_some_and(|s| !self.worlds.iter().any(|w| &w.id == s)) {
+                    if f.selected
+                        .as_ref()
+                        .is_some_and(|s| !self.worlds.iter().any(|w| &w.id == s))
+                    {
                         f.selected = None;
                         f.confirm_delete = false;
                     }
@@ -487,7 +492,9 @@ impl AppModel {
                     None => Vec::new(),
                 }
             }
-            Some(Widget::Slider { min, max, value, .. }) => {
+            Some(Widget::Slider {
+                min, max, value, ..
+            }) => {
                 let step = ((max - min) / 50).max(1);
                 let v = (value + dir * step).clamp(*min, *max);
                 self.slide(&id, v)

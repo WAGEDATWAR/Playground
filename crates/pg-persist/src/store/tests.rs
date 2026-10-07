@@ -522,3 +522,35 @@ fn thumbnails_are_stored_named_in_the_summary_and_cleaned_up_with_old_generation
         .thumbnail
         .is_none());
 }
+
+#[test]
+fn deleting_a_world_removes_every_file_of_that_world_and_only_that_world() {
+    let storage = MemStorage::new();
+    let store = SlotStore::new(&storage);
+    let w = world_at(300);
+    store
+        .save_with("keep", &w, &[], "2026-01-01T00:00:00Z", Some(b"png"))
+        .unwrap();
+    store
+        .save_with("drop", &w, &[], "2026-01-01T00:00:00Z", Some(b"png"))
+        .unwrap();
+    store.save("drop", &w, &[], "2026-01-02T00:00:00Z").unwrap();
+    assert_eq!(store.list_worlds().unwrap(), ["drop", "keep"]);
+    let removed = store.delete_world("drop").unwrap();
+    assert!(
+        removed >= 4,
+        "generations, manifest and thumbnail: {removed}"
+    );
+    assert_eq!(store.list_worlds().unwrap(), ["keep"]);
+    assert!(store.load("keep", &LoadOptions::default()).is_ok());
+    assert_eq!(
+        store.delete_world("drop").unwrap(),
+        0,
+        "deleting twice is harmless"
+    );
+    assert_eq!(
+        store.delete_world("../etc").unwrap(),
+        0,
+        "bad ids remove nothing"
+    );
+}
