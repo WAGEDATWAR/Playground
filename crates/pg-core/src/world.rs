@@ -164,6 +164,8 @@ pub struct WorldState {
     pub pawns: Table<Pawn>,
     pub commitments: Table<Commitment>,
     pub probe: Probe,
+    /// Pack-defined component values and pack health (empty without packs, and then not hashed).
+    pub ext: crate::ext::ExtStore,
     /// Derived from `pawns` and `maps`; never hashed or saved. Call [`WorldState::rebuild_derived`] after
     /// loading.
     pub occupancy: Occupancy,
@@ -186,6 +188,7 @@ impl WorldState {
             pawns: Table::new(),
             commitments: Table::new(),
             probe: Probe::default(),
+            ext: crate::ext::ExtStore::new(),
             occupancy: Occupancy::new(),
         }
     }
@@ -275,6 +278,7 @@ impl WorldState {
             "objects" => Some(rows(&self.objects)),
             "pawns" => Some(rows(&self.pawns)),
             "commitments" => Some(rows(&self.commitments)),
+            "ext" if !self.ext.is_empty() => Some(self.ext.row_hashes()),
             _ => None,
         }
     }
@@ -282,7 +286,7 @@ impl WorldState {
     /// Per-table hashes in a fixed order. Entity tables hash as the combination of their rows.
     pub fn table_hashes(&self) -> Vec<(&'static str, StateHash)> {
         let table = |name: &str| combine_row_hashes(&self.row_hashes(name).unwrap_or_default());
-        vec![
+        let mut tables = vec![
             ("clock", hash_value(&self.clock)),
             ("commitments", table("commitments")),
             ("id_counters", hash_value(&self.id_counters)),
@@ -293,7 +297,12 @@ impl WorldState {
             ("probe", hash_value(&self.probe)),
             ("rng_counters", hash_value(&self.rng_counters)),
             ("settings", hash_value(&self.settings)),
-        ]
+        ];
+        // Extension data joins the hash only when there is some, so worlds without packs keep their hashes.
+        if !self.ext.is_empty() {
+            tables.insert(2, ("ext", table("ext")));
+        }
+        tables
     }
 
     /// The combined state hash (Blueprint §5.4).
@@ -344,7 +353,7 @@ impl ToCanon for Probe {
 impl ToCanon for WorldState {
     /// The authoritative state. `occupancy` is derived and deliberately absent.
     fn to_canon(&self) -> Canon {
-        Canon::map([
+        let mut doc = Canon::map([
             ("schema", self.schema.to_canon()),
             ("meta", self.meta.to_canon()),
             ("settings", self.settings.to_canon()),
@@ -356,7 +365,11 @@ impl ToCanon for WorldState {
             ("pawns", self.pawns.to_canon()),
             ("commitments", self.commitments.to_canon()),
             ("probe", self.probe.to_canon()),
-        ])
+        ]);
+        if let (false, Canon::Map(m)) = (self.ext.is_empty(), &mut doc) {
+            m.insert("ext".to_owned(), self.ext.to_canon());
+        }
+        doc
     }
 }
 
@@ -435,6 +448,7 @@ impl WorldState {
             "pawns",
             "commitments",
             "probe",
+            "ext",
         ])?;
         let found = r.child("schema")?.reader().u32()?;
         if found != SCHEMA_VERSION {
@@ -499,6 +513,10 @@ impl WorldState {
             pawns: read_table(&r, "pawns", Pawn::from_reader, |p| p.id)?,
             commitments: read_table(&r, "commitments", Commitment::from_reader, |c| c.id)?,
             probe,
+            ext: match r.maybe("ext")? {
+                Some(c) => crate::ext::ExtStore::from_reader(c.reader())?,
+                None => crate::ext::ExtStore::new(),
+            },
             occupancy: Occupancy::new(),
         };
         world.rebuild_derived();

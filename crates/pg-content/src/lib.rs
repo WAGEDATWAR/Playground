@@ -20,7 +20,7 @@ pub mod strings;
 pub mod template;
 
 pub use component::{ComponentDef, ComponentRegistry, Origin};
-pub use content_set::{ContentRef, ContentSet, BASE_PACK};
+pub use content_set::{ContentRef, ContentSet, ScriptPack, BASE_PACK};
 pub use ids::{ActionId, ComponentName, IdError, PackId, Tag, TemplateId};
 pub use manifest::{Capability, PackManifest, Version, VersionReq, API_VERSION, ENGINE_VERSION};
 pub use pack::{load_pack, DirPack, Limits, LoadedPack, MemoryPack, PackFiles};

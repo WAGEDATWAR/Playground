@@ -156,6 +156,8 @@ pub struct Services {
     pub exec: Box<dyn BatchExecutor>,
     pub paths: PathCache,
     pub costs: MoveCosts,
+    /// Answers hook questions from packs; `None` when no scripts are loaded.
+    pub hooks: Option<Box<dyn crate::hooks::HookHost>>,
 }
 
 impl Services {
@@ -164,6 +166,7 @@ impl Services {
             exec: Box::new(SerialExecutor),
             paths: PathCache::default(),
             costs: MoveCosts::default(),
+            hooks: None,
         }
     }
 }

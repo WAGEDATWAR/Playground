@@ -9,3 +9,4 @@ publish = false
 pg-core = { path = "../../crates/pg-core" }
 pg-api = { path = "../../crates/pg-api" }
 mlua = { version = "0.12.2", features = ["luau", "send"] }
+pg-content = { version = "0.0.1", path = "../pg-content" }

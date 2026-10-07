@@ -2456,6 +2456,7 @@ name = "pg-core"
 version = "0.0.1"
 dependencies = [
  "blake3",
+ "pg-api",
  "pg-canon",
  "pg-content",
  "pg-host",
@@ -2520,6 +2521,7 @@ version = "0.0.1"
 dependencies = [
  "mlua",
  "pg-api",
+ "pg-content",
  "pg-core",
 ]
 

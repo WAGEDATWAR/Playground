@@ -3,6 +3,7 @@
 //! Only the private `luau` module imports the binding crate; everything else speaks the project's own
 //! value, registration and error types from [`vm`].
 
+pub mod host;
 mod luau;
 pub mod vm;
 

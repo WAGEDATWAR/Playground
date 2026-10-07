@@ -80,7 +80,9 @@ fn resolve_repaths(ctx: &mut TickCtx<'_>, settings: &MovementSettings) {
     // separate fields of the services, so all three can be borrowed together.
     let outcomes: Vec<Option<PathOutcome>> = {
         let world = &*ctx.world;
-        let crate::pipeline::Services { exec, paths, costs } = &mut *ctx.services;
+        let crate::pipeline::Services {
+            exec, paths, costs, ..
+        } = &mut *ctx.services;
         let mut jobs = Vec::new();
         let mut slot_of_job = Vec::new();
         for (i, (_, map_id, from, goal)) in wanting.iter().enumerate() {
@@ -172,7 +174,31 @@ fn can_enter(ctx: &TickCtx<'_>, map: EntityId, tile: Tile) -> bool {
         .is_some_and(|m| ctx.services.costs.step_cost(m, tile).is_some())
 }
 
+/// Ticks one step takes for `pawn`: the world setting, scaled by the `movement.speed_modifier` hook when
+/// packs have registered for it. Asked only for pawns that are actually walking.
+fn step_ticks(ctx: &mut TickCtx<'_>, pawn: EntityId, base: u32) -> u32 {
+    let walking = ctx
+        .world
+        .pawns
+        .get(pawn)
+        .and_then(|p| p.route.as_ref())
+        .is_some_and(|r| !r.needs_repath);
+    let (Some(point), Some(host), true) = (
+        crate::hooks::movement_speed(),
+        ctx.services.hooks.as_mut(),
+        walking,
+    ) else {
+        return base;
+    };
+    let answers = host.ask(point, &*ctx.world, pawn);
+    if answers.is_empty() {
+        return base;
+    }
+    crate::hooks::scaled_step_ticks(base, crate::hooks::resolve(point, &answers))
+}
+
 fn step_one(ctx: &mut TickCtx<'_>, pawn: EntityId, settings: &MovementSettings) {
+    let needed = step_ticks(ctx, pawn, settings.move_ticks_per_tile);
     // Count the tick and see whether a step is due.
     let (map, cur, next) = {
         let Some(p) = ctx.world.pawns.get_mut(pawn) else {
@@ -186,7 +212,7 @@ fn step_one(ctx: &mut TickCtx<'_>, pawn: EntityId, settings: &MovementSettings) 
             return;
         }
         route.since_step = route.since_step.saturating_add(1);
-        if route.since_step < settings.move_ticks_per_tile {
+        if route.since_step < needed {
             return;
         }
         match route.path.get(route.next).copied() {

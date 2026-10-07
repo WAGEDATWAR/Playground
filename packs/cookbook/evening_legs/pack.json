@@ -1,0 +1,9 @@
+{
+  "id": "evening_legs",
+  "name": "Evening Legs (cookbook)",
+  "version": "0.1.0",
+  "api": ">=0.1 <0.2",
+  "depends": [{ "id": "base", "version": ">=0.1" }],
+  "capabilities": ["data"],
+  "entry": "scripts/main.luau"
+}

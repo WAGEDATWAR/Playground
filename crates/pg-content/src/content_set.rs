@@ -43,6 +43,17 @@ impl ToCanon for ContentRef {
     }
 }
 
+/// A pack's scripts as the script host needs them.
+#[derive(Clone, Debug)]
+pub struct ScriptPack<'a> {
+    pub id: &'a str,
+    pub version: String,
+    pub hash: &'a str,
+    pub capabilities: Vec<&'static str>,
+    pub entry: &'a str,
+    pub sources: &'a BTreeMap<String, String>,
+}
+
 #[derive(Debug)]
 pub struct ContentSet {
     packs: Vec<PackInfo>,
@@ -58,6 +69,7 @@ pub struct ContentSet {
 struct PackInfo {
     manifest: PackManifest,
     hash: String,
+    scripts: BTreeMap<String, String>,
 }
 
 impl ContentSet {
@@ -240,6 +252,7 @@ impl ContentSet {
             .map(|p| PackInfo {
                 manifest: p.manifest.clone(),
                 hash: p.hash.clone(),
+                scripts: p.scripts.clone(),
             })
             .collect();
         Ok(ContentSet {
@@ -311,6 +324,22 @@ impl ContentSet {
             .collect()
     }
 
+    /// The packs that have scripts, in load order: what the script host runs.
+    pub fn script_packs(&self) -> Vec<ScriptPack<'_>> {
+        self.packs
+            .iter()
+            .filter(|p| p.manifest.entry.is_some() && !p.scripts.is_empty())
+            .map(|p| ScriptPack {
+                id: p.manifest.id.as_str(),
+                version: p.manifest.version.to_string(),
+                hash: &p.hash,
+                capabilities: p.manifest.capabilities.iter().map(|c| c.name()).collect(),
+                entry: p.manifest.entry.as_deref().unwrap_or_default(),
+                sources: &p.scripts,
+            })
+            .collect()
+    }
+
     /// Non-fatal findings from loading and building.
     pub fn warnings(&self) -> &ValidationReport {
         &self.warnings
@@ -353,6 +382,9 @@ mod tests {
 
     fn pack(manifest: &str, templates: &[&str]) -> LoadedPack {
         let mut p = MemoryPack::new().with("pack.json", manifest);
+        if manifest.contains("scripts/main.luau") {
+            p = p.with("scripts/main.luau", "-- empty");
+        }
         for (i, t) in templates.iter().enumerate() {
             p = p.with(&format!("data/templates/t{i}.json"), t);
         }
@@ -551,7 +583,7 @@ mod tests {
     #[test]
     fn warnings_are_kept_on_success() {
         let p = pack(
-            r#"{"id":"base","name":"B","version":"1","entry":"main.luau"}"#,
+            r#"{"id":"base","name":"B","version":"1","entry":"scripts/main.luau"}"#,
             &[r#"{"id":"base.object","schema":1}"#],
         );
         let set = build(vec![p]).unwrap();

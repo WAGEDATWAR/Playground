@@ -113,6 +113,24 @@ impl EventCatalog {
             &[("command", maybe_text(64)), ("reason", text(400))],
         );
         add(
+            "script.error",
+            Pack,
+            true,
+            "A pack's script failed; the call was discarded.",
+            &[
+                ("pack", text(64)),
+                ("point", text(96)),
+                ("message", text(400)),
+            ],
+        );
+        add(
+            "script.quarantined",
+            Pack,
+            true,
+            "A pack was switched off for the session after repeated script errors.",
+            &[("pack", text(64)), ("reason", text(200))],
+        );
+        add(
             "setting_changed",
             Input,
             true,

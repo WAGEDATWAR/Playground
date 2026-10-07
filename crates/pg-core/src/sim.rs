@@ -90,6 +90,11 @@ impl Sim {
         self.services.exec = exec;
     }
 
+    /// Installs the host that answers pack hooks (the script host).
+    pub fn set_hooks(&mut self, hooks: Option<Box<dyn crate::hooks::HookHost>>) {
+        self.services.hooks = hooks;
+    }
+
     /// `(hits, misses)` of the path cache.
     pub fn path_cache_stats(&self) -> (u64, u64) {
         self.services.paths.stats()

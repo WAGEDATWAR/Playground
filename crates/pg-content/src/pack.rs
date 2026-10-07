@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 
 pub const MANIFEST_FILE: &str = "pack.json";
 pub const TEMPLATE_DIR: &str = "data/templates/";
+pub const SCRIPT_DIR: &str = "scripts/";
 
 /// Resource limits for one pack.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -192,6 +193,8 @@ pub struct LoadedPack {
     pub templates: Vec<ObjectTemplate>,
     /// String tables by locale (`data/strings/<locale>.json`).
     pub strings: BTreeMap<String, crate::strings::Table>,
+    /// Script sources by pack path (`scripts/**/*.luau`). Source text only: bytecode is never loaded.
+    pub scripts: BTreeMap<String, String>,
     /// Hex BLAKE3 over every file's path and bytes (see [`hash_files`]).
     pub hash: String,
     pub file_count: usize,
@@ -354,6 +357,35 @@ pub fn load_pack(source: &dyn PackFiles, limits: &Limits) -> Result<LoadedPack, 
         }
     }
 
+    // Scripts: source text only, UTF-8, and the manifest's entry script must exist.
+    let mut scripts = BTreeMap::new();
+    for (path, bytes) in &files {
+        if !(path.starts_with(SCRIPT_DIR) && path.ends_with(".luau")) {
+            continue;
+        }
+        match std::str::from_utf8(bytes) {
+            Ok(text) => {
+                scripts.insert(path.clone(), text.to_owned());
+            }
+            Err(e) => report.error(
+                "bad_encoding",
+                path.clone(),
+                format!("script is not valid UTF-8 (at byte {})", e.valid_up_to()),
+            ),
+        }
+    }
+    if let Some(m) = &manifest {
+        if let Some(entry) = &m.entry {
+            if !scripts.contains_key(entry) {
+                report.error(
+                    "missing_entry",
+                    entry.clone(),
+                    "the manifest's entry script is not in the pack",
+                );
+            }
+        }
+    }
+
     if !report.is_ok() {
         return Err(report);
     }
@@ -364,6 +396,7 @@ pub fn load_pack(source: &dyn PackFiles, limits: &Limits) -> Result<LoadedPack, 
         manifest,
         templates,
         strings,
+        scripts,
         hash: hash_files(&files),
         file_count: files.len(),
         total_bytes: total,
@@ -537,8 +570,9 @@ mod tests {
         let p = MemoryPack::new()
             .with(
                 "pack.json",
-                r#"{"id":"x","name":"X","version":"1","entry":"main.luau"}"#,
+                r#"{"id":"x","name":"X","version":"1","entry":"scripts/main.luau"}"#,
             )
+            .with("scripts/main.luau", "-- empty")
             .with("data/templates/a.json", ROOT);
         let lp = load(&p).unwrap();
         assert!(lp.warnings.has_code("script_without_capabilities"));
