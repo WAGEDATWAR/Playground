@@ -4,9 +4,9 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Phase 0 / Milestone 0.8 — implemented, awaiting CI.** Accepted and tagged: `m0.0`..`m0.7`. 0.8 delivered: settings registry, string tables, event catalog, row-level hashes (replay v4), runtime (worker pool, run states, accumulator, autosave, keyframes/rewind, shadow verification, panic guard with automatic bundle, snapshot publisher, sim thread), manifest summaries, tick profiler, dev-tool registry, `pg run|profile|tools|events|settings|strings`, GUI stack compile-only. 585 tests; `pg check` 18/18. Decisions D-030. No mandatory checkpoint after 0.8; next checkpoint is after 0.9 (ScriptVm spike).
+**Milestone 0.9 (ScriptVm spike) in progress.** `m0.8` accepted and tagged. Done and committed (part 1): `pg-api` (surface, hook points, generators, shared hints), `ScriptVm` boundary, Luau implementation over `mlua`, sandbox prelude, 39-test hostile-pack corpus. Findings so far (for `docs/spikes/scriptvm.md`, D-031): Luau fast-calls builtins and lowers `pairs` so removed/replaced globals must also be disabled via compiler options; the pattern matcher is fuel-interruptible so no string caps are needed; mlua Integer is i64 so range checks apply; bare `for k,v in t` iteration is not interceptable (lint). Fuel for the pinned script is 145 (needs Linux/macOS CI confirmation).
 
-Docs are current: Blueprint v2.7, Roadmap v4.5, Design Document v3.2.
+Remaining for 0.9: core `ext` storage (hashed only when non-empty), `Command::AttachComponent`, hook host in `Services` + `movement.speed_modifier` hook, `ScriptHost`/`ScriptSystem` with quarantine state in the world, pack loader reading `scripts/`, `SimFactory` script support and safe mode, test pack under golden replay plus VM-reload variant, `pg pack lint|test|docs`, `pg content schema`, three cookbook packs, boundary-cost benchmark (200 pawns), `docs/spikes/scriptvm.md` answering the 7 questions, CI check for no `luau-jit`, FP-contraction flags in `.cargo/config.toml`, docs and D-031. Dependency rule updated (pg-core -> pg-api, pg-content -> pg-api, pg-script -> pg-content).
 
 ## Blocked / waiting on user
 
