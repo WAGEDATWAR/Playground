@@ -6,15 +6,21 @@
 //! 4. On a day boundary, record the state hash.
 //! 5. Return a [`TickReport`].
 //!
-//! `Sim` owns no clock and no randomness source; the runtime decides when to call `step()`.
+//! `Sim` owns no clock and no randomness source; the runtime decides when to call `step()`. It also owns
+//! the derived services systems use (the path cache and the batch executor) and, optionally, the loaded
+//! content that commands such as object spawning need.
 
 use crate::canon::{Canon, ToCanon};
+use crate::commands;
 use crate::dev;
 use crate::hash::{combine_table_hashes, StateHash};
-use crate::input::{Command, InputQueue, SettingChange, SimInput, StampedInput, SubmitError};
-use crate::pipeline::{Event, Pipeline, TickReport};
+use crate::input::{InputQueue, SettingChange, SimInput, StampedInput, SubmitError};
+use crate::path::BatchExecutor;
+use crate::pipeline::{Event, Pipeline, Services, TickReport};
 use crate::time::{flags_for, ClockOverflow, SlotMinutes};
 use crate::world::WorldState;
+use pg_content::ContentSet;
+use std::sync::Arc;
 
 /// The hash recorded when a day boundary was crossed.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,6 +50,8 @@ pub struct Sim {
     applied: Vec<StampedInput>,
     day_hashes: Vec<DayHash>,
     trace: bool,
+    services: Services,
+    content: Option<Arc<ContentSet>>,
 }
 
 impl Sim {
@@ -55,6 +63,8 @@ impl Sim {
             applied: Vec::new(),
             day_hashes: Vec::new(),
             trace: false,
+            services: Services::new(),
+            content: None,
         }
     }
 
@@ -63,6 +73,26 @@ impl Sim {
         let mut pipeline = Pipeline::new();
         dev::install(&mut pipeline);
         Sim::new(world, pipeline)
+    }
+
+    /// Gives the sim loaded content (needed by commands that create objects).
+    pub fn with_content(mut self, content: Arc<ContentSet>) -> Sim {
+        self.content = Some(content);
+        self
+    }
+
+    pub fn content(&self) -> Option<&Arc<ContentSet>> {
+        self.content.as_ref()
+    }
+
+    /// Chooses how path batches are solved. Results never depend on this choice, only speed does.
+    pub fn set_executor(&mut self, exec: Box<dyn BatchExecutor>) {
+        self.services.exec = exec;
+    }
+
+    /// `(hits, misses)` of the path cache.
+    pub fn path_cache_stats(&self) -> (u64, u64) {
+        self.services.paths.stats()
     }
 
     /// Records the ids of the systems that ran in each `TickReport`.
@@ -109,8 +139,11 @@ impl Sim {
     }
 
     /// Resumes from a snapshot with the given pipeline (which must be configured like the original).
+    /// Derived state (occupancy, caches) is rebuilt.
     pub fn restore(snapshot: SimSnapshot, pipeline: Pipeline) -> Sim {
-        let mut sim = Sim::new(snapshot.world, pipeline);
+        let mut world = snapshot.world;
+        world.rebuild_derived();
+        let mut sim = Sim::new(world, pipeline);
         sim.queue = InputQueue::restore(snapshot.next_seq, snapshot.pending);
         sim
     }
@@ -121,8 +154,9 @@ impl Sim {
         let now = self.world.clock.tick();
         let due = self.queue.drain_for(now);
         let mut events = Vec::new();
+        let content = self.content.clone();
         for stamped in &due {
-            apply_input(&mut self.world, stamped, &mut events);
+            apply_input(&mut self.world, content.as_deref(), stamped, &mut events);
         }
         self.applied.extend(due.iter().cloned());
 
@@ -134,8 +168,13 @@ impl Sim {
         let mut report = TickReport::new(flags);
         report.inputs_applied = u32::try_from(due.len()).unwrap_or(u32::MAX);
         report.events = events;
-        self.pipeline
-            .run(&mut self.world, &flags, &mut report, self.trace);
+        self.pipeline.run(
+            &mut self.world,
+            &flags,
+            &mut report,
+            &mut self.services,
+            self.trace,
+        );
 
         // 4. Day boundary: record the state hash.
         if flags.new_day {
@@ -161,7 +200,12 @@ impl Sim {
     }
 }
 
-fn apply_input(world: &mut WorldState, stamped: &StampedInput, events: &mut Vec<Event>) {
+fn apply_input(
+    world: &mut WorldState,
+    content: Option<&ContentSet>,
+    stamped: &StampedInput,
+    events: &mut Vec<Event>,
+) {
     let tick = stamped.tick;
     match &stamped.input {
         SimInput::SettingChange(SettingChange::SlotMinutes(m)) => match SlotMinutes::new(*m) {
@@ -178,17 +222,7 @@ fn apply_input(world: &mut WorldState, stamped: &StampedInput, events: &mut Vec<
             }
             Err(e) => events.push(rejected(tick, &e.to_string())),
         },
-        SimInput::Command {
-            cmd: Command::DevNudge { amount },
-            ..
-        } => {
-            world.probe.value = world.probe.value.saturating_add(i64::from(*amount));
-            events.push(Event {
-                tick,
-                kind: "dev.nudged".into(),
-                detail: Canon::map([("amount", amount.to_canon())]),
-            });
-        }
+        SimInput::Command { cmd, .. } => commands::apply(world, content, tick, cmd, events),
     }
 }
 
@@ -204,6 +238,7 @@ fn rejected(tick: u64, reason: &str) -> Event {
 mod tests {
     use super::*;
     use crate::id::{EntityId, Kind};
+    use crate::input::Command;
     use crate::time::TICKS_PER_DAY;
     use proptest::prelude::*;
 

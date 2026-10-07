@@ -9,11 +9,19 @@
 )]
 
 pub use pg_canon as canon;
+pub mod commands;
+pub mod containment;
 pub mod dev;
 pub mod hash;
 pub mod id;
 pub mod input;
+pub mod map;
+pub mod movement;
 pub mod num;
+pub mod object;
+pub mod occupancy;
+pub mod path;
+pub mod pawn;
 pub mod pipeline;
 pub mod replay;
 pub mod rng;

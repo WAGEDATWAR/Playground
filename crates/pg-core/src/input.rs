@@ -12,13 +12,7 @@ use crate::id::EntityId;
 use std::collections::BTreeMap;
 use std::fmt;
 
-/// Gameplay commands (UI → core). Grows with the milestones; non-exhaustive on purpose.
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum Command {
-    /// **Dev scaffolding:** adds `amount` to the dev probe value. Developer tool only.
-    DevNudge { amount: i32 },
-}
+pub use crate::commands::Command;
 
 /// A change to a world setting. Validated when applied; an invalid value is rejected, never clamped.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -146,38 +140,6 @@ impl InputQueue {
 
     pub fn is_empty(&self) -> bool {
         self.pending.is_empty()
-    }
-}
-
-impl ToCanon for Command {
-    fn to_canon(&self) -> Canon {
-        match self {
-            Command::DevNudge { amount } => Canon::map([
-                ("type", Canon::str("dev_nudge")),
-                ("amount", amount.to_canon()),
-            ]),
-        }
-    }
-}
-
-impl Command {
-    pub fn from_canon(c: &Canon) -> Result<Command, CanonError> {
-        let ty = c
-            .field("type")?
-            .as_str()
-            .ok_or_else(|| CanonError::new("command type must be text"))?;
-        match ty {
-            "dev_nudge" => {
-                let amount = c
-                    .field("amount")?
-                    .as_i64()
-                    .and_then(|v| i32::try_from(v).ok());
-                Ok(Command::DevNudge {
-                    amount: amount.ok_or_else(|| CanonError::new("bad dev_nudge amount"))?,
-                })
-            }
-            other => Err(CanonError(format!("unknown command type '{other}'"))),
-        }
     }
 }
 

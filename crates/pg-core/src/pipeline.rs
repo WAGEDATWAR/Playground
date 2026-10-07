@@ -8,6 +8,9 @@
 use crate::canon::Canon;
 use crate::hash::StateHash;
 use crate::id::EntityId;
+use crate::map::MoveCosts;
+use crate::movement::MovementSystem;
+use crate::path::{BatchExecutor, PathCache, SerialExecutor};
 use crate::time::TimeFlags;
 use crate::world::WorldState;
 use std::collections::BTreeSet;
@@ -141,10 +144,35 @@ pub struct TickReport {
     pub ran: Vec<String>,
 }
 
+/// Derived, shared services for systems: how to solve path batches, the path cache and the movement cost
+/// table. None of it is saved or hashed, and none of it can change a result, only how fast it is computed.
+pub struct Services {
+    pub exec: Box<dyn BatchExecutor>,
+    pub paths: PathCache,
+    pub costs: MoveCosts,
+}
+
+impl Services {
+    pub fn new() -> Services {
+        Services {
+            exec: Box::new(SerialExecutor),
+            paths: PathCache::default(),
+            costs: MoveCosts::default(),
+        }
+    }
+}
+
+impl Default for Services {
+    fn default() -> Self {
+        Services::new()
+    }
+}
+
 /// What a system sees and can report while running.
 pub struct TickCtx<'a> {
     pub world: &'a mut WorldState,
     pub flags: &'a TimeFlags,
+    pub services: &'a mut Services,
     report: &'a mut TickReport,
 }
 
@@ -153,10 +181,12 @@ impl<'a> TickCtx<'a> {
         world: &'a mut WorldState,
         flags: &'a TimeFlags,
         report: &'a mut TickReport,
+        services: &'a mut Services,
     ) -> Self {
         TickCtx {
             world,
             flags,
+            services,
             report,
         }
     }
@@ -243,7 +273,11 @@ impl Pipeline {
                 placement: None,
                 seq: 0,
                 cadence: slot.cadence(),
-                system: Box::new(NoOp(slot.name())),
+                system: if slot == SystemSlot::Movement {
+                    Box::new(MovementSystem)
+                } else {
+                    Box::new(NoOp(slot.name()))
+                },
             })
             .collect();
         let mut p = Pipeline {
@@ -343,6 +377,7 @@ impl Pipeline {
         world: &mut WorldState,
         flags: &TimeFlags,
         report: &mut TickReport,
+        services: &mut Services,
         trace: bool,
     ) {
         let order = self.order.clone();
@@ -354,7 +389,7 @@ impl Pipeline {
                 if trace {
                     report.ran.push(entry.system.id().to_owned());
                 }
-                let mut ctx = TickCtx::new(world, flags, report);
+                let mut ctx = TickCtx::new(world, flags, report, services);
                 entry.system.run(&mut ctx);
             }
         }
@@ -406,7 +441,7 @@ mod tests {
         let flags = flags_for(tick, SlotMinutes::DEFAULT);
         let mut world = WorldState::new("t", "s");
         let mut report = TickReport::new(flags);
-        p.run(&mut world, &flags, &mut report, true);
+        p.run(&mut world, &flags, &mut report, &mut Services::new(), true);
         report
     }
 
