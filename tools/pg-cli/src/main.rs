@@ -1,15 +1,15 @@
 //! `pg`: headless developer tooling (Blueprint §20). Developer-only; never part of the shipped game.
 //!
-//! Commands so far: `selftest`, `rand`, `hash`, `id` (0.1); `sim`, `replay`, `time`, `pipeline` (0.2).
-//! Later milestones add `content`, `schedule`, `save`, `pack`, `bench`.
+//! Commands so far: `selftest`, `rand`, `hash`, `id` (0.1); `sim`, `replay`, `time`, `pipeline` (0.2);
+//! `content` (0.3). Later milestones add `schedule`, `save`, `pack`, `bench`.
 
-use pg_core::canon::Canon;
 use pg_core::hash::hash_canon;
 use pg_core::id::{EntityId, Kind};
 use pg_core::rng::{Key, Rng, Seed};
 use pg_core::vectors;
 use std::process::ExitCode;
 
+mod content_cmds;
 mod sim_cmds;
 
 const USAGE: &str = "\
@@ -32,6 +32,11 @@ USAGE:
         snapshotting at that tick and resuming gives an identical result. Exit 1 on any mismatch.
     pg time <tick> [--slot-minutes <m>]    Show day / clock time / slot / boundary flags for a tick.
     pg pipeline               Show the tick pipeline: systems in execution order and their cadence.
+    pg content lint [pack-dir...]         Load and validate packs (default: data/base). Exit 1 on errors.
+    pg content list [pack-dir...]         List every resolved template: pack, chain depth, tags, components.
+    pg content resolve <id> [pack-dir...] Show a template's inheritance chain, which template sets each
+                                          component, and the fully resolved result.
+    pg content components                 List the registered components and their parameter schemas.
     pg id <text>              Parse an id such as pawn_1a and show its parts.
     pg id <kind> <counter>    Format an id from a kind and a decimal counter.
     pg version
@@ -44,6 +49,7 @@ fn main() -> ExitCode {
         Some("rand") => rand_cmd(&args[1..]),
         Some("hash") => hash_cmd(&args[1..]),
         Some("id") => id_cmd(&args[1..]),
+        Some("content") => content_cmds::content_cmd(&args[1..]),
         Some("sim") => sim_cmds::sim_cmd(&args[1..]),
         Some("replay") => sim_cmds::replay_cmd(&args[1..]),
         Some("time") => sim_cmds::time_cmd(&args[1..]),
@@ -200,42 +206,13 @@ fn rand_cmd(args: &[String]) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// Converts parsed JSON to a canonical value, rejecting anything that is not integer-only.
-pub(crate) fn json_to_canon(v: &serde_json::Value) -> Result<Canon, String> {
-    use serde_json::Value;
-    Ok(match v {
-        Value::Null => Canon::Null,
-        Value::Bool(b) => Canon::Bool(*b),
-        Value::Number(n) => match (n.as_i64(), n.as_u64()) {
-            (Some(i), _) => Canon::Int(i128::from(i)),
-            (None, Some(u)) => Canon::Int(i128::from(u)),
-            _ => {
-                return Err(format!(
-                    "non-integer number {n}: authoritative data is integers only"
-                ))
-            }
-        },
-        Value::String(s) => Canon::Str(s.clone()),
-        Value::Array(items) => {
-            Canon::List(items.iter().map(json_to_canon).collect::<Result<_, _>>()?)
-        }
-        Value::Object(map) => Canon::Map(
-            map.iter()
-                .map(|(k, v)| Ok((k.clone(), json_to_canon(v)?)))
-                .collect::<Result<_, String>>()?,
-        ),
-    })
-}
-
 fn hash_cmd(args: &[String]) -> Result<ExitCode, String> {
     let path = args
         .first()
         .ok_or_else(|| format!("hash needs <file.json>\n\n{USAGE}"))?;
     let show = args.iter().skip(1).any(|a| a == "--show");
     let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"))?;
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("{path}: invalid JSON: {e}"))?;
-    let canon = json_to_canon(&json).map_err(|e| format!("{path}: {e}"))?;
+    let canon = pg_core::canon::json::parse(&text).map_err(|e| format!("{path}: {e}"))?;
     if show {
         println!("{}", canon.to_canonical_string());
     }
@@ -285,31 +262,28 @@ mod tests {
     }
 
     #[test]
-    fn json_conversion_accepts_integers_and_rejects_floats() {
-        let ok: serde_json::Value =
-            serde_json::from_str(r#"{"b":[1,-2,true,null],"a":"x"}"#).unwrap();
+    fn the_strict_parser_accepts_integers_and_rejects_floats_and_duplicate_keys() {
+        use pg_core::canon::json::parse;
         assert_eq!(
-            json_to_canon(&ok).unwrap().to_canonical_string(),
+            parse(r#"{"b":[1,-2,true,null],"a":"x"}"#)
+                .unwrap()
+                .to_canonical_string(),
             r#"{"a":"x","b":[1,-2,true,null]}"#
         );
-        let big: serde_json::Value = serde_json::from_str("18446744073709551615").unwrap();
         assert_eq!(
-            json_to_canon(&big).unwrap().to_canonical_string(),
+            parse("18446744073709551615").unwrap().to_canonical_string(),
             "18446744073709551615"
         );
-        for bad in ["1.5", "1e3", r#"{"x":[0.1]}"#] {
-            let v: serde_json::Value = serde_json::from_str(bad).unwrap();
-            assert!(json_to_canon(&v).is_err(), "{bad}");
+        for bad in ["1.5", "1e3", r#"{"x":[0.1]}"#, r#"{"a":1,"a":2}"#] {
+            assert!(parse(bad).is_err(), "{bad}");
         }
     }
 
     #[test]
     fn json_key_order_does_not_change_the_hash() {
-        let a: serde_json::Value = serde_json::from_str(r#"{"x":1,"y":2}"#).unwrap();
-        let b: serde_json::Value = serde_json::from_str(r#"{ "y": 2, "x": 1 }"#).unwrap();
-        assert_eq!(
-            hash_canon(&json_to_canon(&a).unwrap()),
-            hash_canon(&json_to_canon(&b).unwrap())
-        );
+        use pg_core::canon::json::parse;
+        let a = parse(r#"{"x":1,"y":2}"#).unwrap();
+        let b = parse(r#"{ "y": 2, "x": 1 }"#).unwrap();
+        assert_eq!(hash_canon(&a), hash_canon(&b));
     }
 }

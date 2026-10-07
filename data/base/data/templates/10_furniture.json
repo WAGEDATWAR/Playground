@@ -1,0 +1,46 @@
+[
+  {
+    "id": "furniture.chair", "schema": 1, "extends": "base.furniture",
+    "components": {
+      "value": { "base": 25 },
+      "interaction": { "points": [ { "name": "sit" } ] },
+      "needs_restore": { "effects": [ { "need": "energy", "per_minute": 2 } ] }
+    }
+  },
+  {
+    "id": "furniture.bench", "schema": 1, "extends": "base.furniture", "tags": ["gathering"],
+    "components": {
+      "value": { "base": 60 },
+      "physical": { "width": 2 },
+      "interaction": { "points": [ { "name": "sit", "slots": 2 }, { "name": "talk_here", "dy": 1, "slots": 2 } ] },
+      "needs_restore": { "effects": [ { "need": "energy", "per_minute": 2 } ] }
+    }
+  },
+  {
+    "id": "furniture.bed", "schema": 1, "extends": "base.furniture",
+    "components": {
+      "value": { "base": 200 },
+      "physical": { "width": 1, "height": 2 },
+      "interaction": { "points": [ { "name": "sleep", "slots": 1 } ] },
+      "needs_restore": { "effects": [ { "need": "energy", "per_minute": 12 } ] }
+    }
+  },
+  {
+    "id": "furniture.table", "schema": 1, "extends": "base.furniture",
+    "components": {
+      "value": { "base": 80 },
+      "physical": { "width": 2 },
+      "interaction": { "points": [ { "name": "eat", "dy": 1, "slots": 2 } ] }
+    }
+  },
+  {
+    "id": "furniture.drawer", "schema": 1, "extends": "base.furniture",
+    "components": {
+      "value": { "base": 40 },
+      "interaction": { "points": [ { "name": "open", "dy": 1 } ] }
+    },
+    "containers": [
+      { "id": "contents", "capacity": 8, "accepts": { "tags": ["item"], "exclude_tags": ["furniture"] } }
+    ]
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "id": "item.sandwich", "schema": 1, "extends": "base.item", "tags": ["food"],
+    "components": {
+      "value": { "base": 6 },
+      "needs_restore": { "effects": [ { "need": "hunger", "per_minute": 40 } ] }
+    }
+  },
+  {
+    "id": "item.coffee", "schema": 1, "extends": "base.item", "tags": ["food", "drink"],
+    "components": {
+      "value": { "base": 3 },
+      "needs_restore": { "effects": [ { "need": "energy", "per_minute": 8 } ] }
+    }
+  },
+  { "id": "item.book", "schema": 1, "extends": "base.item", "components": { "value": { "base": 12 } } }
+]

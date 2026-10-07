@@ -29,6 +29,8 @@ jobs:
       - run: cargo test --workspace
       # Determinism: the pinned vectors must come out identical on every OS (Blueprint §18.3).
       - run: cargo run -q -p pg-cli -- selftest
+      # The shipped base content pack must load, validate and resolve on every OS.
+      - run: cargo run -q -p pg-cli -- content lint
       # Golden replay: the recorded day hashes must reproduce on every OS, and a mid-run
       # snapshot/resume must match the uninterrupted run (Blueprint §18.3).
       - run: cargo run -q -p pg-cli -- replay golden/dev-3days.json --snapshot-at 12345

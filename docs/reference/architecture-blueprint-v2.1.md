@@ -1,8 +1,10 @@
-# Playground — Architecture Blueprint v2.0
+# Playground — Architecture Blueprint v2.1
 
 **Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.0 and Roadmap v4.0. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). It is a spec, not final source; names and signatures may shift during implementation, but the contracts and invariants may not. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
 
 **What changed from v1.0:** the platform-agnostic PAL, web/mobile shells, hosted AI gateway and touch input are removed. The project is one native binary with a thin host-services layer, a dedicated simulation thread, a worker pool, and an embedded Luau VM per content pack. The TypeScript reference notation is replaced by Rust. A new §23 defines the modding API objectives and implementation; extension points are cross-referenced from §4, §6, §8, §12, §13, §17, §18, §20 and §21.
+
+**v2.1 (during Phase 0):** added the `pg-canon` crate (§1, §2). The canonical value type and serialization moved out of `pg-core` into a dependency-free crate because `pg-content` needs them and `pg-core` depends on `pg-content`. It also holds a strict, integer-only JSON parser (rejects floats, duplicate keys, lone surrogates and over-deep nesting) used for content packs and replay logs. See `docs/DECISIONS.md` D-010, D-011.
 
 ## 0. Architectural principles
 
@@ -57,7 +59,7 @@
 **Hand-offs.** The sim thread publishes `RenderSnapshot`s into a lock-free triple buffer (the last two ticks, for interpolation). The UI thread sends `Command`s over a single-producer queue; the runtime stamps each with its application tick and records it (§5.3).
 
 **Dependency rule (enforced by CI via `cargo` metadata checks):**
-`pg-app → pg-runtime → {pg-core, pg-content, pg-script, pg-persist, pg-ai, pg-worldgen, pg-ui-model} → pg-host`. `pg-script → {pg-core, pg-api}`. `pg-core` may import only `pg-content` types and `pg-host` *types* it never calls, and it defines the `ScriptHost` trait that `pg-script` implements (dependency inversion), so the core never links the VM. Nothing imports `pg-app`. `pg-core` is `#![forbid(unsafe_code)]`.
+`pg-app → pg-runtime → {pg-core, pg-content, pg-script, pg-persist, pg-ai, pg-worldgen, pg-ui-model} → pg-host`. `pg-script → {pg-core, pg-api}`. `pg-canon` (dependency-free) sits below everything: `pg-content → pg-canon` and `pg-core → pg-canon`. `pg-core` may import only `pg-content` types and `pg-host` *types* it never calls, and it defines the `ScriptHost` trait that `pg-script` implements (dependency inversion), so the core never links the VM. Nothing imports `pg-app`. `pg-core` is `#![forbid(unsafe_code)]`.
 
 ## 2. Workspace layout
 
@@ -68,6 +70,8 @@ playground/
     pg-core/      time, rng, ids, tables, world, spatial, needs, mood, memory,
                   social, schedule, commitments, actions, events, conversation, ext (extension points),
                   [later] economy, property, lifecycle, psychology, services, governance, proposals
+    pg-canon/     integer-only canonical values, canonical serialization, strict JSON parser;
+                  no dependencies; shared by pg-content and pg-core
     pg-api/       single source of truth for the scripting API: function and type specs, capabilities,
                   hook clamps, since/deprecated versions, docs (pure data; no VM)
     pg-content/   schemas, template resolver, validators, pack manifest + loader, built-in templates
@@ -170,6 +174,8 @@ struct ObjectTemplate {
 2. From root to leaf, merge `components` by name: objects deep-merge, arrays replace, `None` deletes the inherited component.
 3. Union `tags`. Validate each component against its registered component schema.
 4. Output a frozen `ResolvedTemplate` (`Arc`-shared, immutable).
+
+**Pack files and namespaces \[S0\]:** a pack's templates live in `data/templates/**/*.json` (each file one template or a list). Only the `base` pack may define ids outside its own namespace; every other pack's template ids must start with `<pack_id>.`. A template may extend only templates from its own pack or from a pack it (transitively) depends on. Every chain must end at `base.object`.
 
 Example chains: `base.object > base.item > base.furniture > furniture.drawer`; `base.object > base.creature > base.sapient > base.humanoid > creature.human`.
 

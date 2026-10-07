@@ -212,6 +212,10 @@ dependencies = [
 [[package]]
 name = "pg-content"
 version = "0.0.1"
+dependencies = [
+ "blake3",
+ "pg-canon",
+]
 
 [[package]]
 name = "pg-core"

@@ -229,9 +229,7 @@ pub fn replay_cmd(args: &[String]) -> Result<ExitCode, String> {
         i += 1;
     }
     let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"))?;
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("{path}: invalid JSON: {e}"))?;
-    let canon: Canon = crate::json_to_canon(&json).map_err(|e| format!("{path}: {e}"))?;
+    let canon: Canon = pg_core::canon::json::parse(&text).map_err(|e| format!("{path}: {e}"))?;
     let log = ReplayLog::from_canon(&canon).map_err(|e| format!("{path}: {e}"))?;
     println!(
         "{path}: world {:?} seed {:?}, {} ticks, {} input(s), {} day hash(es)",

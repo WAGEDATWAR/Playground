@@ -1,0 +1,29 @@
+[
+  { "id": "base.object", "schema": 1 },
+  {
+    "id": "base.item", "schema": 1, "extends": "base.object", "tags": ["item"],
+    "components": {
+      "physical": { "weight": 1 },
+      "value": { "base": 0 },
+      "appearance": {}
+    }
+  },
+  {
+    "id": "base.furniture", "schema": 1, "extends": "base.item", "tags": ["furniture"],
+    "components": {
+      "physical": { "weight": 50, "blocks_movement": true },
+      "durability": { "max": 1000, "decay_per_day": 1 }
+    }
+  },
+  {
+    "id": "base.creature", "schema": 1, "extends": "base.object", "tags": ["creature"],
+    "components": { "physical": { "blocks_movement": false } }
+  },
+  { "id": "base.sapient", "schema": 1, "extends": "base.creature", "tags": ["sapient"] },
+  {
+    "id": "base.humanoid", "schema": 1, "extends": "base.sapient", "tags": ["humanoid"],
+    "containers": [
+      { "id": "inventory", "capacity": 20, "accepts": { "tags": ["item"], "exclude_tags": ["furniture"] } }
+    ]
+  }
+]

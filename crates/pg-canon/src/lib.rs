@@ -57,6 +57,13 @@ impl Canon {
         }
     }
 
+    pub fn as_i128(&self) -> Option<i128> {
+        match self {
+            Canon::Int(v) => Some(*v),
+            _ => None,
+        }
+    }
+
     pub fn as_i64(&self) -> Option<i64> {
         match self {
             Canon::Int(v) => i64::try_from(*v).ok(),

@@ -1,0 +1,9 @@
+[
+  {
+    "id": "creature.human", "schema": 1, "extends": "base.humanoid",
+    "components": {
+      "appearance": { "sprite": "creature/human" },
+      "damage": { "max_health": 100 }
+    }
+  }
+]
