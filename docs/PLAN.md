@@ -4,7 +4,7 @@ Working plan for building Playground in Rust. The three documents in `docs/refer
 
 - `architecture-blueprint-v2.9.md` — how (crates, determinism, scripting, persistence)
 - `design-document-v3.2.md` — what and why (pillars, scope, modding boundaries)
-- `roadmap-v4.6.md` — when (stages, gates, decisions to confirm)
+- `roadmap-v4.7.md` — when (stages, gates, decisions to confirm)
 
 This plan turns them into an ordered build. It is a working document: status lives in `TODO.md`; ideas that go beyond the spec live in `SUGGESTIONS.md` (accepted ones are scheduled below and folded into the specs); deviations from the spec are recorded in `DECISIONS.md`.
 

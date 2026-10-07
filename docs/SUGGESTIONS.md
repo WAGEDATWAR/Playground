@@ -43,6 +43,9 @@ Ordering principle: do small, high-leverage tooling when the thing it observes i
 | S-034 | Real batch calls into scripts | **Stage 1**, only if the first real system profile warrants it | 0.9 measured 12 µs per call, 1.6% of the tick at 200 pawns |
 | S-035 | Luau type check in `pg pack lint` | evaluate with **Stage 11** editor support | Needs Luau's analyzer built or bundled |
 | S-036 | Script cost view in the overlay | **0.10** | The numbers exist already (fuel per call, profiler probe) |
+| S-037 | Native file dialogs | **Stage 1** (with the Mods screen and pack installation) | Replaces the 0.10 exports and imports folders |
+| S-038 | Accessibility output (AccessKit) | **Stage 1** enable and test; full screen-reader pass **Stage 11** | The widget tree already has names, roles and focus order |
+| S-039 | Living main-menu backdrop | **Stage 1** (presentation) | One small paused sim and the existing map view |
 | S-033 | Player2 extras (voice, NPC and game-data endpoints) | evaluate **Stage 4** (possession dialogue) and **Stage 11** (audio) | Not needed for text generation; recorded so the options are not forgotten |
 
 ## Process and tooling
@@ -107,7 +110,7 @@ Details:
 - **S-034 Real batch calls** · performance · accepted · `call_batch` currently loops over `call` (12.5 µs per entity). A batch entry point in the prelude could build the context once and enter Lua once per batch; worth doing only if a profile shows scripts above a few percent of the tick (0.9 spike measured 1.6% for 200 pawns).
 - **S-035 Luau type check in `pg pack lint`** · tooling · accepted · Run Luau's analyzer over scripts with the generated `pg.d.luau` so `--!strict` errors show up before load. Needs the analyzer built or bundled; evaluate with the Stage 11 editor-support work.
 - **S-036 Script cost view in the overlay** · tooling · accepted · Show fuel and time per pack, per system and per hook next to the tick profiler, so authors see which of their handlers is expensive (the numbers already exist: `fuel_used` and the profiler probe).
-- **S-037 Native file dialogs for import and export** · UX · proposed · Replace the exports and imports folders with the operating system's open and save dialogs (the `Dialogs` host trait already exists). Needs a dialog crate whose Linux backend does not require a GTK build; evaluate `rfd` with its portal backend.
-- **S-038 Accessibility output** · accessibility · proposed · Turn on egui's `accesskit` feature so screen readers see the widget tree (names, roles, focus order, the secret-field role). The tree already has everything needed; the work is enabling it and testing on the three platforms.
-- **S-039 A living main-menu backdrop** · polish · proposed · Run a tiny seeded town behind the main menu (paused after a few days, slowly panning) so the first screen already shows the game. Uses the same view; costs one small sim at launch.
+- **S-037 Native file dialogs for import and export** · UX · accepted · Replace the exports and imports folders with the operating system's open and save dialogs (the `Dialogs` host trait already exists). Needs a dialog crate whose Linux backend does not require a GTK build; evaluate `rfd` with its portal backend.
+- **S-038 Accessibility output** · accessibility · accepted · Turn on egui's `accesskit` feature so screen readers see the widget tree (names, roles, focus order, the secret-field role). The tree already has everything needed; the work is enabling it and testing on the three platforms.
+- **S-039 A living main-menu backdrop** · polish · accepted · Run a tiny seeded town behind the main menu (paused after a few days, slowly panning) so the first screen already shows the game. Uses the same view; costs one small sim at launch.
 

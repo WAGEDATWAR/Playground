@@ -1,9 +1,10 @@
 # Playground — Native Desktop Product & Build Roadmap
 
-**Version:** 4.6 · **Last updated:** 2026-10-08 **Basis:** Roadmap v4.5 (itself based on v4.0 and v3.0)
+**Version:** 4.7 · **Last updated:** 2026-10-08 **Basis:** Roadmap v4.6 (itself based on v4.0 and v3.0)
 
 ## 1. What changed from v3.0
 
+- **v4.7:** milestone 0.10 is accepted. Accepted suggestions S-037 to S-039 are scheduled in Stage 1 with the native renderer and UI work: native open and save dialogs replace the exports and imports folders (S-037), AccessKit output for screen readers is switched on (S-038; the full screen-reader pass stays a Stage 11 target) and the main menu gets a living town backdrop (S-039). No product decision or gate changed.
 - **v4.6:** milestone 0.9 is accepted. Accepted suggestions S-034 to S-036 are scheduled: the script cost view joins the 0.10 dev overlay (S-036); real batch calls into scripts are built at Stage 1 if the first real system profile shows scripts above a few percent of the tick (S-034); Luau type checking in `pg pack lint` is evaluated with the Stage 11 editor support (S-035). No product decision or gate changed.
 - **v4.5:** accepted suggestion S-033 is scheduled as two evaluation items: optional Player2 voice and NPC extras at Stage 4 (possession dialogue) and Stage 11 (audio). No product decision or gate changed.
 - **v4.4:** **Player2 is a fifth AI provider** (OpenAI-style web API, sign-in by device code instead of a pasted key, model chosen by the provider; Options flow, Stage 0). Nine accepted suggestions (S-022 to S-030) are scheduled: most of the runtime-facing ones land in milestone 0.8, their UI halves in 0.10 and the soak use in 0.11. A new open decision records the Player2 client id. No product decision or gate changed.
@@ -173,6 +174,7 @@ These replace the v3.0 neutrality rules.
 - [ ] Generator controls: seed, map size, terrain / water amount, population size. No district-mix controls yet.
 - [ ] New worlds default to Standard; Cozy / Standard / Mature per world; global graphic-content filter on by default and affecting both text and visuals.
 - [ ] Native renderer and UI: wgpu tile and sprite rendering, egui screens, keyboard and mouse input mapping, window modes, high-DPI handling.
+- [ ] **[DX] Native dialogs, accessibility output and menu backdrop (S-037, S-038, S-039):** the operating system's open and save dialogs for import, export and pack installation (replacing the 0.10 exports and imports folders); egui's AccessKit output enabled and tested on the three platforms (the widget tree already carries names, roles and focus order); a small paused seeded town behind the main menu.
 - [ ] **Base game shipped as a content pack** using the same format and API as player packs. **Modding API 0.1:** components, events (read), bounded hooks for needs, mood, memory and relationships.
 - [ ] Basic Mods screen: list, enable / disable, capability approval, errors, safe-mode launch.
 - [ ] **[DX] Script batching (S-034):** profile scripts with the first real systems (`pg pack bench`); if they use more than a few percent of the tick, add a batch entry point so a system's context is built once and Luau is entered once per batch (0.9 measured 12 µs per call and 1.6% of the tick for 200 pawns, so this is conditional).
