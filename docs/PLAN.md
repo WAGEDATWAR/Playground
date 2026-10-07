@@ -4,7 +4,7 @@ Working plan for building Playground in Rust. The three documents in `docs/refer
 
 - `architecture-blueprint-v2.7.md` — how (crates, determinism, scripting, persistence)
 - `design-document-v3.2.md` — what and why (pillars, scope, modding boundaries)
-- `roadmap-v4.4.md` — when (stages, gates, decisions to confirm)
+- `roadmap-v4.5.md` — when (stages, gates, decisions to confirm)
 
 This plan turns them into an ordered build. It is a working document: status lives in `TODO.md`; ideas that go beyond the spec live in `SUGGESTIONS.md` (accepted ones are scheduled below and folded into the specs); deviations from the spec are recorded in `DECISIONS.md`.
 
@@ -46,14 +46,14 @@ Each later phase follows Roadmap §7 stage items. Per stage I will produce a det
 | 1 | Stage 1 | Observation-first town: needs, mood, memory, conversations, worldgen v1, renderer + egui screens, base pack, API 0.1 | S-015 inheritance tree view; **S-018 pawn-aware routing;** evaluate S-016 template variants at the end; remove dev probe scaffolding (D-009); cookbook sample for hooks (S-020) |
 | 2 | Stage 2 | Free-time scheduler, commitments, API 0.2 (systems, actions) | cookbook sample for systems/actions (S-020) |
 | 3 | Stage 3 | Generator controls, editor, mutation API, API 0.3 (worldgen) | cookbook sample for worldgen (S-020) |
-| 4 | Stage 4 | Possession and player dialogue | — |
+| 4 | Stage 4 | Possession and player dialogue | evaluate **S-033** Player2 voice input and NPC extras |
 | 5 | Stage 5 | Custom pawn and roster | — |
 | 6 | Stage 6 | Interiors, jobs, economy, property | implement S-016 template variants once there are ≥ 50 templates |
 | 7 | Stage 7 | Relationships v2, personality, life cycle | — |
 | 8 | Stage 8 | Crime, injury, services, filter | — |
 | 9 | Stage 9 | Governance | — |
 | 10 | Stage 10 | LLM proposals | — |
-| 11 | Stage 11 | API 1.0, tooling, packaging, accessibility, performance | polish S-013 JSON Schema export, S-014 content diff, S-012 hints for scripts; S-020 cookbook gallery |
+| 11 | Stage 11 | API 1.0, tooling, packaging, accessibility, performance | polish S-013 JSON Schema export, S-014 content diff, S-012 hints for scripts; S-020 cookbook gallery; evaluate **S-033** Player2 text-to-speech via the Audio service |
 
 ## Standing conventions
 

@@ -1,9 +1,10 @@
 # Playground — Native Desktop Product & Build Roadmap
 
-**Version:** 4.4 · **Last updated:** 2026-10-07 **Basis:** Roadmap v4.3 (itself based on v4.0 and v3.0)
+**Version:** 4.5 · **Last updated:** 2026-10-07 **Basis:** Roadmap v4.4 (itself based on v4.0 and v3.0)
 
 ## 1. What changed from v3.0
 
+- **v4.5:** accepted suggestion S-033 is scheduled as two evaluation items: optional Player2 voice and NPC extras at Stage 4 (possession dialogue) and Stage 11 (audio). No product decision or gate changed.
 - **v4.4:** **Player2 is a fifth AI provider** (OpenAI-style web API, sign-in by device code instead of a pasted key, model chosen by the provider; Options flow, Stage 0). Nine accepted suggestions (S-022 to S-030) are scheduled: most of the runtime-facing ones land in milestone 0.8, their UI halves in 0.10 and the soak use in 0.11. A new open decision records the Player2 client id. No product decision or gate changed.
 - **v4.3:** Stage 0 now ends with a **launchable desktop app and graphical main menu** (new item and a new clause in "Done when"; gate 1 gains the same clause). The Stage 1 presentation work builds on that shell instead of creating it. No other product decision or gate changed.
 - **v4.2:** scheduled three more suggestions: path-search scratch buffers (0.8 profiling pass), pawn-aware routing (Stage 1) and compressed, trimmable replay logs (0.6). No product decision or gate changed.
@@ -215,6 +216,7 @@ These replace the v3.0 neutrality rules.
 - [ ] Optional AI dialogue via the configured provider; actions and relationship outcomes stay rule-based; fallback dialogue works with no key or network.
 - [ ] Overheard bubbles for the focused or possessed pawn, subject to hearing range.
 - [ ] Graphic-content filter stays global; tone preset stays per world.
+- [ ] **[DX] Evaluate Player2 extras (S-033):** optional spoken lines and voice input through Player2's speech endpoints for players who opt in; never part of simulation state, always behind the existing filter and capability settings, and dropped if it cannot be made deterministic-safe and optional.
 - [ ] Packs may add tones, topics and fallback dialogue as data; scripts can read the controller but cannot possess or issue player commands.
 
 **Done when:** possession, conversation, return-to-observation and fallback dialogue all work in a saved / reloaded town, and dialogue never changes game state directly.
@@ -316,6 +318,8 @@ These replace the v3.0 neutrality rules.
 - [ ] Accessibility and settings: rebindable controls, UI scale and text size, colorblind-safe palettes, window / resolution / vsync options, screen-reader support through AccessKit where feasible, visual / audio settings, onboarding, pause / resume, save recovery.
 - [ ] Packaging: portable archive, installers per OS, update instructions, optional opt-in update check, crash reports kept local and redacted.
 - [ ] No cloud sync or multiplayer. Monetization stays undecided / free until the core loop is validated.
+
+- [ ] **[DX] Evaluate and, if worthwhile, build Player2 audio extras (S-033):** text-to-speech for dialogue lines through the Audio service, opt-in, with clear credit usage and an off switch.
 
 **Done when:** a representative town runs and saves reliably on the minimum-spec desktop; worlds and packs validate on import; mod fixtures pass on every Tier 1 OS; API 1.0 documentation and tooling let an outside author build and test a pack without the source tree; a build installs and updates without a store account.
 
