@@ -18,7 +18,7 @@ ALLOWED = {
     "pg-api": set(),
     "pg-script": {"pg-core", "pg-api"},
     "pg-persist": {"pg-core", "pg-content", "pg-host"},
-    "pg-ai": {"pg-core", "pg-host"},
+    "pg-ai": {"pg-core", "pg-content", "pg-host"},
     "pg-worldgen": {"pg-core", "pg-content"},
     "pg-ui-model": {"pg-core"},
     "pg-runtime": {"pg-core", "pg-content", "pg-script", "pg-persist", "pg-ai",

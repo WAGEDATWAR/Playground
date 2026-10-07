@@ -6,8 +6,9 @@
 //! the store ever sees it again.
 
 use crate::provider::Provider;
+use pg_content::schema::{Field, FieldSchema};
+use pg_content::settings::{Scope, SettingsRegistry, SettingsValues};
 use pg_core::canon::{json, Canon};
-use pg_core::read::{ReadError, Reader, Root};
 use pg_host::{Level, LogSink, Secret, SecretError, SecretStore, Storage};
 use std::fmt;
 
@@ -104,7 +105,83 @@ impl fmt::Display for SettingsError {
 
 impl std::error::Error for SettingsError {}
 
-/// Settings stored per device (not per world). Only the AI section exists so far.
+/// Declares the AI settings in a registry (S-025).
+pub fn register_ai_settings(r: &mut SettingsRegistry) -> Result<(), String> {
+    r.register("ai.enabled", Field::boolean(false), Scope::Device, false)?;
+    let ids: Vec<&str> = Provider::ALL.iter().map(|p| p.id()).collect();
+    r.register(
+        "ai.provider",
+        Field::enumeration(&ids, "openai"),
+        Scope::Device,
+        false,
+    )?;
+    r.register(
+        "ai.custom_model",
+        Field::maybe(FieldSchema::Text {
+            max_len: MAX_MODEL_LEN,
+        }),
+        Scope::Device,
+        false,
+    )?;
+    r.add_rule("ai.custom_model", |v: &SettingsValues| {
+        let provider = v.text("ai.provider").and_then(Provider::from_id);
+        match v.text("ai.custom_model") {
+            None => Ok(()),
+            Some(m) => {
+                validate_model_id(m)?;
+                match provider {
+                    Some(p) if p.chooses_own_model() => {
+                        Err(format!("{p} chooses its own model; leave the model empty"))
+                    }
+                    _ => Ok(()),
+                }
+            }
+        }
+    });
+    Ok(())
+}
+
+/// A registry holding only the AI settings.
+pub fn ai_registry() -> SettingsRegistry {
+    let mut r = SettingsRegistry::new();
+    // The ids are fixed and distinct, so registration cannot fail.
+    let _ = register_ai_settings(&mut r);
+    r
+}
+
+impl AiSettings {
+    /// Reads the AI settings out of registry values.
+    pub fn from_values(v: &SettingsValues) -> AiSettings {
+        AiSettings {
+            enabled: v.bool("ai.enabled").unwrap_or(false),
+            provider: v
+                .text("ai.provider")
+                .and_then(Provider::from_id)
+                .unwrap_or(Provider::OpenAi),
+            custom_model: v.text("ai.custom_model").map(str::to_owned),
+        }
+    }
+
+    /// Writes these settings into `values` through the registry (so ranges and rules apply).
+    pub fn write_into(
+        &self,
+        r: &SettingsRegistry,
+        values: &mut SettingsValues,
+    ) -> Result<(), String> {
+        // Clear the model first so switching to a provider that takes none cannot trip the rule.
+        r.set(values, "ai.custom_model", Canon::Null)?;
+        r.set(values, "ai.provider", Canon::str(self.provider.id()))?;
+        r.set(values, "ai.enabled", Canon::Bool(self.enabled))?;
+        r.set(
+            values,
+            "ai.custom_model",
+            self.custom_model.clone().map_or(Canon::Null, Canon::Str),
+        )
+    }
+}
+
+/// Settings stored per device (not per world), as far as this crate knows them. The file may hold other
+/// sections (written by other parts of the app); loading ignores them and saving **keeps them untouched**.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DeviceSettings {
     pub ai: AiSettings,
@@ -112,57 +189,13 @@ pub struct DeviceSettings {
 
 impl DeviceSettings {
     pub fn to_canon(&self) -> Canon {
-        Canon::map([
-            ("version", Canon::Int(1)),
-            (
-                "ai",
-                Canon::map([
-                    ("enabled", Canon::Bool(self.ai.enabled)),
-                    ("provider", Canon::str(self.ai.provider.id())),
-                    (
-                        "custom_model",
-                        self.ai.custom_model.clone().map_or(Canon::Null, Canon::Str),
-                    ),
-                ]),
-            ),
-        ])
-    }
-
-    fn from_reader(r: Reader<'_>) -> Result<DeviceSettings, ReadError> {
-        // Top level is lenient (other sections arrive later and an older build must not choke on them);
-        // the AI section is strict so a typo is reported rather than ignored.
-        let ai = match r.maybe("ai")? {
-            None => return Ok(DeviceSettings::default()),
-            Some(a) => a,
-        };
-        let a = ai.reader();
-        a.only(&["enabled", "provider", "custom_model"])?;
-        let provider_child = a.child("provider")?;
-        let provider = Provider::from_id(provider_child.reader().str()?).ok_or_else(|| {
-            provider_child
-                .reader()
-                .err("unknown provider (openai, deepseek, anthropic, openrouter or player2)")
-        })?;
-        let custom_model = match a.maybe("custom_model")? {
-            Some(m) => {
-                let id = m.reader().str()?;
-                validate_model_id(id).map_err(|e| m.reader().err(e))?;
-                Some(id.to_owned())
-            }
-            None => None,
-        };
-        if provider.chooses_own_model() && custom_model.is_some() {
-            return Err(a.child("custom_model")?.reader().err(format!(
-                "{provider} chooses its own model; leave this empty"
-            )));
+        let r = ai_registry();
+        let mut v = r.defaults();
+        // Settings that fail the registry's rules cannot be built; fall back to the defaults.
+        if self.ai.write_into(&r, &mut v).is_err() {
+            v = r.defaults();
         }
-        Ok(DeviceSettings {
-            ai: AiSettings {
-                enabled: a.child("enabled")?.reader().bool()?,
-                provider,
-                custom_model,
-            },
-        })
+        r.to_canon(&v)
     }
 
     pub fn load(storage: &dyn Storage) -> Result<DeviceSettings, SettingsError> {
@@ -174,8 +207,21 @@ impl DeviceSettings {
         };
         let text =
             String::from_utf8(bytes).map_err(|_| SettingsError::Parse("not UTF-8".to_owned()))?;
-        let root = Root::new(json::parse(&text).map_err(|e| SettingsError::Parse(e.to_string()))?);
-        DeviceSettings::from_reader(root.reader()).map_err(|e| SettingsError::Parse(e.to_string()))
+        let doc = json::parse(&text).map_err(|e| SettingsError::Parse(e.to_string()))?;
+        let (values, report) = ai_registry().parse(&doc);
+        let first = report.errors().next().map(|e| {
+            if e.path.is_empty() {
+                e.message.clone()
+            } else {
+                format!("{}: {}", e.path, e.message)
+            }
+        });
+        match first {
+            Some(msg) => Err(SettingsError::Parse(msg)),
+            None => Ok(DeviceSettings {
+                ai: AiSettings::from_values(&values),
+            }),
+        }
     }
 
     /// Loads settings, falling back to defaults (and saying so in the log) if the file is damaged, so a bad
@@ -191,11 +237,26 @@ impl DeviceSettings {
     }
 
     pub fn save(&self, storage: &dyn Storage) -> Result<(), SettingsError> {
+        // Keep sections this crate does not own (a damaged or missing file simply starts fresh).
+        let mut doc = match storage.read(DEVICE_FILE) {
+            Ok(Some(bytes)) => String::from_utf8(bytes)
+                .ok()
+                .and_then(|t| json::parse(&t).ok())
+                .unwrap_or(Canon::Null),
+            _ => Canon::Null,
+        };
+        let mine = self.to_canon();
+        let merged = match (&mut doc, mine) {
+            (Canon::Map(existing), Canon::Map(new)) => {
+                for (k, v) in new {
+                    existing.insert(k, v);
+                }
+                doc
+            }
+            (_, new) => new,
+        };
         storage
-            .write_atomic(
-                DEVICE_FILE,
-                self.to_canon().to_canonical_string().as_bytes(),
-            )
+            .write_atomic(DEVICE_FILE, merged.to_canonical_string().as_bytes())
             .map_err(|e| SettingsError::Io(e.to_string()))
     }
 }
@@ -322,7 +383,6 @@ mod tests {
         let log = MemLog::new();
         for bad in [
             &b"{{{"[..],
-            br#"{"ai":{"enabled":true}}"#,
             br#"{"ai":{"enabled":true,"provider":"nobody","custom_model":null}}"#,
             br#"{"ai":{"enabled":true,"provider":"openai","custom_model":"bad model!"}}"#,
             br#"{"ai":{"enabled":"yes","provider":"openai","custom_model":null}}"#,
@@ -335,7 +395,7 @@ mod tests {
             assert!(DeviceSettings::load(&mem).is_err(), "{:?}", String::from_utf8_lossy(bad));
             assert_eq!(DeviceSettings::load_or_default(&mem, &log), DeviceSettings::default());
         }
-        assert_eq!(log.lines().len(), 8);
+        assert_eq!(log.lines().len(), 7);
         assert!(log.lines().iter().all(|(l, _)| *l == Level::Warn));
         // The stray key field is refused, and the refusal does not repeat the key.
         assert!(!log.text().contains("sk-12345678"));
@@ -365,5 +425,59 @@ mod tests {
         store.fail_with(Some(SecretError::Denied("locked".into())));
         assert!(k.set_key(Provider::OpenAi, "sk-abcdef123456").is_err());
         assert!(!k.has_key(Provider::OpenAi));
+    }
+
+    #[test]
+    fn missing_entries_take_their_defaults_and_saving_keeps_other_sections() {
+        let mem = MemStorage::new();
+        mem.put_raw(
+            DEVICE_FILE,
+            br#"{"version":1,"ui":{"scale_percent":150},"ai":{"enabled":true}}"#.to_vec(),
+        );
+        let s = DeviceSettings::load(&mem).unwrap();
+        assert!(s.ai.enabled && s.ai.provider == Provider::OpenAi && s.ai.custom_model.is_none());
+        let changed = DeviceSettings {
+            ai: AiSettings {
+                provider: Provider::DeepSeek,
+                ..s.ai
+            },
+        };
+        changed.save(&mem).unwrap();
+        let stored = String::from_utf8(mem.get_raw(DEVICE_FILE).unwrap()).unwrap();
+        assert!(stored.contains(r#""ui":{"scale_percent":150}"#), "{stored}");
+        assert_eq!(DeviceSettings::load(&mem).unwrap(), changed);
+    }
+
+    #[test]
+    fn the_registry_drives_the_ai_settings_and_enforces_the_model_rules() {
+        let r = ai_registry();
+        let mut v = r.defaults();
+        assert_eq!(AiSettings::from_values(&v), AiSettings::default());
+        r.set(&mut v, "ai.provider", Canon::str("player2")).unwrap();
+        assert!(
+            r.set(&mut v, "ai.custom_model", Canon::str("gpt-4o"))
+                .is_err(),
+            "player2 takes no model"
+        );
+        r.set(&mut v, "ai.provider", Canon::str("openai")).unwrap();
+        r.set(&mut v, "ai.custom_model", Canon::str("gpt-4o"))
+            .unwrap();
+        assert!(
+            r.set(&mut v, "ai.provider", Canon::str("player2")).is_err(),
+            "switching would strand the model"
+        );
+        assert!(r
+            .set(&mut v, "ai.custom_model", Canon::str("bad model!"))
+            .is_err());
+        assert!(r.set(&mut v, "ai.provider", Canon::str("nobody")).is_err());
+        // write_into clears the model first, so a settings object for Player2 always applies cleanly.
+        let p2 = AiSettings {
+            enabled: true,
+            provider: Provider::Player2,
+            custom_model: None,
+        };
+        p2.write_into(&r, &mut v).unwrap();
+        assert_eq!(AiSettings::from_values(&v), p2);
+        assert_eq!(r.iter().count(), 3);
     }
 }

@@ -50,6 +50,7 @@ pub struct ContentSet {
     origins: BTreeMap<TemplateId, PackId>,
     resolved: BTreeMap<TemplateId, Arc<ResolvedTemplate>>,
     registry: ComponentRegistry,
+    strings: crate::strings::Strings,
     warnings: ValidationReport,
 }
 
@@ -214,6 +215,25 @@ impl ContentSet {
             return Err(report);
         }
 
+        // Merge string tables in load order; a key defined twice is an error (first definition would win).
+        let mut strings = crate::strings::Strings::new();
+        for id in &order {
+            if let Some(p) = by_id.get(id) {
+                for (locale, table) in &p.strings {
+                    for key in strings.add(locale, table) {
+                        report.error(
+                            "duplicate_string",
+                            format!("{id}: {locale}.{key}"),
+                            "this string key is already defined by an earlier pack",
+                        );
+                    }
+                }
+            }
+        }
+        if !report.is_ok() {
+            return Err(report);
+        }
+
         let infos = order
             .iter()
             .filter_map(|id| by_id.get(id))
@@ -228,6 +248,7 @@ impl ContentSet {
             origins,
             resolved,
             registry,
+            strings,
             warnings: report,
         })
     }
@@ -258,6 +279,11 @@ impl ContentSet {
 
     pub fn is_empty(&self) -> bool {
         self.resolved.is_empty()
+    }
+
+    /// The merged string tables of every loaded pack.
+    pub fn strings(&self) -> &crate::strings::Strings {
+        &self.strings
     }
 
     pub fn registry(&self) -> &ComponentRegistry {

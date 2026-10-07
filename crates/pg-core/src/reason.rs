@@ -107,11 +107,37 @@ impl ReasonCode {
         self.params.get(name)
     }
 
-    /// A plain sentence, with the pack named when a pack made the decision.
+    /// A plain sentence in the built-in English, with the pack named when a pack made the decision.
     pub fn explain(&self) -> String {
-        let body = match TEMPLATES.iter().find(|(c, _)| *c == self.code) {
-            Some((_, template)) if self.source == Source::Builtin => {
-                let mut out = (*template).to_owned();
+        self.explain_with(&|code| {
+            TEMPLATES
+                .iter()
+                .find(|(c, _)| *c == code)
+                .map(|(_, t)| (*t).to_owned())
+        })
+    }
+
+    /// The sentence in `locale` from the content's string tables (falling back to English, then to the
+    /// built-in text).
+    pub fn explain_in(&self, strings: &pg_content::Strings, locale: &str) -> String {
+        self.explain_with(&|code| {
+            strings
+                .template(locale, &format!("reason.{code}"))
+                .or_else(|| {
+                    TEMPLATES
+                        .iter()
+                        .find(|(c, _)| *c == code)
+                        .map(|(_, t)| (*t).to_owned())
+                })
+        })
+    }
+
+    /// Like [`ReasonCode::explain`], with sentence templates supplied by `template_for(code)`, normally a
+    /// lookup of `reason.<code>` in the active string table (S-026).
+    pub fn explain_with(&self, template_for: &dyn Fn(&str) -> Option<String>) -> String {
+        let body = match template_for(&self.code) {
+            Some(template) if self.source == Source::Builtin => {
+                let mut out = template;
                 for (name, value) in &self.params {
                     out = out.replace(&format!("{{{name}}}"), &text_of(value));
                 }
@@ -334,5 +360,47 @@ mod tests {
             unused.is_empty(),
             "sentences with no code that uses them: {unused:?}"
         );
+    }
+
+    /// The base pack's English string table is the shipped copy of the sentence table; they must not drift.
+    #[test]
+    fn the_base_pack_english_strings_match_the_built_in_sentences() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/base/data/strings/en.json");
+        let value = crate::canon::json::parse(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let Canon::Map(file) = value else {
+            panic!("en.json is an object")
+        };
+        let built_in: BTreeMap<String, String> = TEMPLATES
+            .iter()
+            .map(|(c, t)| (format!("reason.{c}"), (*t).to_owned()))
+            .collect();
+        let shipped: BTreeMap<String, String> = file
+            .iter()
+            .filter(|(k, _)| k.starts_with("reason."))
+            .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_owned()))
+            .collect();
+        assert_eq!(shipped, built_in);
+    }
+
+    #[test]
+    fn sentences_come_from_the_active_string_table() {
+        let mut strings = pg_content::Strings::new();
+        let mut fr = BTreeMap::new();
+        fr.insert(
+            "reason.slots_open".to_owned(),
+            "{count} créneau(x) restent libres.".to_owned(),
+        );
+        strings.add("fr", &fr);
+        let r = ReasonCode::builtin("slots_open", [("count", Canon::Int(3))]);
+        assert_eq!(r.explain_in(&strings, "fr"), "3 créneau(x) restent libres.");
+        // A code the table lacks falls back to the built-in English.
+        assert_eq!(r.explain_in(&strings, "de"), "3 slot(s) were left open.");
+        // Pseudo needs English in the table; without it the built-in sentence still shows.
+        assert_eq!(
+            r.explain_in(&pg_content::Strings::new(), "pseudo"),
+            "3 slot(s) were left open."
+        );
+        assert_eq!(r.explain(), "3 slot(s) were left open.");
     }
 }

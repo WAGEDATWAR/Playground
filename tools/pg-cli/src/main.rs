@@ -18,8 +18,10 @@ mod content_cmds;
 mod map_cmds;
 mod persist_cmds;
 mod sched_cmds;
+mod settings_cmds;
 mod shared;
 mod sim_cmds;
+mod strings_cmds;
 
 const USAGE: &str = "\
 pg - Playground developer tool
@@ -85,6 +87,11 @@ USAGE:
     pg ai test [--provider P] [--model M] [--dry-run]
         Run the connection test, or with --dry-run print the exact request (credentials hidden) without sending it.
     pg ai selfcheck                         Run the AI client with a sentinel key and scan everything for leaks.
+    pg settings list | get <id> | set <id> <value> | reset <id> [--dir D]
+                                            The device settings registry: typed, ranged, validated (default dir ./pg-data).
+    pg strings lint [pack-dir...]           Check string tables: missing, orphaned and mismatched keys, unused sentences.
+    pg strings show <key> [--locale L] [--param name=value]...   Look up one string (pseudo locale supported).
+    pg strings pseudo <text>                Show the pseudo-locale rendering of a text.
     pg check [--verbose]                    Run the developer checks (vectors, content, golden replay, scenarios,
                                             saves, bundles, redaction) and print one PASS/FAIL report.
     pg time <tick> [--slot-minutes <m>]    Show day / clock time / slot / boundary flags for a tick.
@@ -115,6 +122,8 @@ fn main() -> ExitCode {
         Some("schedule") => sched_cmds::schedule_cmd(&args[1..]),
         Some("save") => persist_cmds::save_cmd(&args[1..]),
         Some("ai") => ai_cmds::ai_cmd(&args[1..]),
+        Some("strings") => strings_cmds::strings_cmd(&args[1..]),
+        Some("settings") => settings_cmds::settings_cmd(&args[1..]),
         Some("check") => check_cmds::check_cmd(&args[1..]),
         Some("bugbundle") => persist_cmds::bugbundle_cmd(&args[1..]),
         Some("scenario") => persist_cmds::scenario_cmd(&args[1..]),

@@ -39,6 +39,11 @@ pub fn check_cmd(rest: &[String]) -> Result<ExitCode, String> {
             needs: Some("data/base"),
         },
         Check {
+            name: "string tables",
+            args: args(&["strings", "lint"]),
+            needs: Some("data/base"),
+        },
+        Check {
             name: "golden replay + snapshot/resume",
             args: args(&[
                 "replay",

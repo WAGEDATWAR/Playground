@@ -190,6 +190,8 @@ pub struct LoadedPack {
     pub manifest: PackManifest,
     /// Templates in file order (path, then position within the file).
     pub templates: Vec<ObjectTemplate>,
+    /// String tables by locale (`data/strings/<locale>.json`).
+    pub strings: BTreeMap<String, crate::strings::Table>,
     /// Hex BLAKE3 over every file's path and bytes (see [`hash_files`]).
     pub hash: String,
     pub file_count: usize,
@@ -329,6 +331,29 @@ pub fn load_pack(source: &dyn PackFiles, limits: &Limits) -> Result<LoadedPack, 
         }
     }
 
+    // String tables.
+    let mut strings: BTreeMap<String, crate::strings::Table> = BTreeMap::new();
+    if let Some(m) = &manifest {
+        let is_base = m.id.as_str() == crate::content_set::BASE_PACK;
+        for (path, bytes) in &files {
+            if !(path.starts_with(crate::strings::STRINGS_DIR) && path.ends_with(".json")) {
+                continue;
+            }
+            let Some(value) = parse_json_file(path, bytes, &mut report) else {
+                continue;
+            };
+            if let Some((locale, table)) = crate::strings::parse_strings_file(
+                path,
+                &value,
+                m.id.as_str(),
+                is_base,
+                &mut report,
+            ) {
+                strings.insert(locale, table);
+            }
+        }
+    }
+
     if !report.is_ok() {
         return Err(report);
     }
@@ -338,6 +363,7 @@ pub fn load_pack(source: &dyn PackFiles, limits: &Limits) -> Result<LoadedPack, 
     Ok(LoadedPack {
         manifest,
         templates,
+        strings,
         hash: hash_files(&files),
         file_count: files.len(),
         total_bytes: total,

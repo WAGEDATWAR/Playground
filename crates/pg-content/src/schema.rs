@@ -194,7 +194,8 @@ impl ParamSchema {
 }
 
 impl FieldSchema {
-    fn check(&self, value: &Canon, path: &str, report: &mut ValidationReport) -> Canon {
+    /// Validates one value against this shape (used by the settings registry for single values).
+    pub fn check(&self, value: &Canon, path: &str, report: &mut ValidationReport) -> Canon {
         match self {
             FieldSchema::Int { min, max } => match value.as_i128() {
                 Some(v) if v >= i128::from(*min) && v <= i128::from(*max) => value.clone(),

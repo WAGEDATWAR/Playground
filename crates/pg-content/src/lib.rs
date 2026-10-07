@@ -15,6 +15,8 @@ pub mod pack;
 pub mod report;
 pub mod resolve;
 pub mod schema;
+pub mod settings;
+pub mod strings;
 pub mod template;
 
 pub use component::{ComponentDef, ComponentRegistry, Origin};
@@ -24,4 +26,5 @@ pub use manifest::{Capability, PackManifest, Version, VersionReq, API_VERSION, E
 pub use pack::{load_pack, DirPack, Limits, LoadedPack, MemoryPack, PackFiles};
 pub use report::{Issue, Severity, ValidationReport};
 pub use resolve::{resolve_template, ResolvedTemplate};
+pub use strings::Strings;
 pub use template::ObjectTemplate;
