@@ -1,10 +1,12 @@
-# Playground — Architecture Blueprint v2.1
+# Playground — Architecture Blueprint v2.2
 
-**Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.0 and Roadmap v4.0. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). It is a spec, not final source; names and signatures may shift during implementation, but the contracts and invariants may not. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
+**Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.1 and Roadmap v4.1. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). It is a spec, not final source; names and signatures may shift during implementation, but the contracts and invariants may not. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
 
 **What changed from v1.0:** the platform-agnostic PAL, web/mobile shells, hosted AI gateway and touch input are removed. The project is one native binary with a thin host-services layer, a dedicated simulation thread, a worker pool, and an embedded Luau VM per content pack. The TypeScript reference notation is replaced by Rust. A new §23 defines the modding API objectives and implementation; extension points are cross-referenced from §4, §6, §8, §12, §13, §17, §18, §20 and §21.
 
 **v2.1 (during Phase 0):** added the `pg-canon` crate (§1, §2). The canonical value type and serialization moved out of `pg-core` into a dependency-free crate because `pg-content` needs them and `pg-core` depends on `pg-content`. It also holds a strict, integer-only JSON parser (rejects floats, duplicate keys, lone surrogates and over-deep nesting) used for content packs and replay logs. See `docs/DECISIONS.md` D-010, D-011.
+
+**v2.2 (during Phase 0):** scheduled the accepted developer-experience suggestions (`docs/SUGGESTIONS.md`): reproducibility tooling (§20, replay diff and bisect, bug bundles, scenario files), the RNG stream registry (§5.1), canonical-JSON cross-checking (§18), the content compatibility report and `pg content diff` (§4.2, §13.4), pack-authoring aids (§23.12), and the reason-code and event viewers (§20). Stage tags show when each lands.
 
 ## 0. Architectural principles
 
@@ -153,7 +155,7 @@ struct EntityId { kind: Kind /* u8: pawn, obj, plot, ... */, n: u32 }   // displ
 | Identity | TemplateId + version | EntityId |
 | Examples | Object defs, occupations, schedule templates, names, layouts, fallback dialogue, scripts | Pawns, objects, maps, memories, reservations, script-defined component values |
 
-A world save records `content_refs: Vec<ContentRef { pack_id, version, hash }>`. The hash covers data **and script source**. Loading fails safely with a clear message if a referenced pack is missing or its hash differs; the player may choose to continue with a compatibility report or start in **safe mode** (§23.10).
+A world save records `content_refs: Vec<ContentRef { pack_id, version, hash }>`. The hash covers data **and script source**. Loading fails safely with a clear message if a referenced pack is missing or its hash differs; the player may choose to continue with a compatibility report or start in **safe mode** (§23.10). The compatibility report is the same one `pg content diff <old> <new>` produces offline: removed or renamed templates, changed component schemas and defaults, each flagged *save-breaking* or *safe* \[S0, milestone 0.6\].
 
 ### 4.3 Object templates and resolution \[S0\]
 
@@ -278,6 +280,7 @@ fn rand(world_seed: &Seed, stream: StreamId, keys: &[Key], counter: u32) -> u32
 
 - **Hash:** a fixed, specified integer hash (for example an `xxh3-64` or splitmix64 construction), pinned by exact crate version or implemented in-repo, with published test vectors. Never `std::hash::DefaultHasher` or any hasher whose algorithm is unspecified.
 - Derived helpers: `rand_int(min, max)`, `chance(permille)`, `pick(list)`, `shuffle(list)` (Fisher–Yates over a keyed stream).
+- **Stream registry \[S0, from milestone 0.5\]:** every stream name is declared once in a registry (`pg_core::rng::streams`, mirrored in `pg-api` for `mod.<pack>.<name>` streams) and a test fails if any draw site uses an unregistered name, so a typo can never silently create a "new" stream.
 - **Streams** are named: `worldgen.terrain`, `worldgen.roads`, `worldgen.plots`, `worldgen.people`, `sched.variation`, `sched.tiebreak`, `social.topic`, `social.outcome`, `event.<category>`, `path.tiebreak`. **Pack streams** are namespaced `mod.<pack_id>.<name>` and are the only streams scripts can draw from (§23.5). Each draw site passes stable keys (pawn id, day index), so adding a new system or pack never perturbs existing streams.
 - Where a draw must be consumed sequentially, a counter in `WorldState.rng_counters[stream]` is incremented and saved.
 
@@ -922,6 +925,8 @@ Tooling: `cargo nextest`, `proptest` (property tests), `insta` (snapshot tests),
 11. **Sandbox conformance suite (scripts):** a corpus of hostile packs that attempt escape (`getfenv`, `loadstring`, `require` traversal, `debug`, metatable and builtin tampering), resource abuse (infinite loop, deep recursion, memory bomb, huge `string.rep`, pathological patterns), nondeterminism (`pairs` order, `tostring` of tables, floats at the boundary, weak tables) and invalid output. Each must be contained or rejected, with the world and other packs unaffected.
 12. **Script determinism tests:** fixture packs under golden replay; a **VM-reload variant** that rebuilds all VMs at each day boundary and must produce identical hashes (this catches hidden mutable closure state, §23.5); fuel accounting identical across OS and architecture.
 13. **Fuzzing:** pack manifest parser, archive reader, Luau-value-to-command marshalling, import pipeline, save loader.
+14. **Independent canonicalization check \[S0, milestone 0.6\]:** a property test that `Canon::to_canonical_string` equals RFC 8785 (JCS) output, from a third-party implementation used as a dev-dependency, for integer-only documents, so a bug in our own escaping or ordering cannot hide behind our own vectors.
+15. **Scenario files \[S0, format at 0.6\]:** each gate's 'Done when' (and the 30+ day soak with its invariants: bounded memories, events, caches, VM memory) is a JSON scenario (seed, packs, scripted inputs, steps such as save and reload, assertions) run by `pg scenario run`, so acceptance tests read like the roadmap.
 
 ## 19. Performance plan
 
@@ -945,8 +950,11 @@ A `DevToolRegistry` exposes tools as Commands marked developer-only, requiring a
 | Inspection | Schedule viewer with reason codes, route inspector, state hash viewer, proposal inspector with secrets redacted \[S10\], event log |
 | Content | Template resolver viewer, pack validator, save inspector |
 | Scripting | Pack inspector (registered components, systems, hooks, actions; per-system fuel and time; errors and quarantine status), script console (runs in the sandbox with the `dev` capability, logged as a `SimInput`), hot reload of a pack at a tick boundary (recorded as `ScriptReload`), `print` / log viewer per pack |
+| Reproducibility | Replay **diff** (`pg replay --diff a b`: first differing day and table, from per-table hashes stored in replay logs) and **bisect** (`--bisect`: first differing tick) \[S0, 0.4\]; **bug bundle** (`pg bugbundle`, overlay button): snapshot + input log + content refs + tick-hash trail, replayable headlessly \[S0, 0.6\]; **scenario runner** (`pg scenario run`) \[S0, 0.6\] |
+| Explainability | Event viewer with kind-prefix and tick-range filters (`pg sim --events <prefix> --since --until`) \[S0, 0.4\]; **reason-code explorer**: filterable timeline of decisions with their origin ("why did pawn_1a skip lunch?"): `pg schedule explain` at 0.5, overlay panel at 0.10 |
+| Content authoring | `pg content tree` (inheritance forest) \[Stage 1\]; `pg content diff` and the load-time compatibility report \[0.6\]; `pg content schema` (JSON Schema export) \[0.9\]; "did you mean…?" hints in every validation message \[0.4, extended 0.9\] |
 
-`pg-cli` mirrors the content and scripting tools for headless use: `pg pack lint | test | docs | pack | new`, `pg sim`, `pg replay`, `pg bench`, `pg save inspect`.
+`pg-cli` mirrors the content and scripting tools for headless use (reproducibility and authoring aids are listed in the table above): `pg pack lint | test | docs | pack | new`, `pg sim`, `pg replay`, `pg bench`, `pg save inspect`.
 
 ## 21. Security and privacy
 
@@ -1209,6 +1217,7 @@ pg.actions.register({
 - **`pg pack` CLI:** `new` (scaffold from a template), `lint` (manifest, API use, determinism patterns, undeclared globals, upvalue mutation heuristics), `test` (run the pack in a headless world under golden replay, including the VM-reload variant), `docs`, `pack` (build `.pgpack`).
 - **Editor support:** project files for Luau language-server integration using the generated definitions.
 - **Developer mode:** pack inspector, script console, per-system profiling and hot reload (recorded as `ScriptReload`).
+- **Authoring aids \[S0 data files at 0.9; scripts at 0.9; polish Stage 11\]:** validation errors suggest the closest known name ("did you mean…?", edit distance) for unknown fields, components, enum values, parents and API names; `pg content schema` exports JSON Schema for templates, manifests and component params so editors give inline validation with no tooling; the generated `pg.d.luau` covers scripts. `pg content tree` (Stage 1) prints the `extends` forest; template *variants* (data-only expansion of one template into several) are evaluated at the end of Stage 1 and implemented when there are about 50 templates.
 - **Samples:** a small gallery of reference packs (a need, an action, a hook, a worldgen stage, a town design) that double as API conformance tests in CI.
 
 ### 23.13 Performance notes

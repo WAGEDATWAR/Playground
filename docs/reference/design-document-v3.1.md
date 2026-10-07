@@ -1,6 +1,6 @@
-# Playground — Design Document v3.0
+# Playground — Design Document v3.1
 
-**Status:** Updated from v2.0 to define Playground as a **native desktop game written in Rust, with a sandboxed Luau scripting layer for user-created content packs**. Where this document and earlier versions conflict, v3.0 decides (see §17). **Companion docs:** Native Desktop Roadmap v4.0 (when), Architecture Blueprint v2.0 (how).
+**Status (v3.1):** adds the developer-experience commitments accepted during Phase 0 (§12.6, §14.4); no change to scope or pillars. Updated from v2.0 to define Playground as a **native desktop game written in Rust, with a sandboxed Luau scripting layer for user-created content packs**. Where this document and earlier versions conflict, v3.0 decides (see §17). **Companion docs:** Native Desktop Roadmap v4.1 (when), Architecture Blueprint v2.2 (how).
 
 ## 1. Premise
 
@@ -221,6 +221,9 @@ One versioned, documented API (the `pg` namespace) exposes the engine's extensio
 - Any decision a pack influences is attributed to that pack in the resident inspector.
 - Errors name the pack, file, line and extension point, and appear in the Mods screen.
 - Tools: type definitions and a linter, a headless test and replay runner, hot reload in developer mode, sample packs.
+- Friendly errors: validation messages suggest the closest known name ("did you mean…?"); pack authors get JSON Schema for data files and type definitions for scripts, so editors validate and autocomplete as they type.
+- Cookbook: a gallery of small runnable sample packs covers every part of the API and doubles as the compatibility test suite.
+- Compatibility: when a pack changes, a diff tool and a load-time report say which changes are safe for existing saves and which are save-breaking.
 
 ### 12.7 API maturity
 
@@ -259,7 +262,7 @@ Shows current activity, mood, needs, relevant memories and relationship label, w
 
 ### 14.4 Developer / debug tools (Stage 11, hooks earlier)
 
-World: spawn and destroy objects, spawn pawn, toggle pathfinding display. Pawns: full heal, resurrect, injure (random or by part), add / remove items, view / add / remove memories, reset occupation. Scripting: pack inspector (registrations, per-pack time and memory, errors), script console, hot reload, per-pack log viewer. Destructive actions need confirmation.
+World: spawn and destroy objects, spawn pawn, toggle pathfinding display. Pawns: full heal, resurrect, injure (random or by part), add / remove items, view / add / remove memories, reset occupation. Scripting: pack inspector (registrations, per-pack time and memory, errors), script console, hot reload, per-pack log viewer. Destructive actions need confirmation. Reproducibility and explanation: replay diff and bisect to locate any divergence, a **bug bundle** (snapshot, inputs, content versions) that lets any odd behavior be replayed exactly, scenario files that make acceptance checks executable, and a reason-code explorer that answers "why did this resident do that?".
 
 ## 15. Component map
 

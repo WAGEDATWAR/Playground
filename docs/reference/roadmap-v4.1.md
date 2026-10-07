@@ -1,16 +1,17 @@
 # Playground — Native Desktop Product & Build Roadmap
 
-**Version:** 4.0 · **Last updated:** 2026-10-06 **Basis:** Roadmap v3.0 (authoritative for all mechanics), which refined the original Design Document **Style:** Ordered stages. Effort and foundation are relative sizes, not calendar promises.
+**Version:** 4.1 · **Last updated:** 2026-10-06 **Basis:** Roadmap v4.1 (itself based on v3.0) (authoritative for all mechanics), which refined the original Design Document **Style:** Ordered stages. Effort and foundation are relative sizes, not calendar promises.
 
 ## 1. What changed from v3.0
 
+- **v4.1:** the developer-experience suggestions accepted during Phase 0 are scheduled where they are cheapest and most useful: reproducibility tooling and authoring aids in Stage 0, content-growth tooling in Stages 1 and 6, and polish in Stage 11 (new principle 16, extra items marked **\[DX\]** below). No product decision or gate changed.
 - Product decisions, stage order and gates for the *game* are unchanged. Nothing in the simulation design was reversed.
 - **Platform:** the platform-agnostic, touch-first handheld direction is replaced by a **native desktop binary**. Handheld, web and mobile are no longer targets. The Platform Abstraction Layer is replaced by a thin **host services** layer that exists for testing, not portability.
 - **Technology:** the game is built in **Rust**. Mod and content-pack scripting uses a sandboxed **Luau** VM through one unified API. The renderer is wgpu and the UI is egui (reference choices; Blueprint §1).
 - **Modding:** v3.0 prohibited executable mods. v4.0 allows **sandboxed, deterministic, capability-scoped scripts** inside local content packs. Public marketplaces, native-code plugins and unsandboxed mods remain out of scope. Scripting starts as a Stage 0 spike because it shapes the data model and tick pipeline.
 - **Performance targets** are raised to desktop levels (about 200 residents on minimum-spec hardware, stretch 500), and the architecture uses a dedicated simulation thread, a worker pool and data-oriented layout.
 - **AI access** goes directly from the app to the provider; the hosted gateway is removed. Keys live in the OS credential store.
-- Where the original design document disagreed with the roadmap, the roadmap wins; where either disagrees with Design Document v3.0 on platform or modding, v3.0 wins. The reconciliation list is in the Design Document, §17.
+- Where the original design document disagreed with the roadmap, the roadmap wins; where either disagrees with Design Document v3.1 on platform or modding, v3.0 wins. The reconciliation list is in the Design Document, §17.
 
 ## 2. Product direction
 
@@ -115,6 +116,7 @@ These replace the v3.0 neutrality rules.
 13. **Fictional harm stays within game rules.** Crime, injury and death have deterministic in-game consequences and no real-world instruction. Death is permanent in a world; resurrection is a debug tool.
 14. **One API, no back doors.** The base game uses the same pack format and API as player mods. Performance-critical mechanisms stay in Rust and are extended through hooks, not reimplemented in scripts.
 15. **Use the machine.** A dedicated simulation thread, a worker pool and data-oriented layout are the default; parallelism is allowed only where golden replays prove identical results at any thread count.
+16. **Reproducible, explainable, author-friendly tooling.** Any divergence, failure or odd behavior must be reproducible headlessly (replay diff and bisect, bug bundles, scenario files) and explainable from recorded reasons; content and scripting errors name the likely fix ("did you mean…?"); pack authors get editor support from generated schemas and type definitions, plus runnable cookbook samples that double as conformance tests.
 
 ## 6. Effort and foundation guide
 
@@ -140,6 +142,7 @@ These replace the v3.0 neutrality rules.
 - [ ] Key sent directly to the provider per request; never logged or persisted in saves, exports or crash reports.
 - [ ] Versioned local save slots (atomic single-file generations), migrations, corruption recovery, periodic autosave, saves on focus loss / close, manual save, manual JSON world export / import.
 - [ ] **Modding spike:** pack manifest and loader; Luau host with sandbox profile, deterministic fuel and memory metering, source-only loading; typed value boundary; one end-to-end extension (a component, a system and a hook) driven by a test pack; the base content loaded through the pack loader; quarantine and safe mode.
+- [ ] **\[DX\] Reproducibility and authoring tooling, scheduled across the Stage 0 milestones:** replay diff and bisect with per-table hashes stored in logs, event filter, content-validator hints (0.4); RNG stream registry (0.5); bug bundles, scenario-file format, canonical-JSON cross-check against RFC 8785, `pg content diff` and the load-time compatibility report (0.6); JSON Schema export for pack data, first three cookbook packs (0.9); reason-code explorer and bug-bundle button in the dev overlay (0.10); soak scenario (0.11).
 - [ ] **Sandbox conformance and determinism tests:** hostile-pack corpus, VM-reload determinism variant, cross-OS golden hashes with a script pack loaded.
 - [ ] **Define the `ScriptVm` boundary** (Blueprint §23.15) so no other code names the binding crate, and implement it over `mlua` with the Luau backend.
 - [ ] **Answer the binding spike questions** (§12 item 1) with recorded measurements, and **decide** whether `mlua` stays, a hybrid is needed or an in-house binding is justified; set initial script budgets from the same measurements.
@@ -166,6 +169,7 @@ These replace the v3.0 neutrality rules.
 - [ ] Native renderer and UI: wgpu tile and sprite rendering, egui screens, keyboard and mouse input mapping, window modes, high-DPI handling.
 - [ ] **Base game shipped as a content pack** using the same format and API as player packs. **Modding API 0.1:** components, events (read), bounded hooks for needs, mood, memory and relationships.
 - [ ] Basic Mods screen: list, enable / disable, capability approval, errors, safe-mode launch.
+- [ ] **\[DX\]** `pg content tree` (inheritance forest); evaluate template variants (data-only expansion of one template into several) against the content written so far; add a cookbook sample for hooks.
 
 **Done when:** a seeded 10–20-resident town runs autonomously in the native app, can be observed and inspected, produces overheard conversation, and keeps state and social history after restart; the base content loads through the pack loader; a sample pack adds a component and a hook that visibly change behavior and are attributed in the inspector.
 
@@ -233,6 +237,7 @@ These replace the v3.0 neutrality rules.
 - [ ] Renting and housing costs first; then purchase / sale and ownership changes with explicit affordability and legal rules.
 - [ ] Needs connect to goods and services through deterministic rules; get a small job / shop loop working before a full economy.
 - [ ] **Modding API:** items, jobs, shops and obligations as data plus validated effects; ledger remains append-only with no direct balance writes.
+- [ ] **\[DX\]** Implement template variants once there are about 50 templates, if the Stage 1 evaluation still supports it.
 
 **Done when:** a pawn can work, earn and spend, obtain basic needs, rent or own a home, and keep correct inventory, ownership and balances after reload; a sample pack adds an item and a job that behave correctly under replay.
 
@@ -296,6 +301,7 @@ These replace the v3.0 neutrality rules.
 **Effort: XL · Foundation: High for reliable distribution and the modding community**
 
 - [ ] **Freeze Modding API 1.0:** stability policy, `since` and deprecation metadata, compatibility reports at pack load, migration hints in the linter.
+- [ ] **\[DX\] Polish and finish:** JSON Schema export for every pack file format, `pg content diff` with full save-compatibility classification, "did you mean…?" for script API names, and the cookbook gallery (every API area has a runnable sample that runs as a CI conformance test).
 - [ ] **Authoring tooling:** generated type definitions and reference docs from the single API source; `pg pack new | lint | test | docs | pack`; language-server project files; sample pack gallery that doubles as conformance tests; hot reload and per-pack profiling in developer mode.
 - [ ] **Full pack manager:** load order, dependency resolution, capability approvals pinned to content hashes, error and quarantine views, import / export of `.pgpack` files through the hardened archive reader.
 - [ ] **Hardening:** fuzz the manifest, archive, value-boundary, import and save paths; finalize script budgets; decide whether to ship an out-of-process, OS-restricted script host.
