@@ -848,6 +848,7 @@ dependencies = [
  "ahash",
  "bytemuck",
  "document-features",
+ "egui",
  "epaint",
  "log",
  "profiling",
@@ -855,6 +856,7 @@ dependencies = [
  "type-map",
  "web-time",
  "wgpu",
+ "winit",
 ]
 
 [[package]]
@@ -2415,10 +2417,16 @@ dependencies = [
  "egui",
  "egui-wgpu",
  "egui-winit",
+ "pg-ai",
+ "pg-content",
+ "pg-core",
+ "pg-host",
  "pg-host-os",
  "pg-render",
  "pg-runtime",
  "pg-ui-model",
+ "pollster",
+ "winit",
 ]
 
 [[package]]
@@ -2618,6 +2626,12 @@ dependencies = [
  "rustix 1.1.5",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "pollster"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc6355899e1c9462875b6757c79f3caa011a1fdae12bbb1a2e72dd1f234f8336"
 
 [[package]]
 name = "polycool"

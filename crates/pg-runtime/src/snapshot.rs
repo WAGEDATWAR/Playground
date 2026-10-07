@@ -44,6 +44,8 @@ pub struct RenderSnapshot {
     pub keyframes: Vec<u64>,
     /// The newest keyframe's state hash, first 8 hex characters.
     pub keyframe_hash: String,
+    /// The latest planning failure of each pawn that has one, for the reason explorer (suggestion S-010).
+    pub failures: Vec<(String, pg_core::reason::ReasonCode)>,
 }
 
 /// How many recent events a snapshot carries.
@@ -107,6 +109,11 @@ impl RenderSnapshot {
             day_hash: day_hash.to_owned(),
             keyframes: prev.map_or_else(Vec::new, |p| p.keyframes.clone()),
             keyframe_hash: prev.map_or_else(String::new, |p| p.keyframe_hash.clone()),
+            failures: world
+                .pawns
+                .iter()
+                .filter_map(|(_, p)| p.last_failure.clone().map(|f| (p.name.clone(), f)))
+                .collect(),
         }
     }
 }

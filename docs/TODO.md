@@ -4,9 +4,9 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Milestone 0.9 (ScriptVm spike): implemented, waiting for the checkpoint.** `m0.8` is tagged. 0.9 delivered: `pg-api` (surface, hook points, generators, hints), `ScriptVm` boundary and Luau implementation with the sandbox profile and a 40-test hostile-pack corpus, extension data store and hook host in the core, script host (fuel, memory, quarantine in the world, safe mode), pack scripts in the loader, `SimFactory` rebuilds every VM on restore, three cookbook packs under golden hashes with the VM-reload variant, `pg pack lint|test|docs|new|bench`, `pg content schema`, FP-contraction build flags and CI checks. 660 tests; `pg check` 26/26. Spike report: `docs/spikes/scriptvm.md`; decision D-031; Blueprint v2.8.
+**Milestone 0.10 (app shell, graphical main menu, dev overlay): implemented, waiting for the checkpoint.** `m0.9` accepted and tagged; S-034..S-036 accepted (Roadmap v4.6, D-032). 0.10 delivered: `pg-ui-model` (screen state machines, widget tree with text snapshots, generated Options, AI options with the Player2 sign-in flow, overlay model, keyboard and no-dead-end exploration tests), `AppController` in `pg-runtime` (worlds, settings, AI keys, sign-in, export/import, crash prompt, thumbnails, overlay data) tested over in-memory services, `pg-render` (camera, run-merged tile rectangles), the `pg-app` window shell (winit, wgpu via egui-wgpu, egui) with the map view, pause menu, overlay (time scrub, bundle button, script cost, reasons, packs, shadow status), `--smoke`, `--demo`, `--shadow`. Decision D-033, Blueprint v2.9, suggestions S-037..S-039.
 
-**Checkpoint for you:** read `docs/spikes/scriptvm.md` (decision: `mlua` stays; known gap: bare `for k, v in t` order), try the pack commands in `docs/BUILDING.md` section "Packs with scripts", then confirm CI is green on all three OSes (the pinned fuel value 145 and the FMA probe are the cross-platform checks). After acceptance: tag `m0.9`, then 0.10.
+**Checkpoint for you:** launch the game (`cargo run -p pg-app`) and click through it as listed in `docs/BUILDING.md`, section "Playing the game (0.10)". CI should be green on all three OSes (it runs `pg-app --smoke`). After acceptance: tag `m0.10`, then 0.11 (the Stage 0 gate).
 
 ## Blocked / waiting on user
 
@@ -14,8 +14,8 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Next up
 
-1. Push 0.9, check CI on all three OSes, record the Linux/macOS figures in `docs/spikes/scriptvm.md`, tag `m0.9` on acceptance.
-2. 0.10 app shell and graphical main menu (checkpoint), 0.11 Stage 0 gate.
+1. Push 0.10, check CI on all three OSes, tag `m0.10` on acceptance.
+2. 0.11 Stage 0 gate (menu-flow acceptance scenario, soak with shadow verification, cross-OS golden replay).
 3. Prune dev scaffolding as real systems land (D-009).
 
 ## Shell note

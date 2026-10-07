@@ -177,3 +177,29 @@ cargo run -q -p pg-cli -- pack new my_pack packs/my_pack
 
 The ScriptVm spike report with every measurement is `docs/spikes/scriptvm.md`.
 
+## Playing the game (0.10)
+
+```bash
+# Open the game (needs a desktop; the first build takes a few minutes).
+cargo run -p pg-app
+
+# Developer aids.
+cargo run -p pg-app -- --demo game      # new, options, ai, saved, game, pause, overlay: open straight on a screen
+cargo run -p pg-app -- --shadow 2       # re-run every keyframe span on 2 threads and compare (overlay, Time tab)
+cargo run -p pg-app -- --pack packs/cookbook/caffeine   # also load a pack with scripts (developer use)
+cargo run -p pg-app -- --smoke          # scripted session without a window; what CI runs
+```
+
+Saves, settings and bug bundles live in the per-user data folder (`%APPDATA%\Playground` on Windows,
+`~/Library/Application Support/Playground` on macOS, `~/.local/share/Playground` on Linux); `--data-dir <folder>`
+uses another one. Exports are written to `exports/` there and imports are read from `imports/`.
+
+**Keys:** Tab / Shift+Tab and Up / Down move focus, Left / Right change choices and sliders, Enter or Space
+press, Escape goes back (in the world it opens the pause menu), Space pauses and resumes, F3 shows the
+developer overlay. In the world: drag to pan the map, mouse wheel to zoom.
+
+**What to try for the 0.10 checkpoint:** launch; New world (change the name, map size, residents); watch the
+town run at 1x, 9x and 27x; pause; Escape and Save and go to main menu; Saved worlds (the picture, Load,
+Export, Delete); Continue; Options (scale, window mode, autosave, language `pseudo` to see every string
+transformed); Options, AI provider, Player2 (sign-in shows a code and link); close the window while a world
+runs and relaunch to see it saved; F3 for the overlay.

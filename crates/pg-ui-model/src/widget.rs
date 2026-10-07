@@ -55,6 +55,10 @@ pub enum Widget {
         /// Thousandths, 0..=1000.
         permille: u32,
     },
+    /// A saved picture, named by the storage blob it lives in; the shell loads and draws it.
+    Thumbnail {
+        name: String,
+    },
     /// Widgets laid out side by side.
     Row(Vec<Widget>),
     /// A group with a title; its contents follow vertically.
@@ -241,6 +245,9 @@ fn snapshot_widget(out: &mut String, w: &Widget, depth: usize, focus: Option<&st
         }
         Widget::Progress { label, permille } => {
             let _ = writeln!(out, "{pad}{label}: {}%", permille / 10);
+        }
+        Widget::Thumbnail { name } => {
+            let _ = writeln!(out, "{pad}(picture {name})");
         }
         Widget::Row(c) => {
             let _ = writeln!(out, "{pad}row:");

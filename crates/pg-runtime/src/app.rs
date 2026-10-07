@@ -33,7 +33,7 @@ use pg_persist::compat::ContentRefRecord;
 use pg_persist::export::{commit_import, export_world, import_world, ImportOptions};
 use pg_persist::store::{valid_world_id, LoadOptions, Recovery, SlotStore};
 use pg_script::host::ScriptMeter;
-use pg_ui_model::overlay::{EventRow, OverlayData, PackRow, ScriptRow, SystemRow};
+use pg_ui_model::overlay::{EventRow, OverlayData, PackRow, ReasonRow, ScriptRow, SystemRow};
 use pg_ui_model::types::*;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -88,6 +88,10 @@ pub struct AppController {
     speed: Speed,
     last_hud: Option<HudInfo>,
     status: Option<(String, Duration)>,
+    /// Developer option: re-simulate every keyframe span on this many threads and compare (S-030).
+    shadow_threads: Option<usize>,
+    shadow_ok: u64,
+    shadow_bad: u64,
 }
 
 fn slug(name: &str) -> String {
@@ -159,7 +163,15 @@ impl AppController {
             speed: Speed::Normal,
             last_hud: None,
             status: None,
+            shadow_threads: None,
+            shadow_ok: 0,
+            shadow_bad: 0,
         }
+    }
+
+    /// Turns shadow determinism verification on for worlds opened from now on (developer option).
+    pub fn set_shadow_threads(&mut self, threads: Option<usize>) {
+        self.shadow_threads = threads;
     }
 
     pub fn quit_requested(&self) -> bool {
@@ -344,6 +356,14 @@ impl AppController {
         self.svc.storage.read(name).ok().flatten()
     }
 
+    /// The same picture as `(width, height, rgb bytes)`, ready for a texture.
+    pub fn thumbnail_image(&self, name: &str) -> Option<(u32, u32, Vec<u8>)> {
+        if !name.starts_with("worlds/") || name.contains("..") {
+            return None;
+        }
+        crate::thumbnail::decode_png_rgb(&self.thumbnail(name)?)
+    }
+
     fn unique_world_id(&self, name: &str) -> String {
         let base = slug(name);
         let existing = self.store().list_worlds().unwrap_or_default();
@@ -452,6 +472,9 @@ impl AppController {
         let mut cfg = LoopConfig::new(id);
         cfg.app_version = self.svc.app_version.clone();
         cfg.content_refs = refs_of(&self.content);
+        cfg.shadow_threads = self.shadow_threads;
+        self.shadow_ok = 0;
+        self.shadow_bad = 0;
         cfg.autosave_minutes = self
             .values
             .int("time.autosave_minutes")
@@ -933,6 +956,7 @@ impl AppController {
                     )));
                 }
                 LoopEvent::Diverged { at_tick, .. } => {
+                    self.shadow_bad += 1;
                     out.push(UiEvent::Failed(
                         self.text("ui.notice.diverged", &[("tick", &at_tick.to_string())]),
                     ));
@@ -951,7 +975,8 @@ impl AppController {
                     ));
                 }
                 LoopEvent::Refused(m) => out.push(UiEvent::Notice(m)),
-                LoopEvent::State(_) | LoopEvent::Verified { .. } => {}
+                LoopEvent::Verified { .. } => self.shadow_ok += 1,
+                LoopEvent::State(_) => {}
             }
         }
         if let Some(h) = self.hud() {
@@ -1011,6 +1036,24 @@ impl AppController {
             };
             d.state = format!("{:?}", s.run);
             d.keyframes = s.keyframes.clone();
+            if let Some(c) = &self.content {
+                let locale = self.locale();
+                d.reasons = s
+                    .failures
+                    .iter()
+                    .map(|(name, code)| ReasonRow {
+                        subject: name.clone(),
+                        text: code.explain_in(c.strings(), &locale),
+                    })
+                    .collect();
+            }
+            d.shadow = match self.shadow_threads {
+                Some(n) => format!(
+                    "{} verified, {} diverged ({n} thread(s))",
+                    self.shadow_ok, self.shadow_bad
+                ),
+                None => String::new(),
+            };
             d.events = s
                 .recent_events
                 .iter()

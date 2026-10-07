@@ -24,7 +24,8 @@ ALLOWED = {
     "pg-runtime": {"pg-core", "pg-content", "pg-script", "pg-persist", "pg-ai",
                    "pg-worldgen", "pg-ui-model", "pg-host"},
     "pg-render": {"pg-ui-model"},
-    "pg-app": {"pg-runtime", "pg-render", "pg-host-os", "pg-ui-model", "pg-host", "pg-core"},
+    "pg-app": {"pg-runtime", "pg-render", "pg-host-os", "pg-ui-model", "pg-host", "pg-core",
+              "pg-content", "pg-ai"},
     "pg-cli": {"pg-runtime", "pg-host-os", "pg-core", "pg-content", "pg-persist", "pg-host", "pg-ai",
                "pg-script", "pg-api"},
 }

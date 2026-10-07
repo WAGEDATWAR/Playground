@@ -55,6 +55,9 @@ jobs:
       - run: cargo run -q -p pg-cli -- pack test packs/cookbook/birthdays
       - run: cargo run -q -p pg-cli -- pack docs --luau
       - run: cargo run -q -p pg-cli -- content schema templates
+      # The app (0.10): a scripted session through every menu and an in-game run, with the real UI code under a
+      # headless egui context. The window itself is not opened in CI.
+      - run: cargo run -q -p pg-app -- --smoke
       # Everything above in one report, as a person would run it.
       - run: cargo run -q -p pg-cli -- check
       # Parallel pathfinding must give results identical to serial on every OS (Blueprint §7.3, §19).

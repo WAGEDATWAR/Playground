@@ -75,6 +75,72 @@ pub fn encode_png(w: u32, h: u32, rgb: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Reads back a PNG written by [`encode_png`] (8-bit RGB, stored blocks): `(width, height, rgb)`. Any other
+/// PNG, or a damaged one, gives `None`; thumbnails are only ever ones this module wrote.
+pub fn decode_png_rgb(png: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    if png.get(..8)? != [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
+        return None;
+    }
+    let mut at = 8usize;
+    let (mut w, mut h) = (0u32, 0u32);
+    let mut idat = Vec::new();
+    while at + 12 <= png.len() {
+        let len = u32::from_be_bytes(png.get(at..at + 4)?.try_into().ok()?) as usize;
+        let kind = png.get(at + 4..at + 8)?;
+        let body = png.get(at + 8..at + 8 + len)?;
+        let crc = u32::from_be_bytes(png.get(at + 8 + len..at + 12 + len)?.try_into().ok()?);
+        if crc != crc32(png.get(at + 4..at + 8 + len)?) {
+            return None;
+        }
+        match kind {
+            b"IHDR" => {
+                w = u32::from_be_bytes(body.get(0..4)?.try_into().ok()?);
+                h = u32::from_be_bytes(body.get(4..8)?.try_into().ok()?);
+                if body.get(8..13)? != [8, 2, 0, 0, 0] || w == 0 || h == 0 || w > 4096 || h > 4096 {
+                    return None;
+                }
+            }
+            b"IDAT" => idat.extend_from_slice(body),
+            b"IEND" => break,
+            _ => {}
+        }
+        at += 12 + len;
+    }
+    if idat.get(..2)? != [0x78, 0x01] {
+        return None;
+    }
+    let mut raw = Vec::new();
+    let mut i = 2usize;
+    loop {
+        let head = *idat.get(i)?;
+        if head & 6 != 0 {
+            return None;
+        }
+        let len = u16::from_le_bytes([*idat.get(i + 1)?, *idat.get(i + 2)?]);
+        let nlen = u16::from_le_bytes([*idat.get(i + 3)?, *idat.get(i + 4)?]);
+        if len != !nlen {
+            return None;
+        }
+        raw.extend_from_slice(idat.get(i + 5..i + 5 + len as usize)?);
+        i += 5 + len as usize;
+        if head & 1 == 1 {
+            break;
+        }
+    }
+    if u32::from_be_bytes(idat.get(i..i + 4)?.try_into().ok()?) != adler32(&raw) {
+        return None;
+    }
+    let stride = w as usize * 3 + 1;
+    let mut rgb = Vec::with_capacity(w as usize * h as usize * 3);
+    for row in raw.chunks(stride) {
+        if row.first() != Some(&0) || row.len() != stride {
+            return None;
+        }
+        rgb.extend_from_slice(row.get(1..)?);
+    }
+    (rgb.len() == w as usize * h as usize * 3).then_some((w, h, rgb))
+}
+
 /// A picture of the world's first map (with its pawns), at most [`MAX_WIDTH`] by [`MAX_HEIGHT`] pixels,
 /// or `None` when the world has no map.
 pub fn thumbnail_png(world: &WorldState) -> Option<Vec<u8>> {

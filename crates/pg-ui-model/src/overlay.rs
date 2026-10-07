@@ -219,7 +219,7 @@ impl Overlay {
                         &[("status", &d.shadow)],
                     )));
                 }
-                w.push(Widget::Heading(t("ui.overlay.keyframes", &[])));
+                w.push(Widget::Label(t("ui.overlay.keyframes", &[])));
                 w.push(Widget::Row(
                     d.keyframes
                         .iter()

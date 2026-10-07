@@ -572,11 +572,29 @@ fn in_game_controls_and_the_pause_menu() {
         vec![AppEffect::SetSpeed("9x".into())]
     );
     assert_eq!(click(&mut m, "hud.save"), vec![AppEffect::SaveNow]);
-    // Escape opens the pause menu and closes it again.
-    assert!(press(&mut m, Key::Escape).is_empty());
+    // Escape opens the pause menu and closes it again; a running world is paused while the menu is open
+    // and resumed when it closes.
+    assert_eq!(
+        press(&mut m, Key::Escape),
+        vec![AppEffect::SetRunning(false)]
+    );
     assert!(matches!(m.screen(), Screen::Pause));
-    assert!(press(&mut m, Key::Escape).is_empty());
+    assert_eq!(
+        press(&mut m, Key::Escape),
+        vec![AppEffect::SetRunning(true)]
+    );
     assert!(matches!(m.screen(), Screen::InGame));
+    // A world that was already paused stays paused.
+    m.update(UiEvent::Hud(HudInfo {
+        running: false,
+        ..m.hud().clone()
+    }));
+    assert!(press(&mut m, Key::Escape).is_empty());
+    assert!(press(&mut m, Key::Escape).is_empty());
+    m.update(UiEvent::Hud(HudInfo {
+        running: true,
+        ..m.hud().clone()
+    }));
     // Options from the pause menu return to the pause menu.
     press(&mut m, Key::Escape);
     click(&mut m, "pause.options");

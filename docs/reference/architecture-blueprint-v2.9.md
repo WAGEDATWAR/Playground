@@ -1,4 +1,4 @@
-# Playground — Architecture Blueprint v2.8
+# Playground — Architecture Blueprint v2.9
 
 **Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.1 and Roadmap v4.2. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). It is a spec, not final source; names and signatures may shift during implementation, but the contracts and invariants may not. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
 
@@ -19,6 +19,8 @@
 **v2.7 (during Phase 0):** milestone 0.7 specifics (§3 services and redaction, §10 provider set, Player2 and the device-code sign-in, key and log hygiene) and the architecture additions accepted as S-022 to S-030: typed event catalog (§6.2, §20), row-level state hashes (§5.4), save summaries (§13.1), schema-driven settings (§13.1, §14.3), string tables (§14.3), automatic bug bundles, keyframe snapshots and shadow verification (§6.4, §17, §18), headless UI snapshots (§14.3).
 
 **v2.8 (during Phase 0):** milestone 0.9 (the ScriptVm spike) settled what the first implementation had to choose. §23.4: the compiler is configured so removed and replaced builtins cannot be reached through Luau's fast-call and `pairs` lowering, and string functions need no length caps because Luau's pattern matcher is interruptible by fuel. §23.5 and §23.10: pack components apply to every entity of their kinds, are stored only when written, and are hashed only when present. §23.6: quarantine from deterministic failures is world state. §23.15: `call` takes its context as data and returns buffered commands; registrations are returned rather than pushed to a registrar. See `docs/spikes/scriptvm.md` and D-031.
+
+**v2.9 (during Phase 0):** milestone 0.10 (app shell and graphical main menu), §14: the UI is three layers. `pg-ui-model` holds pure screen state machines from events to state and effects, plus the widget tree (with text snapshots, focus order and keyboard navigation); `pg-runtime::app::AppController` performs effects against the host traits and the running world; `pg-app` is a thin winit, wgpu and egui shell that draws the widget tree and the map through egui's painter. Import and export use folders until native dialogs (S-037), the pause menu pauses a running world, AccessKit is deferred (S-038). See D-033.
 
 ## 0. Architectural principles
 

@@ -661,3 +661,60 @@ fn every_string_key_a_screen_asks_for_exists_and_none_is_blank() {
         }
     }
 }
+
+#[test]
+fn the_pseudo_locale_transforms_every_screen_and_keeps_the_arguments() {
+    let m = Machine::new();
+    let c = content(&[]);
+    let mut d = m.launch(&c);
+    d.click("main.new");
+    d.click("new.create");
+    d.settle(|d| d.model.hud().pawns == 10);
+    d.send(UiEvent::Key(Key::Escape));
+    d.click("pause.menu");
+    d.click("main.options");
+    d.send(UiEvent::Text("setting.ui.language".into(), "pseudo".into()));
+    d.send(UiEvent::Key(Key::Escape));
+    let menu = d.text();
+    assert!(!menu.contains("Saved worlds"), "{menu}");
+    assert!(
+        menu.contains("Continue: [") || !menu.is_ascii(),
+        "{menu}"
+    );
+    assert!(
+        menu.contains("New Town"),
+        "the world's own name is never transformed:\n{menu}"
+    );
+    no_missing_strings(&menu);
+    // Back to English.
+    d.click("main.options");
+    d.send(UiEvent::Text("setting.ui.language".into(), "en".into()));
+    d.send(UiEvent::Key(Key::Escape));
+    assert!(d.text().contains("Saved worlds"));
+}
+
+#[test]
+fn the_reason_explorer_and_shadow_verification_show_up_in_the_overlay() {
+    let m = Machine::new();
+    let c = content(&[]);
+    let mut d = m.launch(&c);
+    d.ctl.set_shadow_threads(Some(2));
+    d.click("main.new");
+    d.click("new.create");
+    d.settle(|d| d.model.hud().pawns == 10);
+    d.click("hud.speed.27x");
+    d.settle(|d| d.model.hud().running);
+    d.play(&m, 24);
+    d.settle(|d| d.tick() > 3700);
+    let data = d.ctl.overlay_data();
+    assert!(
+        data.shadow.contains("verified") && data.shadow.contains("0 diverged"),
+        "{}",
+        data.shadow
+    );
+    assert!(
+        !data.shadow.starts_with("0 verified"),
+        "spans were verified: {}",
+        data.shadow
+    );
+}

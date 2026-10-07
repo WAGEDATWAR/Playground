@@ -147,6 +147,9 @@ fn saved_worlds(worlds: &[WorldEntry], f: &SavedForm, t: Text) -> Tree {
         }
         w.push(Widget::button(&format!("saved.row.{}", e.id), label));
         if f.selected.as_deref() == Some(e.id.as_str()) {
+            if let Some(name) = &e.thumbnail {
+                w.push(Widget::Thumbnail { name: name.clone() });
+            }
             w.push(Widget::Note(t(
                 "ui.saved.details",
                 &[
@@ -379,6 +382,10 @@ fn ai_options(ai: &AiState, f: &AiForm, t: Text) -> Tree {
     Tree::new(t("ui.ai.title", &[]), w)
 }
 
+pub(crate) fn hud(h: &HudInfo, t: Text) -> Tree {
+    in_game(h, t)
+}
+
 fn in_game(h: &HudInfo, t: Text) -> Tree {
     let mut w = vec![Widget::Row(vec![
         Widget::Label(h.world_name.clone()),
@@ -500,18 +507,12 @@ pub(crate) fn activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
         ("hud", "hud.pause") => vec![AppEffect::SetRunning(!m.hud().running)],
         ("hud", "hud.resume") => vec![AppEffect::SetRunning(true)],
         ("hud", "hud.save") => vec![AppEffect::SaveNow],
-        ("hud", "hud.menu") => {
-            m.go_to(Screen::Pause);
-            Vec::new()
-        }
+        ("hud", "hud.menu") => m.open_pause(),
         ("hud", _) => match id.strip_prefix("hud.speed.") {
             Some(s) => vec![AppEffect::SetSpeed(s.to_owned())],
             None => Vec::new(),
         },
-        ("pause", "pause.resume") => {
-            m.go_back();
-            Vec::new()
-        }
+        ("pause", "pause.resume") => m.close_pause(),
         ("pause", "pause.save") => vec![AppEffect::SaveNow],
         ("pause", "pause.menu") => {
             m.leave_world();

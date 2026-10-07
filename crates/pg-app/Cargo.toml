@@ -10,6 +10,12 @@ pg-runtime = { path = "../../crates/pg-runtime" }
 pg-render = { path = "../../crates/pg-render" }
 pg-host-os = { path = "../../crates/pg-host-os" }
 pg-ui-model = { path = "../../crates/pg-ui-model" }
+pg-host = { path = "../../crates/pg-host" }
+pg-content = { path = "../../crates/pg-content" }
+pg-ai = { path = "../../crates/pg-ai" }
+pg-core = { path = "../../crates/pg-core" }
 egui = "0.36.2"
-egui-wgpu = "0.36.2"
+egui-wgpu = { version = "0.36.2", features = ["winit"] }
 egui-winit = "0.36.2"
+pollster = "1.0.1"
+winit = "0.30.13"

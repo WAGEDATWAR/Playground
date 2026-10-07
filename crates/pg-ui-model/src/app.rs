@@ -111,6 +111,8 @@ pub struct AppModel {
     notice: Option<Notice>,
     focus: Option<String>,
     in_world: bool,
+    /// The pause menu stopped a running world, so closing it should start it again.
+    paused_by_menu: bool,
     overlay: Overlay,
 }
 
@@ -136,6 +138,7 @@ impl AppModel {
             notice: None,
             focus: None,
             in_world: false,
+            paused_by_menu: false,
             overlay: Overlay::default(),
         }
     }
@@ -190,6 +193,11 @@ impl AppModel {
             tree.widgets.insert(0, Widget::Label(text));
         }
         tree
+    }
+
+    /// The in-game bar, whichever screen is on top of the world (the pause menu is drawn over it).
+    pub fn hud_tree(&self, t: Text) -> Tree {
+        crate::screens::hud(self.hud(), t)
     }
 
     /// The overlay's tree when it is visible.
@@ -507,14 +515,8 @@ impl AppModel {
         match self.screen.clone() {
             Screen::Boot | Screen::MainMenu => Vec::new(),
             Screen::CrashPrompt { .. } => self.activate("crash.dismiss"),
-            Screen::InGame => {
-                self.go(Screen::Pause);
-                Vec::new()
-            }
-            Screen::Pause => {
-                self.back();
-                Vec::new()
-            }
+            Screen::InGame => self.open_pause(),
+            Screen::Pause => self.close_pause(),
             Screen::SavedWorlds(f) if f.confirm_delete => {
                 if let Screen::SavedWorlds(g) = &mut self.screen {
                     g.confirm_delete = false;
@@ -572,6 +574,27 @@ impl AppModel {
         &mut self.screen
     }
 
+    /// Opens the pause menu. A running world is paused while it is open.
+    pub(crate) fn open_pause(&mut self) -> Vec<AppEffect> {
+        self.paused_by_menu = self.hud.running;
+        self.go(Screen::Pause);
+        if self.paused_by_menu {
+            vec![AppEffect::SetRunning(false)]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Closes the pause menu, resuming the world if opening it paused it.
+    pub(crate) fn close_pause(&mut self) -> Vec<AppEffect> {
+        self.back();
+        if std::mem::take(&mut self.paused_by_menu) {
+            vec![AppEffect::SetRunning(true)]
+        } else {
+            Vec::new()
+        }
+    }
+
     pub(crate) fn go_to(&mut self, s: Screen) {
         self.go(s);
     }
@@ -582,6 +605,7 @@ impl AppModel {
 
     pub(crate) fn leave_world(&mut self) {
         self.in_world = false;
+        self.paused_by_menu = false;
         self.reset_to(Screen::MainMenu);
     }
 
