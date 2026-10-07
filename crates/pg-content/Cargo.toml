@@ -7,4 +7,5 @@ publish = false
 
 [dependencies]
 blake3 = { version = "1.8.7", default-features = false, features = ["std", "pure"] }
+pg-api = { version = "0.0.1", path = "../pg-api" }
 pg-canon = { version = "0.0.1", path = "../pg-canon" }

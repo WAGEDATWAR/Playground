@@ -22,9 +22,9 @@ use std::time::Duration;
 
 /// The OAuth grant type for the device flow.
 pub const GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:device_code";
-/// The id this build identifies itself with until a real one is registered with the provider (an open
-/// question recorded in the plan). Override with the `PG_PLAYER2_CLIENT_ID` environment variable in tools.
-pub const PLACEHOLDER_CLIENT_ID: &str = "playground-unregistered";
+/// The client id registered with Player2 for this game (a public identifier, not a secret). Tools can
+/// override it with `--client-id` or the `PG_PLAYER2_CLIENT_ID` environment variable.
+pub const CLIENT_ID: &str = "01a114aa-5569-7b98-96cc-949d6d32191d";
 
 const BASE: &str = "https://api.player2.game/v1";
 const MAX_USER_CODE: usize = 32;

@@ -10,7 +10,7 @@ Docs are current: Blueprint v2.7, Roadmap v4.5, Design Document v3.2.
 
 ## Blocked / waiting on user
 
-- [ ] **Register a Player2 `client_id`** for this game (Roadmap §12 item 8) and confirm the API base URL and terms (`player2.game/devtos`). Until then `pg ai login player2` uses a placeholder the provider will likely refuse. Not blocking 0.8.
+- [x] (done 2026-10-07, id in `pg_ai::login::CLIENT_ID`; terms at `player2.game/devtos` still worth a read before release) **Register a Player2 `client_id`** for this game (Roadmap §12 item 8) and confirm the API base URL and terms (`player2.game/devtos`). Until then `pg ai login player2` uses a placeholder the provider will likely refuse. Not blocking 0.8.
 
 ## Next up
 

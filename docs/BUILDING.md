@@ -119,8 +119,8 @@ cargo run -q -p pg-cli -- ai selfcheck
 # then run the real connection test
 #   PowerShell:  $env:MY_KEY = "sk-..."; cargo run -q -p pg-cli -- ai key set openai --from-env MY_KEY
 cargo run -q -p pg-cli -- ai test --provider openai
-# Player2 signs in with a code instead of a pasted key (needs a registered client id, see docs/TODO.md):
-#   PowerShell:  $env:PG_PLAYER2_CLIENT_ID = "<your client id>"; cargo run -q -p pg-cli -- ai login player2
+# Player2 signs in with a code instead of a pasted key (the registered client id is built in):
+#   cargo run -q -p pg-cli -- ai login player2
 cargo run -q -p pg-cli -- ai test --provider player2
 
 # The golden replay CI checks on every OS

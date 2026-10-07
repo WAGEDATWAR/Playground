@@ -2,7 +2,7 @@
 
 use crate::args::{parse, Parsed, Spec};
 use pg_ai::client::{AiClient, ClientConfig};
-use pg_ai::login::{store_key, DeviceLoginSession, SessionState, PLACEHOLDER_CLIENT_ID};
+use pg_ai::login::{store_key, DeviceLoginSession, SessionState, CLIENT_ID};
 use pg_ai::provider::{adapter_for, allowed_hosts, AiTask, AuthMethod, Provider};
 use pg_ai::selfcheck;
 use pg_ai::settings::{validate_model_id, DeviceSettings, KeyManager};
@@ -255,10 +255,7 @@ fn login(args: &[String]) -> Result<ExitCode, String> {
         .one("client-id")
         .map(str::to_owned)
         .or_else(|| std::env::var("PG_PLAYER2_CLIENT_ID").ok())
-        .unwrap_or_else(|| PLACEHOLDER_CLIENT_ID.to_owned());
-    if client_id == PLACEHOLDER_CLIENT_ID {
-        println!("note: using the placeholder client id; the provider will probably refuse it until one is registered (--client-id or PG_PLAYER2_CLIENT_ID)");
-    }
+        .unwrap_or_else(|| CLIENT_ID.to_owned());
     let net = AllowListNet::new(UreqNet, &allowed_hosts());
     let clock = SystemClock::new();
     let cancel = CancelToken::new();
