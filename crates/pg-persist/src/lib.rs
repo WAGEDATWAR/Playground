@@ -2,3 +2,6 @@
 //! logs, bug bundles and scenarios. Blueprint §13, §20.
 
 pub mod codec;
+pub mod compat;
+pub mod migrate;
+pub mod store;
