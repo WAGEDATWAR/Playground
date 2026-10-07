@@ -43,6 +43,7 @@ pub fn device_registry() -> SettingsRegistry {
         false,
     );
     let _ = r.register("ui.vsync", Field::boolean(true), Scope::Device, false);
+    let _ = r.register("dev.enabled", Field::boolean(false), Scope::Device, false);
     let _ = r.register("ui.language", Field::text(16, "en"), Scope::Device, false);
     let _ = register_ai_settings(&mut r);
     r
@@ -106,6 +107,7 @@ mod tests {
             "ai.custom_model",
             "ai.enabled",
             "ai.provider",
+            "dev.enabled",
             "time.autosave_minutes",
             "time.pause_on_focus_loss",
             "ui.language",

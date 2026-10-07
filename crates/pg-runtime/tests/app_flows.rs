@@ -110,6 +110,16 @@ impl Driver {
         panic!("timed out; screen is {:?}", self.model.screen());
     }
 
+    /// Turns developer mode on from the pause menu's Options, as a player would, and returns to the world.
+    fn dev_mode(&mut self) {
+        self.send(UiEvent::Key(Key::Escape));
+        self.click("pause.options");
+        self.send(UiEvent::Toggle("setting.dev.enabled".into(), true));
+        self.send(UiEvent::Key(Key::Escape));
+        self.send(UiEvent::Key(Key::Escape));
+        assert!(self.model.dev_mode());
+    }
+
     /// Plays `secs` of fake time in small steps, so the world's frame loop sees a steady clock.
     fn play(&mut self, m: &Machine, secs: u64) {
         for _ in 0..secs * 10 {
@@ -480,9 +490,9 @@ fn a_damaged_save_is_recovered_or_refused_with_a_reason_and_other_worlds_are_unt
     d.type_into("new.name", "Fragile");
     d.click("new.create");
     d.settle(|d| d.model.hud().pawns == 10);
-    d.click("hud.save");
-    d.settle(|d| d.text().contains("Saved"));
     d.send(UiEvent::Key(Key::Escape));
+    d.click("pause.save");
+    d.settle(|d| d.model.hud().status.contains("Saved"));
     d.click("pause.menu");
     // Corrupt the newest generation file.
     let newest = m
@@ -544,6 +554,7 @@ fn the_overlay_shows_systems_events_packs_and_script_costs() {
     d.settle(|d| d.model.hud().running);
     d.play(&m, 4);
     d.settle(|d| d.tick() > 600);
+    d.dev_mode();
     d.send(UiEvent::Key(Key::F3));
     d.model.set_overlay_data(d.ctl.overlay_data());
     let data = d.ctl.overlay_data();
@@ -624,6 +635,7 @@ fn every_string_key_a_screen_asks_for_exists_and_none_is_blank() {
     grab(&d);
     d.settle(|d| d.model.hud().pawns == 10);
     grab(&d);
+    d.dev_mode();
     d.send(UiEvent::Key(Key::F3));
     d.model.set_overlay_data(d.ctl.overlay_data());
     for tab in ["time", "systems", "events", "reasons", "packs", "scripts"] {

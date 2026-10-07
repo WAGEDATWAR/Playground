@@ -184,7 +184,7 @@ The ScriptVm spike report with every measurement is `docs/spikes/scriptvm.md`.
 cargo run -p pg-app
 
 # Developer aids.
-cargo run -p pg-app -- --demo game      # new, options, ai, saved, game, pause, overlay: open straight on a screen
+cargo run -p pg-app -- --demo game      # new, options, ai, saved, game, drawer, focus, pause, overlay: open straight on a screen
 cargo run -p pg-app -- --shadow 2       # re-run every keyframe span on 2 threads and compare (overlay, Time tab)
 cargo run -p pg-app -- --pack packs/cookbook/caffeine   # also load a pack with scripts (developer use)
 cargo run -p pg-app -- --smoke          # scripted session without a window; what CI runs
@@ -196,13 +196,16 @@ uses another one. Exports are written to `exports/` there and imports are read f
 
 **Keys:** Tab / Shift+Tab and Up / Down move focus, Left / Right change choices and sliders, Enter or Space
 press, Escape goes back (in the world it opens the pause menu), Space pauses and resumes, F3 shows the
-developer overlay. In the world: drag to pan the map, mouse wheel to zoom.
+developer overlay (only after turning on Options, Developer mode). In the world: the controls are in the
+bottom-right corner (the speed button opens a drawer); saving is in the pause menu (Escape). Drag to pan the map,
+mouse wheel to zoom.
 
 **What to try for the 0.10 checkpoint:** launch; New world (change the name, map size, residents); watch the
 town run at 1x, 9x and 27x; pause; Escape and Save and go to main menu; Saved worlds (the picture, Load,
 Export, Delete); Continue; Options (scale, window mode, autosave, language `pseudo` to see every string
 transformed); Options, AI provider, Player2 (sign-in shows a code and link); close the window while a world
-runs and relaunch to see it saved; F3 for the overlay.
+runs and relaunch to see it saved; Options, Developer mode, then F3 for the overlay; switch to another window
+and back to see the centred "Welcome back" notice (Options can turn pause-on-focus-loss off).
 
 ## Gate scenarios and the soak (0.11)
 

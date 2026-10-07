@@ -124,7 +124,16 @@ pub fn run(content: Arc<ContentSet>) -> Result<(), String> {
     app.dispatch(UiEvent::Click("hud.speed.27x".into()));
     h.until(&mut app, "time to pass", |a| a.model.hud().tick > 200)?;
     expect(true, "time passes in the running world")?;
+    app.dispatch(UiEvent::Key(Key::Escape));
+    app.dispatch(UiEvent::Click("pause.options".into()));
+    app.dispatch(UiEvent::Toggle("setting.dev.enabled".into(), true));
+    app.dispatch(UiEvent::Key(Key::Escape));
+    app.dispatch(UiEvent::Key(Key::Escape));
     app.dispatch(UiEvent::Key(Key::F3));
+    expect(
+        app.model.overlay().visible(),
+        "developer mode opens the overlay",
+    )?;
     h.run_for(&mut app, 150);
     app.dispatch(UiEvent::Key(Key::F3));
     app.dispatch(UiEvent::Key(Key::Escape));

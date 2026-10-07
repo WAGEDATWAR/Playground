@@ -5,8 +5,9 @@
 //! through `t`; widget ids are stable and never translated.
 
 use crate::app::{AiForm, AppModel, ConnUi, LoginUi, NewWorldForm, SavedForm, Screen};
+use crate::layout::{Align, DrawerLayout};
 use crate::types::*;
-use crate::widget::{Tree, Widget};
+use crate::widget::{DrawerItem, Tree, Widget};
 use pg_host::Secret;
 
 fn hhmm(minute_of_day: u32) -> String {
@@ -46,7 +47,7 @@ pub(crate) fn build(m: &AppModel, t: Text) -> Tree {
         Screen::SavedWorlds(f) => saved_worlds(st.worlds, f, t),
         Screen::Options => options(st.settings, t),
         Screen::AiOptions(f) => ai_options(st.ai, f, t),
-        Screen::InGame => in_game(st.hud, t),
+        Screen::InGame => in_game(m, t),
         Screen::Pause => pause(t),
     }
 }
@@ -250,6 +251,8 @@ fn options(items: &[SettingItem], t: Text) -> Tree {
             entry.1.push(Widget::Note(t("ui.options.restart", &[])));
         }
     }
+    // Developer settings go last, out of the way of the ones every player uses.
+    groups.sort_by_key(|(g, _)| g == "dev");
     for (g, children) in groups {
         w.push(Widget::Group {
             title: t(&format!("ui.options.group.{g}"), &[]),
@@ -382,12 +385,21 @@ fn ai_options(ai: &AiState, f: &AiForm, t: Text) -> Tree {
     Tree::new(t("ui.ai.title", &[]), w)
 }
 
-pub(crate) fn hud(h: &HudInfo, t: Text) -> Tree {
-    in_game(h, t)
+/// The in-game screen in the three places it is drawn: an information bar along the top, the simulation
+/// controls in the bottom-right corner, and, while the window was in the background, a notice in the
+/// middle of the screen. The focus order is the notice first, then the controls.
+pub struct HudParts {
+    pub top: Vec<Widget>,
+    pub dialog: Vec<Widget>,
+    pub controls: Vec<Widget>,
 }
 
-fn in_game(h: &HudInfo, t: Text) -> Tree {
-    let mut w = vec![Widget::Row(vec![
+/// The speeds the drawer offers.
+pub const SPEEDS: [&str; 4] = ["1x", "3x", "9x", "27x"];
+
+pub(crate) fn hud_parts(m: &AppModel, t: Text) -> HudParts {
+    let h = m.hud();
+    let mut row = vec![
         Widget::Label(h.world_name.clone()),
         Widget::Label(t(
             "ui.hud.time",
@@ -396,37 +408,62 @@ fn in_game(h: &HudInfo, t: Text) -> Tree {
                 ("time", &hhmm(h.minute_of_day)),
             ],
         )),
-        Widget::Label(if h.running {
-            t("ui.hud.speed", &[("speed", &h.speed)])
-        } else {
-            t("ui.hud.paused", &[])
-        }),
         Widget::Label(t("ui.hud.residents", &[("count", &h.pawns.to_string())])),
-    ])];
-    if h.suspended {
-        w.push(Widget::Label(t("ui.hud.suspended", &[])));
-        w.push(Widget::button("hud.resume", t("ui.hud.resume", &[])));
+    ];
+    if !h.running {
+        row.push(Widget::Label(t("ui.hud.paused", &[])));
     }
-    let mut controls = vec![Widget::button(
-        "hud.pause",
-        t(
-            if h.running {
-                "ui.hud.pause"
-            } else {
-                "ui.hud.play"
-            },
-            &[],
-        ),
-    )];
-    for s in ["1x", "3x", "9x", "27x"] {
-        controls.push(Widget::button(&format!("hud.speed.{s}"), s));
-    }
-    controls.push(Widget::button("hud.save", t("ui.hud.save", &[])));
-    controls.push(Widget::button("hud.menu", t("ui.hud.menu", &[])));
-    w.push(Widget::Row(controls));
+    let mut top = vec![Widget::Row(row)];
     if !h.status.is_empty() {
-        w.push(Widget::Note(h.status.clone()));
+        top.push(Widget::Note(h.status.clone()));
     }
+    let mut dialog = Vec::new();
+    if h.suspended {
+        dialog.push(Widget::Heading(t("ui.hud.suspended_title", &[])));
+        dialog.push(Widget::Label(t("ui.hud.suspended", &[])));
+        dialog.push(Widget::button("hud.resume", t("ui.hud.resume", &[])));
+    }
+    let controls = vec![
+        Widget::button(
+            "hud.pause",
+            t(
+                if h.running {
+                    "ui.hud.pause"
+                } else {
+                    "ui.hud.play"
+                },
+                &[],
+            ),
+        ),
+        Widget::Drawer {
+            id: "hud.speed".into(),
+            label: t("ui.hud.speed", &[("speed", &h.speed)]),
+            open: m.open_drawer() == Some("hud.speed"),
+            layout: DrawerLayout::List { max_rows: 8 },
+            align: Align::End,
+            items: SPEEDS
+                .iter()
+                .map(|s| DrawerItem {
+                    id: format!("hud.speed.{s}"),
+                    label: (*s).to_owned(),
+                    selected: h.speed == *s,
+                })
+                .collect(),
+        },
+        Widget::button("hud.menu", t("ui.hud.menu", &[])),
+    ];
+    HudParts {
+        top,
+        dialog,
+        controls,
+    }
+}
+
+fn in_game(m: &AppModel, t: Text) -> Tree {
+    let p = hud_parts(m, t);
+    let mut w = p.top;
+    w.extend(p.dialog);
+    w.extend(p.controls);
     Tree::new(t("ui.hud.title", &[]), w)
 }
 
@@ -506,10 +543,16 @@ pub(crate) fn activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
         ("ai", _) => ai_activate(m, id),
         ("hud", "hud.pause") => vec![AppEffect::SetRunning(!m.hud().running)],
         ("hud", "hud.resume") => vec![AppEffect::SetRunning(true)],
-        ("hud", "hud.save") => vec![AppEffect::SaveNow],
         ("hud", "hud.menu") => m.open_pause(),
+        ("hud", "hud.speed") => {
+            m.toggle_drawer("hud.speed");
+            Vec::new()
+        }
         ("hud", _) => match id.strip_prefix("hud.speed.") {
-            Some(s) => vec![AppEffect::SetSpeed(s.to_owned())],
+            Some(s) => {
+                m.close_drawer();
+                vec![AppEffect::SetSpeed(s.to_owned())]
+            }
             None => Vec::new(),
         },
         ("pause", "pause.resume") => m.close_pause(),

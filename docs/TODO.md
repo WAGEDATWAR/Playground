@@ -6,6 +6,8 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 **Stage 0 gate (milestone 0.11): implemented, waiting for your verification.** `m0.10` is accepted and tagged; S-037..S-039 accepted (Roadmap v4.7, D-034); the Blueprint was consolidated to v3.0 (D-035). 0.11 delivered: scenario runner environments and the `migrate`, `soak` and state-hash steps; three gate scenarios and the 30-day soak (shadow-verified, bounded, hash-pinned); `pg-app --smoke` with a relaunch; CI steps and a soak job on all three systems; `pg check` at 29 checks; the gate report `docs/gates/stage-0.md`; decision D-036. 719 tests.
 
+**Review changes after your testing (D-037, Blueprint v3.1):** focus-loss notice centred; simulation controls bottom right; saving only in the pause menu; speeds in one drawer button; drawers (list or grid, placed opposite the nearest border, scale-aware, scrollable); developer-mode toggle in Options (gates F3); pause-on-focus-loss toggle (already in Options). Submitted for another review.
+
 **Gate for you:** read `docs/gates/stage-0.md`, click through the game once more (`docs/BUILDING.md`, "Playing the game"), and confirm CI is green on all three systems including the soak job. After acceptance: tag `m0.11` (Stage 0 complete) and start Stage 1 planning.
 
 ## Blocked / waiting on user

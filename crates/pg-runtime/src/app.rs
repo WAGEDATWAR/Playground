@@ -1001,8 +1001,8 @@ impl AppController {
         }
         let (running, suspended, speed) = match snap.run {
             RunState::Running(s) => (true, false, s.name().to_owned()),
-            RunState::Suspended => (false, true, String::new()),
-            _ => (false, false, String::new()),
+            RunState::Suspended => (false, true, self.speed.name().to_owned()),
+            _ => (false, false, self.speed.name().to_owned()),
         };
         Some(HudInfo {
             world_name: self

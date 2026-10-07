@@ -113,6 +113,8 @@ pub struct AppModel {
     in_world: bool,
     /// The pause menu stopped a running world, so closing it should start it again.
     paused_by_menu: bool,
+    /// The drawer whose panel is open, if any (at most one).
+    open_drawer: Option<String>,
     overlay: Overlay,
 }
 
@@ -139,6 +141,7 @@ impl AppModel {
             focus: None,
             in_world: false,
             paused_by_menu: false,
+            open_drawer: None,
             overlay: Overlay::default(),
         }
     }
@@ -165,6 +168,17 @@ impl AppModel {
 
     pub fn overlay(&self) -> &Overlay {
         &self.overlay
+    }
+
+    pub fn open_drawer(&self) -> Option<&str> {
+        self.open_drawer.as_deref()
+    }
+
+    /// Developer mode is on (Options, Developer): the overlay and its tools are available.
+    pub fn dev_mode(&self) -> bool {
+        self.settings
+            .iter()
+            .any(|s| s.id == "dev.enabled" && s.value == SettingValue::Bool(true))
     }
 
     pub fn notice(&self) -> Option<&Notice> {
@@ -195,9 +209,10 @@ impl AppModel {
         tree
     }
 
-    /// The in-game bar, whichever screen is on top of the world (the pause menu is drawn over it).
-    pub fn hud_tree(&self, t: Text) -> Tree {
-        crate::screens::hud(self.hud(), t)
+    /// The in-game screen in its three places, whichever screen is on top of the world (the pause menu is
+    /// drawn over it).
+    pub fn hud_parts(&self, t: Text) -> crate::screens::HudParts {
+        crate::screens::hud_parts(self, t)
     }
 
     /// The overlay's tree when it is visible.
@@ -211,7 +226,6 @@ impl AppModel {
             worlds: &self.worlds,
             settings: &self.settings,
             ai: &self.ai,
-            hud: &self.hud,
         }
     }
 
@@ -221,6 +235,7 @@ impl AppModel {
         let from = std::mem::replace(&mut self.screen, s);
         self.stack.push(from);
         self.focus = None;
+        self.open_drawer = None;
     }
 
     fn back(&mut self) {
@@ -234,12 +249,14 @@ impl AppModel {
             };
         }
         self.focus = None;
+        self.open_drawer = None;
     }
 
     fn reset_to(&mut self, s: Screen) {
         self.screen = s;
         self.stack.clear();
         self.focus = None;
+        self.open_drawer = None;
     }
 
     fn notice_with(&mut self, key: &'static str, args: &[(&str, &str)]) {
@@ -291,6 +308,9 @@ impl AppModel {
             self.notice = None;
         }
         let effects = self.apply(ev);
+        if !self.dev_mode() && self.overlay.visible() {
+            self.overlay.toggle();
+        }
         self.fix_focus();
         effects
     }
@@ -377,7 +397,13 @@ impl AppModel {
             }
             UiEvent::Hud(h) => {
                 if self.in_world {
+                    // The notice for a returning player takes focus when it appears, so Enter resumes.
+                    let appeared = h.suspended && !self.hud.suspended;
                     self.hud = h;
+                    if appeared && matches!(self.screen, Screen::InGame) {
+                        self.open_drawer = None;
+                        self.focus = Some("hud.resume".to_owned());
+                    }
                 }
                 Vec::new()
             }
@@ -432,11 +458,16 @@ impl AppModel {
 
     fn key(&mut self, k: Key) -> Vec<AppEffect> {
         if k == Key::F3 {
-            self.overlay.toggle();
+            if self.dev_mode() {
+                self.overlay.toggle();
+            }
             return Vec::new();
         }
+        if let Some(fx) = self.drawer_key(k) {
+            return fx;
+        }
         // In the world, Space pauses and resumes whatever has focus.
-        if k == Key::Space && matches!(self.screen, Screen::InGame) {
+        if k == Key::Space && matches!(self.screen, Screen::InGame) && self.open_drawer.is_none() {
             return vec![AppEffect::SetRunning(!self.hud.running)];
         }
         match k {
@@ -459,11 +490,37 @@ impl AppModel {
         }
     }
 
+    /// Arrow keys inside an open drawer move between its items (Up and Down jump a row in a grid) and
+    /// stop at the ends. `None` when the key is not the drawer's business.
+    fn drawer_key(&mut self, k: Key) -> Option<Vec<AppEffect>> {
+        self.open_drawer.as_ref()?;
+        let focus = self.focus.clone()?;
+        let tree = self.tree(&plain);
+        let (drawer, at) = tree.drawer_of(&focus)?;
+        let Widget::Drawer { items, layout, .. } = drawer else {
+            return None;
+        };
+        let cols = layout.columns(items.len()) as i64;
+        let step = match k {
+            Key::Left => -1,
+            Key::Right => 1,
+            Key::Up => -cols,
+            Key::Down => cols,
+            _ => return None,
+        };
+        let to = (at as i64 + step).clamp(0, items.len() as i64 - 1) as usize;
+        self.focus = items.get(to).map(|i| i.id.clone());
+        Some(Vec::new())
+    }
+
     /// Enter or Space on the focused widget.
     fn activate_focused(&mut self, id: &str) -> Vec<AppEffect> {
         let tree = self.tree(&plain);
+        if tree.drawer_of(id).is_some() {
+            return self.activate(id);
+        }
         match tree.find(id) {
-            Some(Widget::Button { .. }) => self.activate(id),
+            Some(Widget::Button { .. }) | Some(Widget::Drawer { .. }) => self.activate(id),
             Some(Widget::Toggle { value, .. }) => {
                 let v = !*value;
                 self.toggle(id, v)
@@ -515,6 +572,10 @@ impl AppModel {
         match self.screen.clone() {
             Screen::Boot | Screen::MainMenu => Vec::new(),
             Screen::CrashPrompt { .. } => self.activate("crash.dismiss"),
+            Screen::InGame if self.open_drawer.is_some() => {
+                self.close_drawer();
+                Vec::new()
+            }
             Screen::InGame => self.open_pause(),
             Screen::Pause => self.close_pause(),
             Screen::SavedWorlds(f) if f.confirm_delete => {
@@ -595,6 +656,34 @@ impl AppModel {
         }
     }
 
+    /// Opens the drawer `id` (closing any other) with focus on its selected item, or closes it if it was open.
+    pub(crate) fn toggle_drawer(&mut self, id: &str) {
+        if self.open_drawer.as_deref() == Some(id) {
+            self.close_drawer();
+            return;
+        }
+        self.open_drawer = Some(id.to_owned());
+        let tree = self.tree(&plain);
+        let first = tree.walk().into_iter().find_map(|w| match w {
+            Widget::Drawer { id: d, items, .. } if d == id => items
+                .iter()
+                .find(|i| i.selected)
+                .or(items.first())
+                .map(|i| i.id.clone()),
+            _ => None,
+        });
+        if first.is_some() {
+            self.focus = first;
+        }
+    }
+
+    /// Closes the open drawer and returns focus to its button.
+    pub(crate) fn close_drawer(&mut self) {
+        if let Some(id) = self.open_drawer.take() {
+            self.focus = Some(id);
+        }
+    }
+
     pub(crate) fn go_to(&mut self, s: Screen) {
         self.go(s);
     }
@@ -648,5 +737,4 @@ pub(crate) struct ScreenState<'a> {
     pub worlds: &'a [WorldEntry],
     pub settings: &'a [SettingItem],
     pub ai: &'a AiState,
-    pub hud: &'a HudInfo,
 }

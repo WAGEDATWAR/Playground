@@ -3,15 +3,17 @@
 //! * [`widget`]: the widget tree every screen produces, with a text snapshot (suggestion S-027).
 //! * [`types`]: events in, effects out, and the data screens show.
 //! * [`app`] and `screens`: the screen state machines, pure functions from events to state and effects.
+//! * [`layout`]: where drawers unroll and how grids size themselves.
 //! * [`overlay`]: the developer overlay's model.
 //!
 //! Nothing in this crate touches a window, the disk, the network or the simulation, so every flow is tested
 //! headless.
 
 pub mod app;
+pub mod layout;
 pub mod overlay;
 pub mod palette;
-mod screens;
+pub mod screens;
 pub mod types;
 pub mod widget;
 

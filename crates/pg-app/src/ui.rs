@@ -6,8 +6,9 @@
 //! key presses into model keys, and the model moves focus, which this module then shows.
 
 use egui::{Align, Color32, Id, Key as EKey, Layout, Modifiers, RichText, Stroke};
+use pg_ui_model::layout::{self, DrawerLayout};
 use pg_ui_model::types::{Key, UiEvent};
-use pg_ui_model::widget::{Tree, Widget};
+use pg_ui_model::widget::{DrawerItem, Tree, Widget};
 use std::collections::BTreeMap;
 
 /// What one drawn tree produced.
@@ -45,12 +46,199 @@ pub fn draw_tree(
     tracker: &FocusTracker,
     images: Images<'_>,
 ) -> Drawn {
+    draw_widgets(ui, &tree.widgets, focus, tracker, images)
+}
+
+/// Draws a list of widgets one under the other.
+pub fn draw_widgets(
+    ui: &mut egui::Ui,
+    widgets: &[Widget],
+    focus: Option<&str>,
+    tracker: &FocusTracker,
+    images: Images<'_>,
+) -> Drawn {
     let mut d = Drawn::default();
     let focus_moved = tracker.last.as_deref() != focus;
-    for w in &tree.widgets {
+    for w in widgets {
         draw_widget(ui, w, focus, focus_moved, false, images, &mut d);
     }
     d
+}
+
+/// Draws a list of widgets side by side at their natural size (a control strip).
+pub fn draw_inline(
+    ui: &mut egui::Ui,
+    widgets: &[Widget],
+    focus: Option<&str>,
+    tracker: &FocusTracker,
+    images: Images<'_>,
+) -> Drawn {
+    let mut d = Drawn::default();
+    let focus_moved = tracker.last.as_deref() != focus;
+    ui.horizontal(|ui| {
+        for w in widgets {
+            draw_widget(ui, w, focus, focus_moved, true, images, &mut d);
+        }
+    });
+    d
+}
+
+fn to_layout(r: egui::Rect) -> layout::Rect {
+    layout::Rect::new(r.min.x, r.min.y, r.width(), r.height())
+}
+
+const ITEM_HEIGHT: f32 = 32.0;
+
+/// A drawer: a button, and while open a panel placed by [`layout::place`] on the side with the most room,
+/// scrolling when its items do not fit. Clicking outside both closes it.
+#[allow(clippy::too_many_arguments)]
+fn draw_drawer(
+    ui: &mut egui::Ui,
+    id: &str,
+    label: &str,
+    open: bool,
+    layout: &DrawerLayout,
+    align: layout::Align,
+    items: &[DrawerItem],
+    focus: Option<&str>,
+    d: &mut Drawn,
+) {
+    let b = egui::Button::new(RichText::new(format!("{label}    ")).size(17.0))
+        .min_size(egui::vec2(0.0, 34.0));
+    let r = ui.add(b);
+    // A small triangle on the right: up while open.
+    let c = egui::pos2(r.rect.right() - 14.0, r.rect.center().y);
+    let tri = if open {
+        vec![
+            c + egui::vec2(-4.5, 2.5),
+            c + egui::vec2(4.5, 2.5),
+            c + egui::vec2(0.0, -3.5),
+        ]
+    } else {
+        vec![
+            c + egui::vec2(-4.5, -2.5),
+            c + egui::vec2(4.5, -2.5),
+            c + egui::vec2(0.0, 3.5),
+        ]
+    };
+    ui.painter().add(egui::Shape::convex_polygon(
+        tri,
+        ui.visuals().text_color(),
+        Stroke::NONE,
+    ));
+    ring(ui, &r, id, focus);
+    if r.clicked() {
+        d.events.push(UiEvent::Click(id.to_owned()));
+    }
+    d.rects.insert(id.to_owned(), r.rect);
+    if !open || items.is_empty() {
+        return;
+    }
+
+    let ctx = ui.ctx().clone();
+    let frame = egui::Frame::popup(ui.style());
+    let margin = frame.total_margin().sum();
+    let pad = ui.spacing().button_padding;
+    let gap = ui.spacing().item_spacing;
+    let font = egui::FontId::proportional(17.0);
+    // What the panel wants (the visible part: rows beyond the maximum scroll).
+    let (cell_w, cell_h, cols, content) = match layout {
+        DrawerLayout::List { max_rows } => {
+            let widest = items
+                .iter()
+                .map(|i| {
+                    ctx.fonts_mut(|f| {
+                        f.layout_no_wrap(i.label.clone(), font.clone(), Color32::WHITE)
+                            .size()
+                            .x
+                    })
+                })
+                .fold(0.0_f32, f32::max);
+            let w = widest + 2.0 * pad.x + 8.0;
+            let rows = items.len().min((*max_rows).max(1) as usize) as f32;
+            (
+                w,
+                ITEM_HEIGHT,
+                1,
+                (w, rows * ITEM_HEIGHT + (rows - 1.0) * gap.y),
+            )
+        }
+        DrawerLayout::Grid(g) => {
+            let (w, h) = g.content_size(items.len());
+            (
+                g.cell_w as f32,
+                g.cell_h as f32,
+                g.columns(items.len()),
+                (w, h),
+            )
+        }
+    };
+    let (gx, gy) = match layout {
+        DrawerLayout::List { .. } => (gap.x, gap.y),
+        DrawerLayout::Grid(g) => (g.gap as f32, g.gap as f32),
+    };
+    let p = layout::place(
+        to_layout(r.rect),
+        to_layout(ctx.content_rect()),
+        (content.0 + margin.x, content.1 + margin.y),
+        align,
+        4.0,
+        8.0,
+    );
+    let inner = egui::vec2(
+        (p.rect.w - margin.x).max(1.0),
+        (p.rect.h - margin.y).max(1.0),
+    );
+    let area = egui::Area::new(egui_id(id).with("drawer"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(egui::pos2(p.rect.x, p.rect.y))
+        .show(&ctx, |ui| {
+            frame.show(ui, |ui| {
+                ui.set_width(inner.x);
+                egui::ScrollArea::both()
+                    .id_salt(egui_id(id).with("scroll"))
+                    .max_width(inner.x)
+                    .max_height(inner.y)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.spacing_mut().item_spacing = egui::vec2(gx, gy);
+                        let mut cell = |ui: &mut egui::Ui, i: &DrawerItem| {
+                            let b = egui::Button::new(RichText::new(&i.label).size(17.0))
+                                .selected(i.selected)
+                                .min_size(egui::vec2(cell_w, cell_h));
+                            let r = ui.add_sized([cell_w, cell_h], b);
+                            ring(ui, &r, &i.id, focus);
+                            if r.clicked() {
+                                d.events.push(UiEvent::Click(i.id.clone()));
+                            }
+                            d.rects.insert(i.id.clone(), r.rect);
+                        };
+                        if cols <= 1 {
+                            for i in items {
+                                cell(ui, i);
+                            }
+                        } else {
+                            for row in items.chunks(cols) {
+                                ui.horizontal(|ui| {
+                                    for i in row {
+                                        cell(ui, i);
+                                    }
+                                });
+                            }
+                        }
+                    });
+            });
+        });
+    let panel = area.response.rect;
+    let pressed_outside = ctx.input(|i| {
+        i.pointer.any_pressed()
+            && i.pointer
+                .interact_pos()
+                .is_some_and(|p| !panel.contains(p) && !r.rect.contains(p))
+    });
+    if pressed_outside {
+        d.events.push(UiEvent::Click(id.to_owned()));
+    }
 }
 
 fn ring(ui: &egui::Ui, r: &egui::Response, id: &str, focus: Option<&str>) {
@@ -206,6 +394,14 @@ fn draw_widget(
         Widget::Progress { label, permille } => {
             ui.add(egui::ProgressBar::new(*permille as f32 / 1000.0).text(label));
         }
+        Widget::Drawer {
+            id,
+            label,
+            open,
+            layout,
+            align,
+            items,
+        } => draw_drawer(ui, id, label, *open, layout, *align, items, focus, d),
         Widget::Row(children) => {
             ui.horizontal_wrapped(|ui| {
                 for c in children {
@@ -366,6 +562,131 @@ mod tests {
                 .events
                 .is_empty()
         );
+    }
+
+    fn drawer(open: bool, layout: DrawerLayout, n: usize) -> Tree {
+        Tree::new(
+            "t",
+            vec![Widget::Drawer {
+                id: "d".into(),
+                label: "Speed 3x".into(),
+                open,
+                layout,
+                align: layout::Align::End,
+                items: (0..n)
+                    .map(|i| DrawerItem {
+                        id: format!("d.{i}"),
+                        label: format!("Entry number {i}"),
+                        selected: i == 1,
+                    })
+                    .collect(),
+            }],
+        )
+    }
+
+    /// A frame with the drawer's button in the bottom-right corner of a 900x700 screen.
+    fn corner_frame(ctx: &egui::Context, tree: &Tree, events: Vec<egui::Event>) -> Drawn {
+        let tracker = FocusTracker::default();
+        let mut drawn = Drawn::default();
+        let mut out = ctx.run_ui(raw(events), |ui| {
+            egui::Area::new(Id::new("corner"))
+                .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-12.0, -12.0))
+                .show(ui.ctx(), |ui| {
+                    drawn = draw_inline(ui, &tree.widgets, None, &tracker, &mut |_| None);
+                });
+        });
+        out.textures_delta.clear();
+        drawn
+    }
+
+    #[test]
+    fn a_list_drawer_opens_up_and_left_inside_the_screen_and_sizes_to_its_longest_entry() {
+        let ctx = egui::Context::default();
+        let tree = drawer(true, DrawerLayout::List { max_rows: 8 }, 4);
+        corner_frame(&ctx, &tree, vec![]);
+        let d = corner_frame(&ctx, &tree, vec![]);
+        let button = d.rects["d"];
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(900.0, 700.0));
+        let widths: Vec<f32> = (0..4).map(|i| d.rects[&format!("d.{i}")].width()).collect();
+        assert!(
+            widths.iter().all(|w| (w - widths[0]).abs() < 0.5),
+            "{widths:?}"
+        );
+        for i in 0..4 {
+            let r = d.rects[&format!("d.{i}")];
+            assert!(screen.contains_rect(r), "{r:?} inside {screen:?}");
+            assert!(r.max.y < button.min.y, "items sit above the button");
+        }
+        let (a, b) = (d.rects["d.0"], d.rects["d.1"]);
+        assert!(a.min.y < b.min.y, "one column, in order");
+        assert!(
+            (a.max.x - button.max.x).abs() < 20.0,
+            "end-aligned with the button"
+        );
+    }
+
+    #[test]
+    fn a_grid_drawer_is_as_big_as_its_items_up_to_the_maximum_and_scrolls_past_it() {
+        let ctx = egui::Context::default();
+        let grid = |n| {
+            drawer(
+                true,
+                DrawerLayout::Grid(layout::GridSpec {
+                    max_cols: 3,
+                    max_rows: 2,
+                    cell_w: 70,
+                    cell_h: 30,
+                    gap: 6,
+                }),
+                n,
+            )
+        };
+        for (n, cols, rows) in [(2, 2, 1), (5, 3, 2), (6, 3, 2)] {
+            let tree = grid(n);
+            corner_frame(&ctx, &tree, vec![]);
+            let d = corner_frame(&ctx, &tree, vec![]);
+            let xs: std::collections::BTreeSet<i32> = (0..n)
+                .map(|i| d.rects[&format!("d.{i}")].min.x.round() as i32)
+                .collect();
+            let ys: std::collections::BTreeSet<i32> = (0..n)
+                .map(|i| d.rects[&format!("d.{i}")].min.y.round() as i32)
+                .collect();
+            assert_eq!((xs.len(), ys.len()), (cols, rows), "{n} items");
+        }
+        // Twenty items: only the maximum rows are visible, the rest scroll.
+        let tree = grid(20);
+        corner_frame(&ctx, &tree, vec![]);
+        let d = corner_frame(&ctx, &tree, vec![]);
+        let top = d.rects["d.0"].min.y;
+        let visible = (0..20)
+            .filter(|i| {
+                let r = d.rects[&format!("d.{i}")];
+                r.min.y >= top && r.max.y <= top + 2.0 * 30.0 + 6.0 + 1.0
+            })
+            .count();
+        assert_eq!(visible, 6);
+    }
+
+    #[test]
+    fn clicking_an_item_or_outside_a_drawer_is_reported() {
+        let ctx = egui::Context::default();
+        let tree = drawer(true, DrawerLayout::List { max_rows: 8 }, 3);
+        corner_frame(&ctx, &tree, vec![]);
+        let d = corner_frame(&ctx, &tree, vec![]);
+        let item = d.rects["d.2"].center();
+        corner_frame(&ctx, &tree, vec![egui::Event::PointerMoved(item)]);
+        corner_frame(&ctx, &tree, vec![click_at(item, true)]);
+        let up = corner_frame(&ctx, &tree, vec![click_at(item, false)]);
+        assert_eq!(up.events, vec![UiEvent::Click("d.2".into())]);
+        // A press far from both the button and the panel asks to toggle the drawer closed.
+        let away = egui::pos2(40.0, 40.0);
+        corner_frame(&ctx, &tree, vec![egui::Event::PointerMoved(away)]);
+        let down = corner_frame(&ctx, &tree, vec![click_at(away, true)]);
+        assert_eq!(down.events, vec![UiEvent::Click("d".into())]);
+        // A closed drawer draws only its button.
+        let closed = drawer(false, DrawerLayout::List { max_rows: 8 }, 3);
+        let d = corner_frame(&ctx, &closed, vec![]);
+        assert!(d.rects.contains_key("d") && !d.rects.contains_key("d.0"));
     }
 
     #[test]

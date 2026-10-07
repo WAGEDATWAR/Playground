@@ -3,7 +3,9 @@
 
 use crate::game_view::GameView;
 use crate::os;
-use crate::ui::{centered_column, collect_keys, draw_tree, Drawn, FocusTracker};
+use crate::ui::{
+    centered_column, collect_keys, draw_inline, draw_tree, draw_widgets, Drawn, FocusTracker,
+};
 use egui::{Color32, Frame};
 use pg_ai::login::CLIENT_ID;
 use pg_ai::provider::allowed_hosts;
@@ -97,7 +99,7 @@ impl App {
     }
 
     /// Developer aid (`--demo <screen>`): drives the app to a screen so it can be looked at or captured
-    /// without clicking there by hand. Names: new, options, ai, saved, game, pause, overlay.
+    /// without clicking there by hand. Names: new, options, ai, saved, game, drawer, focus, pause, overlay.
     pub fn apply_demo(&mut self, name: &str) {
         let click = |a: &mut App, id: &str| a.dispatch(UiEvent::Click(id.to_owned()));
         let start_world = |a: &mut App| {
@@ -125,6 +127,14 @@ impl App {
                 click(self, "saved.row.demo-town");
             }
             "game" => start_world(self),
+            "drawer" => {
+                start_world(self);
+                click(self, "hud.speed");
+            }
+            "focus" => {
+                start_world(self);
+                self.dispatch(UiEvent::FocusLost);
+            }
             "pause" => {
                 start_world(self);
                 self.dispatch(UiEvent::Key(pg_ui_model::Key::Escape));
@@ -132,6 +142,11 @@ impl App {
             "overlay" => {
                 start_world(self);
                 click(self, "hud.speed.27x");
+                self.dispatch(UiEvent::Key(pg_ui_model::Key::Escape));
+                click(self, "pause.options");
+                self.dispatch(UiEvent::Toggle("setting.dev.enabled".into(), true));
+                self.dispatch(UiEvent::Key(pg_ui_model::Key::Escape));
+                self.dispatch(UiEvent::Key(pg_ui_model::Key::Escape));
                 self.dispatch(UiEvent::Key(pg_ui_model::Key::F3));
             }
             other => eprintln!("unknown demo '{other}'"),
@@ -177,7 +192,7 @@ impl App {
 
         let t = |k: &str, a: &[(&str, &str)]| self.controller.text(k, a);
         let tree = self.model.tree(&t);
-        let hud = self.model.hud_tree(&t);
+        let hud = self.model.hud_parts(&t);
         let overlay = self.model.overlay_tree(&t);
         let focus = self.model.focus().map(str::to_owned);
         let screen = self.model.screen().clone();
@@ -202,15 +217,9 @@ impl App {
         match screen {
             Screen::InGame | Screen::Pause => {
                 let in_game = matches!(screen, Screen::InGame);
+                let f = if in_game { focus.as_deref() } else { None };
                 egui::Panel::top("hud").show(ui, |ui| {
-                    let f = if in_game { focus.as_deref() } else { None };
-                    let drawn = draw_tree(
-                        ui,
-                        if in_game { &tree } else { &hud },
-                        f,
-                        &self.tracker,
-                        &mut images,
-                    );
+                    let drawn = draw_widgets(ui, &hud.top, f, &self.tracker, &mut images);
                     events.extend(drawn.events);
                 });
                 egui::CentralPanel::default()
@@ -221,6 +230,30 @@ impl App {
                             ui.centered_and_justified(|ui| ui.label("…"));
                         }
                     });
+                // The simulation controls, bottom right; shown but dead while the pause menu is up.
+                egui::Area::new(egui::Id::new("hud-controls"))
+                    .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-12.0, -12.0))
+                    .show(&ctx, |ui| {
+                        egui::Frame::window(ui.style()).show(ui, |ui| {
+                            ui.add_enabled_ui(in_game, |ui| {
+                                let drawn =
+                                    draw_inline(ui, &hud.controls, f, &self.tracker, &mut images);
+                                events.extend(drawn.events);
+                            });
+                        });
+                    });
+                if in_game && !hud.dialog.is_empty() {
+                    egui::Window::new("welcome-back")
+                        .title_bar(false)
+                        .resizable(false)
+                        .collapsible(false)
+                        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                        .show(&ctx, |ui| {
+                            let drawn =
+                                draw_widgets(ui, &hud.dialog, f, &self.tracker, &mut images);
+                            events.extend(drawn.events);
+                        });
+                }
                 if !in_game {
                     egui::Window::new("pause")
                         .title_bar(false)

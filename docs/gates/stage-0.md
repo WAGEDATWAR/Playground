@@ -4,7 +4,7 @@ Roadmap v4.7, Stage 0 "Done when", checked clause by clause. Each clause names t
 command that reruns it. "Local" is a run on the Windows development machine on 2026-10-08; "CI" is the same
 command on Windows, Linux and macOS (`.github/workflows/ci.yml`). The CI column is filled in when CI is green.
 
-**Status: ready for your verification.** Everything below passes locally; the two things only you can judge are
+**Status: ready for your verification (second review).** The first review's changes (in-game layout, drawers, developer mode; D-037) are in. Everything below passes locally; the two things only you can judge are
 the feel of the app (clause 1) and whether the evidence is enough to call Stage 0 done.
 
 | # | Clause | Evidence | Rerun | Local | CI |
@@ -23,7 +23,7 @@ the feel of the app (clause 1) and whether the evidence is enough to call Stage 
 
 - `cargo fmt --check`, `cargo clippy --workspace --all-targets -D warnings`, `python scripts/check_deps.py`,
   `cargo deny check`: clean.
-- `cargo test --workspace`: 719 tests pass.
+- `cargo test --workspace`: 732 tests pass.
 - `pg check`: 29 of 29 checks pass (determinism vectors, content and string lints, golden replay, event catalog,
   settings registry, profile and session runs, pack lint and golden tests, the three gate scenarios, persistence
   scenario, saves, bundles, redaction self-check).

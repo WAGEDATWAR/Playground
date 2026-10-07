@@ -5,6 +5,7 @@
 //! data it can be snapshotted as text, checked for keyboard reachability, and handed to the platform's
 //! accessibility layer: a button is a button with a name whether it is drawn or not.
 
+use crate::layout::{Align, DrawerLayout};
 use std::fmt::Write;
 
 /// A stable identifier such as `menu.continue`. Ids never contain spaces.
@@ -59,6 +60,17 @@ pub enum Widget {
     Thumbnail {
         name: String,
     },
+    /// A button that opens a panel of choices (a list or a grid) on the side with the most room. The model
+    /// keeps which drawer is open; the shell places and scrolls the panel (see [`crate::layout`]).
+    Drawer {
+        id: WidgetId,
+        /// The button's text.
+        label: String,
+        open: bool,
+        layout: DrawerLayout,
+        align: Align,
+        items: Vec<DrawerItem>,
+    },
     /// Widgets laid out side by side.
     Row(Vec<Widget>),
     /// A group with a title; its contents follow vertically.
@@ -66,6 +78,14 @@ pub enum Widget {
         title: String,
         children: Vec<Widget>,
     },
+}
+
+/// One choice in a drawer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DrawerItem {
+    pub id: WidgetId,
+    pub label: String,
+    pub selected: bool,
 }
 
 impl Widget {
@@ -91,7 +111,8 @@ impl Widget {
             | Widget::TextField { id, .. }
             | Widget::Toggle { id, .. }
             | Widget::Choice { id, .. }
-            | Widget::Slider { id, .. } => Some(id),
+            | Widget::Slider { id, .. }
+            | Widget::Drawer { id, .. } => Some(id),
             _ => None,
         }
     }
@@ -103,7 +124,8 @@ impl Widget {
             Widget::TextField { .. }
             | Widget::Toggle { .. }
             | Widget::Choice { .. }
-            | Widget::Slider { .. } => true,
+            | Widget::Slider { .. }
+            | Widget::Drawer { .. } => true,
             _ => false,
         }
     }
@@ -145,13 +167,35 @@ impl Tree {
         out
     }
 
-    /// The focus order: ids of the focusable widgets in reading order.
+    /// The focus order: ids of the focusable widgets in reading order. An open drawer is followed by its
+    /// items, so the keyboard can reach them.
     pub fn focus_order(&self) -> Vec<&str> {
-        self.walk()
-            .into_iter()
-            .filter(|w| w.focusable())
-            .filter_map(Widget::id)
-            .collect()
+        let mut out = Vec::new();
+        for w in self.walk() {
+            if !w.focusable() {
+                continue;
+            }
+            if let Some(id) = w.id() {
+                out.push(id);
+            }
+            if let Widget::Drawer {
+                open: true, items, ..
+            } = w
+            {
+                out.extend(items.iter().map(|i| i.id.as_str()));
+            }
+        }
+        out
+    }
+
+    /// The open drawer holding `item_id`, with the item's position.
+    pub fn drawer_of(&self, item_id: &str) -> Option<(&Widget, usize)> {
+        self.walk().into_iter().find_map(|w| match w {
+            Widget::Drawer {
+                open: true, items, ..
+            } => items.iter().position(|i| i.id == item_id).map(|p| (w, p)),
+            _ => None,
+        })
     }
 
     pub fn find(&self, id: &str) -> Option<&Widget> {
@@ -248,6 +292,32 @@ fn snapshot_widget(out: &mut String, w: &Widget, depth: usize, focus: Option<&st
         }
         Widget::Thumbnail { name } => {
             let _ = writeln!(out, "{pad}(picture {name})");
+        }
+        Widget::Drawer {
+            id,
+            label,
+            open,
+            items,
+            ..
+        } => {
+            let _ = writeln!(
+                out,
+                "{pad}{}[{label} {}] <{id}>",
+                mark(id),
+                if *open { "^" } else { "v" }
+            );
+            if *open {
+                for i in items {
+                    let _ = writeln!(
+                        out,
+                        "{pad}  {}{}[{}] <{}>",
+                        mark(&i.id),
+                        if i.selected { "*" } else { " " },
+                        i.label,
+                        i.id
+                    );
+                }
+            }
         }
         Widget::Row(c) => {
             let _ = writeln!(out, "{pad}row:");

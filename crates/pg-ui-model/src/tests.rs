@@ -84,6 +84,13 @@ fn settings() -> Vec<SettingItem> {
             value: SettingValue::Bool(true),
             restart_required: true,
         },
+        SettingItem {
+            id: "dev.enabled".into(),
+            label_key: "setting.dev.enabled".into(),
+            kind: SettingKind::Bool,
+            value: SettingValue::Bool(false),
+            restart_required: false,
+        },
         // AI settings never appear in the generated screen: they have their own.
         SettingItem {
             id: "ai.provider".into(),
@@ -118,6 +125,16 @@ fn click(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
 
 fn snap(m: &AppModel) -> String {
     m.tree(&show).snapshot(m.focus())
+}
+
+/// Turns developer mode on or off through the pause menu and Options, as a player would, and comes back.
+fn dev_mode(m: &mut AppModel, on: bool) {
+    press(m, Key::Escape);
+    click(m, "pause.options");
+    m.update(UiEvent::Toggle("setting.dev.enabled".into(), on));
+    press(m, Key::Escape);
+    press(m, Key::Escape);
+    assert!(matches!(m.screen(), Screen::InGame) && m.dev_mode() == on);
 }
 
 fn in_world() -> AppModel {
@@ -571,7 +588,10 @@ fn in_game_controls_and_the_pause_menu() {
         click(&mut m, "hud.speed.9x"),
         vec![AppEffect::SetSpeed("9x".into())]
     );
-    assert_eq!(click(&mut m, "hud.save"), vec![AppEffect::SaveNow]);
+    assert!(
+        !s.contains("hud.save"),
+        "saving lives in the pause menu: {s}"
+    );
     // Escape opens the pause menu and closes it again; a running world is paused while the menu is open
     // and resumed when it closes.
     assert_eq!(
@@ -692,6 +712,7 @@ fn failures_show_a_notice_and_keep_the_screen() {
 #[test]
 fn the_overlay_toggles_with_f3_and_its_clicks_become_effects() {
     let mut m = in_world();
+    dev_mode(&mut m, true);
     assert!(m.overlay_tree(&show).is_none());
     press(&mut m, Key::F3);
     assert!(m.overlay_tree(&show).is_some());
@@ -757,7 +778,10 @@ fn explore(
         let mut next = start.clone();
         let widget = tree.find(id).cloned();
         let fx = match widget {
-            Some(Widget::Button { .. }) => next.update(UiEvent::Click(id.to_owned())),
+            Some(Widget::Button { .. } | Widget::Drawer { .. }) => {
+                next.update(UiEvent::Click(id.to_owned()))
+            }
+            None if tree.drawer_of(id).is_some() => next.update(UiEvent::Click(id.to_owned())),
             Some(Widget::Toggle { value, .. }) => {
                 next.update(UiEvent::Toggle(id.to_owned(), !value))
             }
@@ -897,4 +921,144 @@ fn the_pseudo_text_of_every_screen_is_not_empty() {
             );
         }
     }
+}
+
+#[test]
+fn the_speeds_live_in_one_drawer_that_the_keyboard_can_open_choose_from_and_close() {
+    let mut m = in_world();
+    m.update(UiEvent::Hud(HudInfo {
+        running: true,
+        speed: "3x".into(),
+        ..m.hud().clone()
+    }));
+    let s = snap(&m);
+    assert!(
+        s.contains("[ui.hud.speed{speed=3x} v] <hud.speed>") && !s.contains("<hud.speed.9x>"),
+        "closed, one button showing the speed: {s}"
+    );
+    // Opening it puts focus on the current speed and lists every speed after the button.
+    assert!(click(&mut m, "hud.speed").is_empty());
+    assert_eq!(m.open_drawer(), Some("hud.speed"));
+    assert_eq!(m.focus(), Some("hud.speed.3x"));
+    let order: Vec<String> = m
+        .tree(&show)
+        .focus_order()
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+    let at = order.iter().position(|i| i == "hud.speed").unwrap();
+    assert_eq!(
+        &order[at..at + 5],
+        [
+            "hud.speed",
+            "hud.speed.1x",
+            "hud.speed.3x",
+            "hud.speed.9x",
+            "hud.speed.27x"
+        ]
+    );
+    assert!(snap(&m).contains("*[3x] <hud.speed.3x>"), "{}", snap(&m));
+    // Arrows move through the items and stop at the ends; Space does not pause while it is open.
+    press(&mut m, Key::Down);
+    assert_eq!(m.focus(), Some("hud.speed.9x"));
+    press(&mut m, Key::Down);
+    press(&mut m, Key::Down);
+    assert_eq!(m.focus(), Some("hud.speed.27x"));
+    press(&mut m, Key::Up);
+    assert_eq!(
+        press(&mut m, Key::Enter),
+        vec![AppEffect::SetSpeed("9x".into())]
+    );
+    assert_eq!(m.open_drawer(), None);
+    assert_eq!(m.focus(), Some("hud.speed"), "focus returns to the button");
+    // Escape closes an open drawer before it opens the pause menu.
+    click(&mut m, "hud.speed");
+    assert_eq!(
+        press(&mut m, Key::Space),
+        vec![AppEffect::SetSpeed("3x".into())],
+        "Space picks the focused item instead of pausing"
+    );
+    assert_eq!(m.open_drawer(), None);
+    click(&mut m, "hud.speed");
+    assert_eq!(m.open_drawer(), Some("hud.speed"));
+    assert!(press(&mut m, Key::Escape).is_empty());
+    assert!(matches!(m.screen(), Screen::InGame) && m.open_drawer().is_none());
+    // Clicking the button again closes it, and the pause menu never starts with one open.
+    click(&mut m, "hud.speed");
+    click(&mut m, "hud.speed");
+    assert_eq!(m.open_drawer(), None);
+    click(&mut m, "hud.speed");
+    press(&mut m, Key::Tab);
+    click(&mut m, "hud.menu");
+    assert!(matches!(m.screen(), Screen::Pause) && m.open_drawer().is_none());
+}
+
+#[test]
+fn saving_is_in_the_pause_menu_only() {
+    let mut m = in_world();
+    let hud: Vec<String> = m
+        .tree(&show)
+        .focus_order()
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+    assert!(!hud.iter().any(|i| i.contains("save")), "{hud:?}");
+    press(&mut m, Key::Escape);
+    assert!(m.tree(&show).focus_order().contains(&"pause.save"));
+    assert_eq!(click(&mut m, "pause.save"), vec![AppEffect::SaveNow]);
+}
+
+#[test]
+fn the_in_game_screen_has_a_top_bar_bottom_right_controls_and_a_notice_for_a_returning_player() {
+    let mut m = in_world();
+    let p = m.hud_parts(&show);
+    let ids = |ws: &[Widget]| -> Vec<String> {
+        crate::widget::Tree::new("t", ws.to_vec())
+            .focus_order()
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect()
+    };
+    assert!(ids(&p.top).is_empty(), "the top bar is information only");
+    assert_eq!(ids(&p.controls), ["hud.pause", "hud.speed", "hud.menu"]);
+    assert!(p.dialog.is_empty());
+    m.update(UiEvent::Hud(HudInfo {
+        suspended: true,
+        ..m.hud().clone()
+    }));
+    let p = m.hud_parts(&show);
+    assert_eq!(ids(&p.dialog), ["hud.resume"]);
+    // The notice comes first in the focus order, so Enter resumes.
+    assert_eq!(m.tree(&show).focus_order()[0], "hud.resume");
+    assert_eq!(m.focus(), Some("hud.resume"), "focus lands on the notice");
+    assert_eq!(press(&mut m, Key::Enter), vec![AppEffect::SetRunning(true)]);
+}
+
+#[test]
+fn developer_mode_gates_the_overlay_and_turning_it_off_closes_it() {
+    let mut m = in_world();
+    assert!(!m.dev_mode());
+    press(&mut m, Key::F3);
+    assert!(
+        m.overlay_tree(&show).is_none(),
+        "F3 does nothing outside developer mode"
+    );
+    dev_mode(&mut m, true);
+    press(&mut m, Key::F3);
+    assert!(m.overlay_tree(&show).is_some());
+    press(&mut m, Key::Escape);
+    click(&mut m, "pause.options");
+    let fx = m.update(UiEvent::Toggle("setting.dev.enabled".into(), false));
+    assert!(matches!(fx.as_slice(), [AppEffect::SetSetting { .. }]));
+    assert!(
+        m.overlay_tree(&show).is_none(),
+        "the overlay closes with developer mode"
+    );
+    // The toggle is in the generated Options screen under its own group.
+    let s = snap(&m);
+    assert!(
+        s.contains("ui.options.group.dev") && s.contains("setting.dev.enabled"),
+        "{s}"
+    );
+    assert!(s.contains("setting.time.pause_on_focus_loss"), "{s}");
 }
