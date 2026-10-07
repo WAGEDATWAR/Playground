@@ -2,7 +2,7 @@
 //!
 //! Commands so far: `selftest`, `rand`, `hash`, `id` (0.1); `sim`, `replay`, `time`, `pipeline` (0.2);
 //! `content` (0.3); `map`, plus replay `--diff` / `--bisect` and event filters (0.4); `schedule explain`,
-//! `actions` (0.5); `save`, `bugbundle`, `scenario`, `content diff` (0.6). Later milestones add
+//! `actions` (0.5); `save`, `bugbundle`, `scenario`, `content diff` (0.6); `ai`, `check` (0.7). Later milestones add
 //! `pack`, `bench`.
 
 use pg_core::hash::hash_canon;
@@ -11,7 +11,9 @@ use pg_core::rng::{Key, Rng, Seed, Stream};
 use pg_core::vectors;
 use std::process::ExitCode;
 
+mod ai_cmds;
 mod args;
+mod check_cmds;
 mod content_cmds;
 mod map_cmds;
 mod persist_cmds;
@@ -76,6 +78,15 @@ USAGE:
     pg bugbundle run <file.pgbundle>        Replay a bundle and verify its hashes.
     pg scenario run <file.json>...          Run scenario files (build, run, save, reload, damage, recover, assert).
     pg content diff <packs-a> <packs-b>     Compare two content sets (comma-separated pack dirs each).
+    pg ai providers                         The four providers, their hosts, recommended models and whether a key is stored.
+    pg ai key set <provider> [--from-env VAR] | clear <provider> | status
+        Manage provider keys in the OS credential store (never in files).
+    pg ai settings show | set [--provider P] [--model M | --default-model] [--enable | --disable] [--dir D]
+    pg ai test [--provider P] [--model M] [--dry-run]
+        Run the connection test, or with --dry-run print the exact request (credentials hidden) without sending it.
+    pg ai selfcheck                         Run the AI client with a sentinel key and scan everything for leaks.
+    pg check [--verbose]                    Run the developer checks (vectors, content, golden replay, scenarios,
+                                            saves, bundles, redaction) and print one PASS/FAIL report.
     pg time <tick> [--slot-minutes <m>]    Show day / clock time / slot / boundary flags for a tick.
     pg pipeline               Show the tick pipeline: systems in execution order and their cadence.
     pg content lint [pack-dir...]         Load and validate packs (default: data/base). Exit 1 on errors.
@@ -103,6 +114,8 @@ fn main() -> ExitCode {
         Some("pipeline") => Ok(sim_cmds::pipeline_cmd()),
         Some("schedule") => sched_cmds::schedule_cmd(&args[1..]),
         Some("save") => persist_cmds::save_cmd(&args[1..]),
+        Some("ai") => ai_cmds::ai_cmd(&args[1..]),
+        Some("check") => check_cmds::check_cmd(&args[1..]),
         Some("bugbundle") => persist_cmds::bugbundle_cmd(&args[1..]),
         Some("scenario") => persist_cmds::scenario_cmd(&args[1..]),
         Some("actions") => Ok(sched_cmds::actions_cmd()),

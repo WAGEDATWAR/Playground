@@ -12,7 +12,9 @@ pub enum AiError {
     Auth,
     /// No key is stored for the selected provider.
     NoKey,
-    RateLimit { retry_after: Option<Duration> },
+    RateLimit {
+        retry_after: Option<Duration>,
+    },
     /// The account is out of credit or over its quota.
     Quota,
     Timeout,
@@ -24,7 +26,9 @@ pub enum AiError {
     /// AI is switched off in settings.
     Disabled,
     /// The circuit breaker is open after repeated failures.
-    CircuitOpen { retry_in: Duration },
+    CircuitOpen {
+        retry_in: Duration,
+    },
     Cancelled,
     /// The credential store could not be read.
     KeyStore(String),
@@ -51,14 +55,23 @@ impl AiError {
         match self {
             AiError::Auth => "AI unavailable: the provider rejected the key".to_owned(),
             AiError::NoKey => "AI unavailable: no key is set for this provider".to_owned(),
-            AiError::RateLimit { retry_after: Some(d) } => {
-                format!("AI is busy: rate limited, try again in {} s", d.as_secs().max(1))
+            AiError::RateLimit {
+                retry_after: Some(d),
+            } => {
+                format!(
+                    "AI is busy: rate limited, try again in {} s",
+                    d.as_secs().max(1)
+                )
             }
             AiError::RateLimit { retry_after: None } => "AI is busy: rate limited".to_owned(),
-            AiError::Quota => "AI unavailable: the account is out of credit or over its quota".to_owned(),
+            AiError::Quota => {
+                "AI unavailable: the account is out of credit or over its quota".to_owned()
+            }
             AiError::Timeout => "AI unavailable: the provider did not answer in time".to_owned(),
             AiError::Offline => "AI unavailable: no network connection".to_owned(),
-            AiError::BadOutput => "AI unavailable: the provider's reply could not be used".to_owned(),
+            AiError::BadOutput => {
+                "AI unavailable: the provider's reply could not be used".to_owned()
+            }
             AiError::Provider(m) => format!("AI unavailable: {m}"),
             AiError::Disabled => "AI is turned off".to_owned(),
             AiError::CircuitOpen { retry_in } => format!(
@@ -88,7 +101,9 @@ mod tests {
         let all = [
             AiError::Auth,
             AiError::NoKey,
-            AiError::RateLimit { retry_after: Some(Duration::from_secs(7)) },
+            AiError::RateLimit {
+                retry_after: Some(Duration::from_secs(7)),
+            },
             AiError::RateLimit { retry_after: None },
             AiError::Quota,
             AiError::Timeout,
@@ -96,7 +111,9 @@ mod tests {
             AiError::BadOutput,
             AiError::Provider("model not found".into()),
             AiError::Disabled,
-            AiError::CircuitOpen { retry_in: Duration::from_secs(20) },
+            AiError::CircuitOpen {
+                retry_in: Duration::from_secs(20),
+            },
             AiError::Cancelled,
             AiError::KeyStore("locked".into()),
         ];
@@ -104,7 +121,10 @@ mod tests {
         let unique: std::collections::BTreeSet<&String> = texts.iter().collect();
         assert_eq!(unique.len(), texts.len(), "{texts:?}");
         assert!(texts[2].contains("7 s"));
-        assert_eq!(AiError::Auth.to_string(), "AI unavailable: the provider rejected the key");
+        assert_eq!(
+            AiError::Auth.to_string(),
+            "AI unavailable: the provider rejected the key"
+        );
     }
 
     #[test]
@@ -113,7 +133,14 @@ mod tests {
         assert!(AiError::Provider("x".into()).counts_against_breaker());
         assert!(AiError::Offline.counts_against_breaker());
         assert!(AiError::BadOutput.counts_against_breaker());
-        for e in [AiError::Auth, AiError::NoKey, AiError::Quota, AiError::Disabled, AiError::Cancelled, AiError::RateLimit { retry_after: None }] {
+        for e in [
+            AiError::Auth,
+            AiError::NoKey,
+            AiError::Quota,
+            AiError::Disabled,
+            AiError::Cancelled,
+            AiError::RateLimit { retry_after: None },
+        ] {
             assert!(!e.counts_against_breaker(), "{e:?}");
         }
         assert!(AiError::Timeout.is_transient() && !AiError::Auth.is_transient());

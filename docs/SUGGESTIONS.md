@@ -78,14 +78,14 @@ An inspection pass over the code as it stands, looking for the cheapest places t
 | S-022 | Typed event catalog | 0.8 (debug validation), 0.10 (viewer) | Low-medium | Events are `(kind: text, detail)`; the overlay's event viewer, filters and pack events need a list of known kinds with field schemas |
 | S-023 | Row-level state hashes | 0.8 | Low-medium | Bisect names the table; a Merkle layer names the entity (`pawns: pawn_3`), which is what a person debugging actually needs |
 | S-024 | Save summaries in the manifest | 0.10 | Low | The Saved Worlds screen needs name, day, population, play time and an optional thumbnail without loading each world |
-| S-025 | Schema-driven settings | 0.7 (registry), 0.10 (generated screen) | Medium | One typed registry gives validation, defaults, `device.json`, `pg settings` and the Options screen; the AI flow in 0.7 is the first user |
+| S-025 | Schema-driven settings | 0.10 (registry and generated screen; 0.7 shipped the AI settings by hand) | Medium | One typed registry gives validation, defaults, `device.json`, `pg settings` and the Options screen; the AI flow in 0.7 is the first user |
 | S-026 | String table (localisation-ready UI text) | 0.10 | Low-medium | The menus are the first player-facing text; keys from the start are cheap, retrofitting is not; reason-code sentences move into the same table |
 | S-027 | Headless UI snapshots and an accessibility tree | 0.10 | Medium | Menu models emit a widget tree that tests snapshot and keyboard-navigate; egui's accessibility support then comes almost free |
 | S-028 | Automatic bug bundle on panic or divergence | 0.8 (runtime guard), 0.10 (button) | Low | A crash leaves a replayable `.pgbundle` (redacted) instead of a description |
 | S-029 | Keyframe snapshots and time scrub | 0.8 (ring), 0.10 (overlay control) | Medium | A bounded ring of snapshots lets the dev overlay step back and re-run forward deterministically; it also feeds S-028 |
 | S-030 | Shadow determinism verification | 0.8, soak in 0.11 | Medium | A worker re-simulates from a keyframe with a different thread count and compares day hashes, catching ordering bugs that unit tests miss |
 | S-031 | Reason-code coverage lint | **done in 0.7** | Tiny | Every `ReasonCode::builtin("...")` literal in the source must have a sentence template and vice versa; a ten-line test |
-| S-032 | `pg check`: one-command verification report | 0.7 | Low | Runs selftest, content lint, golden replay, scenarios and a save/verify cycle and prints one report; makes each checkpoint a single paste-able command and mirrors CI |
+| S-032 | `pg check`: one-command verification report | **done in 0.7** | Low | Runs selftest, content lint, golden replay, scenarios and a save/verify cycle and prints one report; makes each checkpoint a single paste-able command and mirrors CI |
 
 Details:
 
@@ -99,4 +99,4 @@ Details:
 - **S-029 Keyframe snapshots and time scrub** · tooling · proposed · A memory-bounded ring of snapshots (for example one per simulated hour, last 24). The dev overlay can rewind to one and replay forward; a "what if" input injected after a rewind runs deterministically.
 - **S-030 Shadow determinism verification** · reliability · proposed · In dev and soak runs a worker re-runs the span between two keyframes on a different thread count and compares per-table hashes at day boundaries; a mismatch writes a bundle (S-028) and flags the system that ran last.
 - **S-031 Reason-code coverage lint** · testing · done · Implemented in 0.7 (`pg-core` test scanning the source tree).
-- **S-032 `pg check`** · tooling · proposed · One command: determinism vectors, content lint, golden replay with snapshot check, persistence scenario, a save/verify cycle and a bug-bundle round trip, with a final PASS/FAIL table. Exit code for CI; the same output is what you paste back at a checkpoint.
+- **S-032 `pg check`** · tooling · done (0.7) · One command: determinism vectors, content lint, golden replay with snapshot check, persistence scenario, a save/verify cycle and a bug-bundle round trip, with a final PASS/FAIL table. Exit code for CI; the same output is what you paste back at a checkpoint.

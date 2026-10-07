@@ -43,6 +43,11 @@ jobs:
       - run: cargo run -q -p pg-cli -- scenario run scenarios/persistence.json
       - run: cargo run -q -p pg-cli -- bugbundle create golden/dev-town-3days.json --at 20000 --out target/ci.pgbundle
       - run: cargo run -q -p pg-cli -- bugbundle run target/ci.pgbundle
+      # AI client skeleton (0.7): redaction self-check with a sentinel key, and the exact request is printable.
+      - run: cargo run -q -p pg-cli -- ai selfcheck
+      - run: cargo run -q -p pg-cli -- ai test --provider anthropic --dry-run
+      # Everything above in one report, as a person would run it.
+      - run: cargo run -q -p pg-cli -- check
       # Parallel pathfinding must give results identical to serial on every OS (Blueprint §7.3, §19).
       - run: cargo run -q -p pg-cli -- map bench-paths --size 96x72 --requests 300 --threads 1,2,4
 

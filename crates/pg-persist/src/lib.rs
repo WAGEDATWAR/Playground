@@ -4,6 +4,7 @@
 pub mod archive;
 pub mod codec;
 pub mod compat;
+pub mod crash;
 pub mod export;
 pub mod logfile;
 pub mod migrate;

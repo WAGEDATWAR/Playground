@@ -25,10 +25,16 @@ impl Default for BreakerConfig {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum BreakerState {
-    Closed { failures: u32 },
-    Open { until: Duration },
+    Closed {
+        failures: u32,
+    },
+    Open {
+        until: Duration,
+    },
     /// One probe request is allowed; `probing` is true while it is in flight.
-    HalfOpen { probing: bool },
+    HalfOpen {
+        probing: bool,
+    },
 }
 
 /// What the breaker says about sending a request now.
@@ -37,7 +43,9 @@ pub enum Permit {
     Yes,
     /// Send it, as the single probe; report the outcome.
     Probe,
-    No { retry_in: Duration },
+    No {
+        retry_in: Duration,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -66,7 +74,9 @@ impl CircuitBreaker {
                 self.state = BreakerState::HalfOpen { probing: true };
                 Permit::Probe
             }
-            BreakerState::Open { until } => Permit::No { retry_in: until - now },
+            BreakerState::Open { until } => Permit::No {
+                retry_in: until - now,
+            },
             BreakerState::HalfOpen { probing: false } => {
                 self.state = BreakerState::HalfOpen { probing: true };
                 Permit::Probe
@@ -120,7 +130,10 @@ mod tests {
     }
 
     fn breaker() -> CircuitBreaker {
-        CircuitBreaker::new(BreakerConfig { failures_to_open: 3, open_for: secs(30) })
+        CircuitBreaker::new(BreakerConfig {
+            failures_to_open: 3,
+            open_for: secs(30),
+        })
     }
 
     #[test]

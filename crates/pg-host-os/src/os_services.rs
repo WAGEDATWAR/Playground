@@ -48,7 +48,11 @@ impl SecretStore for KeyringSecretStore {
             Ok(v) => Ok(Some(Secret::new(v))),
             Err(keyring::Error::NoEntry) => Ok(None),
             // No usable OS store: behave as session-only, so "nothing stored" rather than an error.
-            Err(keyring::Error::NoDefaultStore | keyring::Error::PlatformFailure(_) | keyring::Error::NoStorageAccess(_)) => {
+            Err(
+                keyring::Error::NoDefaultStore
+                | keyring::Error::PlatformFailure(_)
+                | keyring::Error::NoStorageAccess(_),
+            ) => {
                 self.fall_back();
                 Ok(None)
             }
@@ -62,7 +66,11 @@ impl SecretStore for KeyringSecretStore {
                 lock(&self.session).remove(name);
                 Ok(())
             }
-            Err(keyring::Error::NoDefaultStore | keyring::Error::PlatformFailure(_) | keyring::Error::NoStorageAccess(_)) => {
+            Err(
+                keyring::Error::NoDefaultStore
+                | keyring::Error::PlatformFailure(_)
+                | keyring::Error::NoStorageAccess(_),
+            ) => {
                 self.fall_back();
                 lock(&self.session).insert(name.to_owned(), value.expose().to_owned());
                 Ok(())
@@ -75,7 +83,11 @@ impl SecretStore for KeyringSecretStore {
         lock(&self.session).remove(name);
         match Self::entry(name).and_then(|e| e.delete_credential()) {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(keyring::Error::NoDefaultStore | keyring::Error::PlatformFailure(_) | keyring::Error::NoStorageAccess(_)) => {
+            Err(
+                keyring::Error::NoDefaultStore
+                | keyring::Error::PlatformFailure(_)
+                | keyring::Error::NoStorageAccess(_),
+            ) => {
                 self.fall_back();
                 Ok(())
             }
@@ -100,11 +112,29 @@ fn map_error(e: &ureq::Error) -> NetError {
     match e {
         E::Timeout(_) => NetError::Timeout,
         E::HostNotFound | E::ConnectionFailed => NetError::Offline,
-        E::Io(io) if matches!(io.kind(), std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock) => NetError::Timeout,
-        E::Io(io) if matches!(io.kind(), std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::NotConnected) => NetError::Offline,
+        E::Io(io)
+            if matches!(
+                io.kind(),
+                std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+            ) =>
+        {
+            NetError::Timeout
+        }
+        E::Io(io)
+            if matches!(
+                io.kind(),
+                std::io::ErrorKind::ConnectionRefused
+                    | std::io::ErrorKind::ConnectionReset
+                    | std::io::ErrorKind::NotConnected
+            ) =>
+        {
+            NetError::Offline
+        }
         other => {
             let text = other.to_string();
-            if text.to_ascii_lowercase().contains("tls") || text.to_ascii_lowercase().contains("certificate") {
+            if text.to_ascii_lowercase().contains("tls")
+                || text.to_ascii_lowercase().contains("certificate")
+            {
                 NetError::Tls(text)
             } else {
                 NetError::Other(text)
@@ -158,7 +188,11 @@ impl Net for UreqNet {
             .limit(MAX_RESPONSE_BYTES)
             .read_to_string()
             .map_err(|e| map_error(&e))?;
-        Ok(HttpResponse { status, headers, body })
+        Ok(HttpResponse {
+            status,
+            headers,
+            body,
+        })
     }
 }
 
@@ -169,7 +203,9 @@ pub struct SystemClock {
 
 impl SystemClock {
     pub fn new() -> SystemClock {
-        SystemClock { start: Instant::now() }
+        SystemClock {
+            start: Instant::now(),
+        }
     }
 }
 
@@ -203,7 +239,10 @@ mod tests {
         std::thread::sleep(Duration::from_millis(5));
         assert!(c.now_monotonic() > a);
         let iso = c.wall_clock_iso();
-        assert!(iso.len() == 20 && iso.ends_with('Z') && iso.starts_with("20"), "{iso}");
+        assert!(
+            iso.len() == 20 && iso.ends_with('Z') && iso.starts_with("20"),
+            "{iso}"
+        );
     }
 
     #[test]
@@ -222,7 +261,13 @@ mod tests {
 
     #[test]
     fn plain_http_and_unreachable_hosts_fail_cleanly() {
-        let mk = |url: &str| HttpRequest { method: Method::Get, url: url.into(), headers: vec![], body: None, timeout_ms: 500 };
+        let mk = |url: &str| HttpRequest {
+            method: Method::Get,
+            url: url.into(),
+            headers: vec![],
+            body: None,
+            timeout_ms: 500,
+        };
         let c = CancelToken::new();
         // https_only: plain http is refused before anything is sent.
         assert!(UreqNet.request(&mk("http://127.0.0.1:9/"), &c).is_err());
@@ -237,7 +282,10 @@ mod tests {
         let s = KeyringSecretStore::new();
         let name = format!("playground.test.{}", std::process::id());
         s.set(&name, &Secret::new("sentinel-value-123")).unwrap();
-        assert_eq!(s.get(&name).unwrap().unwrap().expose(), "sentinel-value-123");
+        assert_eq!(
+            s.get(&name).unwrap().unwrap().expose(),
+            "sentinel-value-123"
+        );
         s.delete(&name).unwrap();
         assert_eq!(s.get(&name).unwrap(), None);
         println!("persistent: {}", s.is_persistent());

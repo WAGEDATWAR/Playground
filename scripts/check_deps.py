@@ -25,7 +25,7 @@ ALLOWED = {
                    "pg-worldgen", "pg-ui-model", "pg-host"},
     "pg-render": {"pg-ui-model"},
     "pg-app": {"pg-runtime", "pg-render", "pg-host-os", "pg-ui-model", "pg-host", "pg-core"},
-    "pg-cli": {"pg-runtime", "pg-host-os", "pg-core", "pg-content", "pg-persist", "pg-host"},
+    "pg-cli": {"pg-runtime", "pg-host-os", "pg-core", "pg-content", "pg-persist", "pg-host", "pg-ai"},
 }
 
 # External crates that only specific workspace crates may use.

@@ -127,7 +127,13 @@ pub struct HttpRequest {
     pub timeout_ms: u64,
 }
 
-const SENSITIVE_HEADERS: [&str; 5] = ["authorization", "x-api-key", "api-key", "proxy-authorization", "x-goog-api-key"];
+const SENSITIVE_HEADERS: [&str; 5] = [
+    "authorization",
+    "x-api-key",
+    "api-key",
+    "proxy-authorization",
+    "x-goog-api-key",
+];
 
 impl fmt::Debug for HttpRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -142,7 +148,14 @@ impl fmt::Debug for HttpRequest {
         let url = self.url.split('?').next().unwrap_or("");
         f.debug_struct("HttpRequest")
             .field("method", &self.method)
-            .field("url", &if url.len() == self.url.len() { url.to_owned() } else { format!("{url}?***") })
+            .field(
+                "url",
+                &if url.len() == self.url.len() {
+                    url.to_owned()
+                } else {
+                    format!("{url}?***")
+                },
+            )
             .field("headers", &headers)
             .field("body_bytes", &self.body.as_ref().map(String::len))
             .field("timeout_ms", &self.timeout_ms)
@@ -270,7 +283,9 @@ impl Net for ScriptedNet {
         if let Some(h) = lock(&self.handler).as_ref() {
             return h(req);
         }
-        lock(&self.replies).pop_front().unwrap_or(Err(NetError::Offline))
+        lock(&self.replies)
+            .pop_front()
+            .unwrap_or(Err(NetError::Offline))
     }
 }
 
@@ -312,11 +327,12 @@ impl<N: Net> AllowListNet<N> {
 
 impl<N: Net> Net for AllowListNet<N> {
     fn request(&self, req: &HttpRequest, cancel: &CancelToken) -> Result<HttpResponse, NetError> {
-        let host = https_host(&req.url).ok_or_else(|| {
-            NetError::Blocked("only plain https URLs are allowed".to_owned())
-        })?;
+        let host = https_host(&req.url)
+            .ok_or_else(|| NetError::Blocked("only plain https URLs are allowed".to_owned()))?;
         if !self.hosts.contains(&host) {
-            return Err(NetError::Blocked(format!("host '{host}' is not on the allow-list")));
+            return Err(NetError::Blocked(format!(
+                "host '{host}' is not on the allow-list"
+            )));
         }
         self.inner.request(req, cancel)
     }
@@ -379,8 +395,10 @@ impl MemLog {
             .iter()
             .map(|(l, s)| format!("{l:?}: {s}"))
             .collect::<Vec<_>>()
-            .join("
-")
+            .join(
+                "
+",
+            )
     }
 }
 
@@ -415,7 +433,12 @@ pub fn iso_utc(secs: u64) -> String {
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = yoe + era * 400 + i64::from(m <= 2);
-    format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", rem / 3600, rem % 3600 / 60, rem % 60)
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z",
+        rem / 3600,
+        rem % 3600 / 60,
+        rem % 60
+    )
 }
 
 /// Monotonic time for timers; wall-clock text for save metadata only (never inside the simulation).
@@ -553,7 +576,10 @@ mod tests {
             method: Method::Post,
             url: url.to_owned(),
             headers: vec![
-                ("Authorization".into(), "Bearer sk-SENTINEL-123456789".into()),
+                (
+                    "Authorization".into(),
+                    "Bearer sk-SENTINEL-123456789".into(),
+                ),
                 ("Content-Type".into(), "application/json".into()),
             ],
             body: Some("{}".into()),
@@ -584,7 +610,10 @@ mod tests {
     fn a_request_never_shows_its_credentials_in_debug_output() {
         let r = req("https://api.example.com/v1/x?key=SUPERSECRETKEY&alt=json");
         let text = format!("{r:?}");
-        assert!(!text.contains("SENTINEL") && !text.contains("SUPERSECRETKEY"), "{text}");
+        assert!(
+            !text.contains("SENTINEL") && !text.contains("SUPERSECRETKEY"),
+            "{text}"
+        );
         assert!(text.contains("application/json") && text.contains("api.example.com"));
     }
 
@@ -594,14 +623,38 @@ mod tests {
         n.push_ok(200, "one");
         n.push(Err(NetError::Timeout));
         let c = CancelToken::new();
-        assert_eq!(n.request(&req("https://a.example/x"), &c).unwrap().body, "one");
-        assert_eq!(n.request(&req("https://a.example/y"), &c), Err(NetError::Timeout));
-        assert_eq!(n.request(&req("https://a.example/z"), &c), Err(NetError::Offline), "empty queue is offline");
+        assert_eq!(
+            n.request(&req("https://a.example/x"), &c).unwrap().body,
+            "one"
+        );
+        assert_eq!(
+            n.request(&req("https://a.example/y"), &c),
+            Err(NetError::Timeout)
+        );
+        assert_eq!(
+            n.request(&req("https://a.example/z"), &c),
+            Err(NetError::Offline),
+            "empty queue is offline"
+        );
         assert_eq!(n.request_count(), 3);
         c.cancel();
-        assert_eq!(n.request(&req("https://a.example/w"), &c), Err(NetError::Cancelled));
-        n.set_handler(Box::new(|r| Ok(HttpResponse { status: 200, headers: Vec::new(), body: r.url.clone() })));
-        assert_eq!(n.request(&req("https://a.example/h"), &CancelToken::new()).unwrap().body, "https://a.example/h");
+        assert_eq!(
+            n.request(&req("https://a.example/w"), &c),
+            Err(NetError::Cancelled)
+        );
+        n.set_handler(Box::new(|r| {
+            Ok(HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: r.url.clone(),
+            })
+        }));
+        assert_eq!(
+            n.request(&req("https://a.example/h"), &CancelToken::new())
+                .unwrap()
+                .body,
+            "https://a.example/h"
+        );
     }
 
     #[test]
@@ -609,7 +662,9 @@ mod tests {
         let n = AllowListNet::new(ScriptedNet::new(), &["api.openai.com", "API.anthropic.com"]);
         n.inner().push_ok(200, "ok");
         let c = CancelToken::new();
-        assert!(n.request(&req("https://api.openai.com/v1/chat"), &c).is_ok());
+        assert!(n
+            .request(&req("https://api.openai.com/v1/chat"), &c)
+            .is_ok());
         for bad in [
             "http://api.openai.com/v1",
             "https://evil.example/v1",
@@ -623,18 +678,39 @@ mod tests {
             "https://api.openai.com\\@evil.example/",
             "",
         ] {
-            assert!(matches!(n.request(&req(bad), &c), Err(NetError::Blocked(_))), "{bad}");
+            assert!(
+                matches!(n.request(&req(bad), &c), Err(NetError::Blocked(_))),
+                "{bad}"
+            );
         }
-        assert_eq!(n.inner().request_count(), 1, "blocked requests never reach the network");
+        assert_eq!(
+            n.inner().request_count(),
+            1,
+            "blocked requests never reach the network"
+        );
         n.inner().push_ok(200, "ok");
-        assert!(n.request(&req("https://api.anthropic.com/v1/messages"), &c).is_ok(), "host match ignores case");
+        assert!(
+            n.request(&req("https://api.anthropic.com/v1/messages"), &c)
+                .is_ok(),
+            "host match ignores case"
+        );
     }
 
     #[test]
     fn https_host_extracts_only_clean_hosts() {
-        assert_eq!(https_host("https://Api.Example.com/a?b#c").as_deref(), Some("api.example.com"));
+        assert_eq!(
+            https_host("https://Api.Example.com/a?b#c").as_deref(),
+            Some("api.example.com")
+        );
         assert_eq!(https_host("https://x.y"), Some("x.y".to_owned()));
-        for bad in ["http://x", "https://", "https://a b/", "https://a:1/", "https://a@b/", "https://é.com/"] {
+        for bad in [
+            "http://x",
+            "https://",
+            "https://a b/",
+            "https://a:1/",
+            "https://a@b/",
+            "https://é.com/",
+        ] {
             assert_eq!(https_host(bad), None, "{bad}");
         }
     }
@@ -659,8 +735,15 @@ mod tests {
 
         let d = ScriptedDialogs::new();
         d.answer_read(Some(PathBuf::from("a.json")));
-        assert_eq!(d.pick_file_to_read(&["json"]), Some(PathBuf::from("a.json")));
-        assert_eq!(d.pick_file_to_read(&["json"]), None, "out of answers is a cancelled dialog");
+        assert_eq!(
+            d.pick_file_to_read(&["json"]),
+            Some(PathBuf::from("a.json"))
+        );
+        assert_eq!(
+            d.pick_file_to_read(&["json"]),
+            None,
+            "out of answers is a cancelled dialog"
+        );
         assert_eq!(d.pick_file_to_write("x.json"), None);
         assert_eq!(d.asked(), ["read json", "read json", "write x.json"]);
 
@@ -668,6 +751,9 @@ mod tests {
         a.play("click", Bus::Ui);
         a.set_volume(Bus::Music, 0.5);
         a.stop(Bus::Ui);
-        assert_eq!(a.log(), ["play click on Ui", "volume Music 0.50", "stop Ui"]);
+        assert_eq!(
+            a.log(),
+            ["play click on Ui", "volume Music 0.50", "stop Ui"]
+        );
     }
 }

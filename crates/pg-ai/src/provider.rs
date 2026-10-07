@@ -23,7 +23,12 @@ pub enum Provider {
 }
 
 impl Provider {
-    pub const ALL: [Provider; 4] = [Provider::OpenAi, Provider::DeepSeek, Provider::Anthropic, Provider::OpenRouter];
+    pub const ALL: [Provider; 4] = [
+        Provider::OpenAi,
+        Provider::DeepSeek,
+        Provider::Anthropic,
+        Provider::OpenRouter,
+    ];
 
     /// The stable id used in settings files and secret names.
     pub const fn id(self) -> &'static str {
@@ -114,7 +119,13 @@ const MAX_ERROR_CHARS: usize = 200;
 
 pub trait ProviderAdapter: Send + Sync {
     fn provider(&self) -> Provider;
-    fn build_request(&self, task: &AiTask, model: &str, key: &Secret, timeout: Duration) -> HttpRequest;
+    fn build_request(
+        &self,
+        task: &AiTask,
+        model: &str,
+        key: &Secret,
+        timeout: Duration,
+    ) -> HttpRequest;
     /// The reply text from a **successful** response body, cleaned and capped at `max_chars`.
     fn parse_response(&self, body: &str, max_chars: usize) -> Result<String, AiError>;
     /// Classifies a non-success response.
@@ -126,9 +137,15 @@ pub trait ProviderAdapter: Send + Sync {
 /// The adapter for a provider.
 pub fn adapter_for(p: Provider) -> &'static dyn ProviderAdapter {
     match p {
-        Provider::OpenAi => &OpenAiLike { provider: Provider::OpenAi },
-        Provider::DeepSeek => &OpenAiLike { provider: Provider::DeepSeek },
-        Provider::OpenRouter => &OpenAiLike { provider: Provider::OpenRouter },
+        Provider::OpenAi => &OpenAiLike {
+            provider: Provider::OpenAi,
+        },
+        Provider::DeepSeek => &OpenAiLike {
+            provider: Provider::DeepSeek,
+        },
+        Provider::OpenRouter => &OpenAiLike {
+            provider: Provider::OpenRouter,
+        },
         Provider::Anthropic => &AnthropicAdapter,
     }
 }
@@ -137,7 +154,12 @@ struct OpenAiLike {
     provider: Provider,
 }
 
-fn json_request(url: &str, headers: Vec<(String, String)>, body: &Canon, timeout: Duration) -> HttpRequest {
+fn json_request(
+    url: &str,
+    headers: Vec<(String, String)>,
+    body: &Canon,
+    timeout: Duration,
+) -> HttpRequest {
     HttpRequest {
         method: Method::Post,
         url: url.to_owned(),
@@ -152,19 +174,37 @@ impl ProviderAdapter for OpenAiLike {
         self.provider
     }
 
-    fn build_request(&self, task: &AiTask, model: &str, key: &Secret, timeout: Duration) -> HttpRequest {
+    fn build_request(
+        &self,
+        task: &AiTask,
+        model: &str,
+        key: &Secret,
+        timeout: Duration,
+    ) -> HttpRequest {
         let (url, tokens_field) = match self.provider {
-            Provider::OpenAi => ("https://api.openai.com/v1/chat/completions", "max_completion_tokens"),
+            Provider::OpenAi => (
+                "https://api.openai.com/v1/chat/completions",
+                "max_completion_tokens",
+            ),
             Provider::DeepSeek => ("https://api.deepseek.com/chat/completions", "max_tokens"),
-            _ => ("https://openrouter.ai/api/v1/chat/completions", "max_tokens"),
+            _ => (
+                "https://openrouter.ai/api/v1/chat/completions",
+                "max_tokens",
+            ),
         };
         let body = Canon::map([
             ("model", Canon::str(model)),
             (
                 "messages",
                 Canon::List(vec![
-                    Canon::map([("role", Canon::str("system")), ("content", Canon::str(task.system.clone()))]),
-                    Canon::map([("role", Canon::str("user")), ("content", Canon::str(task.user.clone()))]),
+                    Canon::map([
+                        ("role", Canon::str("system")),
+                        ("content", Canon::str(task.system.clone())),
+                    ]),
+                    Canon::map([
+                        ("role", Canon::str("user")),
+                        ("content", Canon::str(task.user.clone())),
+                    ]),
                 ]),
             ),
             (tokens_field, Canon::Int(i128::from(task.max_tokens))),
@@ -172,7 +212,10 @@ impl ProviderAdapter for OpenAiLike {
         json_request(
             url,
             vec![
-                ("Authorization".to_owned(), format!("Bearer {}", key.expose())),
+                (
+                    "Authorization".to_owned(),
+                    format!("Bearer {}", key.expose()),
+                ),
                 ("Content-Type".to_owned(), "application/json".to_owned()),
             ],
             &body,
@@ -206,7 +249,13 @@ impl ProviderAdapter for AnthropicAdapter {
         Provider::Anthropic
     }
 
-    fn build_request(&self, task: &AiTask, model: &str, key: &Secret, timeout: Duration) -> HttpRequest {
+    fn build_request(
+        &self,
+        task: &AiTask,
+        model: &str,
+        key: &Secret,
+        timeout: Duration,
+    ) -> HttpRequest {
         let body = Canon::map([
             ("model", Canon::str(model)),
             ("max_tokens", Canon::Int(i128::from(task.max_tokens))),
@@ -233,7 +282,10 @@ impl ProviderAdapter for AnthropicAdapter {
 
     fn parse_response(&self, body: &str, max_chars: usize) -> Result<String, AiError> {
         let v = parse_json(body)?;
-        let parts = v.get("content").and_then(serde_json::Value::as_array).ok_or(AiError::BadOutput)?;
+        let parts = v
+            .get("content")
+            .and_then(serde_json::Value::as_array)
+            .ok_or(AiError::BadOutput)?;
         let text: String = parts
             .iter()
             .filter(|p| p.get("type").and_then(serde_json::Value::as_str) == Some("text"))
@@ -309,13 +361,17 @@ fn error_code(body: &str) -> String {
     serde_json::from_str::<serde_json::Value>(body)
         .ok()
         .map(|v| {
-            [v.pointer("/error/code"), v.pointer("/error/type"), v.get("type")]
-                .into_iter()
-                .flatten()
-                .filter_map(serde_json::Value::as_str)
-                .collect::<Vec<_>>()
-                .join(" ")
-                .to_ascii_lowercase()
+            [
+                v.pointer("/error/code"),
+                v.pointer("/error/type"),
+                v.get("type"),
+            ]
+            .into_iter()
+            .flatten()
+            .filter_map(serde_json::Value::as_str)
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_ascii_lowercase()
         })
         .unwrap_or_default()
 }
@@ -326,7 +382,12 @@ fn classify(resp: &HttpResponse) -> AiError {
         .header("retry-after")
         .and_then(|v| v.trim().parse::<u64>().ok())
         .map(|s| Duration::from_secs(s.min(3600)));
-    let quota_words = ["insufficient_quota", "billing", "credit", "exceeded_current_quota"];
+    let quota_words = [
+        "insufficient_quota",
+        "billing",
+        "credit",
+        "exceeded_current_quota",
+    ];
     let message = || error_message(&resp.body).unwrap_or_else(|| format!("HTTP {}", resp.status));
     match resp.status {
         401 | 403 => AiError::Auth,

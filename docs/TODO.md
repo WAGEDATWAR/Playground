@@ -4,22 +4,20 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Phase 0 / Milestone 0.6 — Persistence: implemented, CHECKPOINT: waiting for your verification.** Accepted and tagged: `m0.0`..`m0.5`.
+**Phase 0 / Milestone 0.7 — Host services and AI client skeleton: implemented, awaiting CI + user acceptance.** Accepted and tagged: `m0.0`..`m0.6`. No mandatory checkpoint here; the next one is after 0.9.
 
-0.6 delivered: typed `Reader` + `WorldState::from_canon` (round trips at every stage of a run, corruption never panics); `pg-host` `Storage` trait with a fault-injecting `MemStorage`, `pg-host-os` `FsStorage` (temp file, fsync, rename); `pg-persist`: `.pgsave` container (header, BLAKE3, zstd), slot store (manifest with two generations, atomic save, recovery, damaged marking, per-generation verify), migrations framework, content compatibility report (S-014), world export/import pipeline, hardened archive reader, compressed logs and bug bundles (S-019, S-001), scenario runner (S-003); `ReplayLog::trim`; RFC 8785 cross-check (S-004, D-022); `pg content diff`. CLI: `pg save create/list/inspect/verify/load/export/import`, `pg bugbundle create/run`, `pg scenario run`, `pg content diff`. CI runs a save/verify cycle, the persistence scenario and a bundle round trip. Blueprint v2.5; decisions D-022..D-024.
-
-Crash safety is tested by failing storage at every operation of a save; a load afterwards always returns the old or the new world.
+0.7 delivered: `pg-host` traits and doubles for `SecretStore`, `Net` (plus `AllowListNet`), `Clock`, `Dialogs`, `Audio`, log sinks (`RedactingLog`, `MemLog`), `Secret` and `redact()`; `pg-host-os` `KeyringSecretStore` (OS credential store with session-only fallback), `UreqNet` (HTTPS, no redirects), `SystemClock`; `pg-ai`: four provider adapters (OpenAI, DeepSeek, Anthropic, OpenRouter; pure, fixture-tested, hostile-reply tests), circuit breaker, error taxonomy with plain messages, settings and key manager (`settings/device.json`, keys only in the credential store), `AiClient` (cache, rate cap, retry, breaker, allow-list), redaction self-check; `pg-persist` crash reports; the sentinel-key leak test; reason-code lint (S-031). CLI: `pg ai providers|key|settings|test|selfcheck`, `pg check` (S-032). Plan updated for the graphical main menu (0.10 checkpoint, Roadmap v4.3, Blueprint v2.6, D-025); ten new suggestions S-022..S-032 proposed, awaiting your decision.
 
 ## Blocked / waiting on user
 
-- [ ] **Checkpoint after 0.6:** confirm CI (three OSes) and try the persistence commands (see `docs/BUILDING.md` section 4). Then say "accept 0.6" so I tag `m0.6` and start 0.7.
+- [ ] Confirm CI for the 0.7 commit (three OSes) and accept 0.7.
+- [ ] Decide on the proposed suggestions S-022..S-030 (S-031 and S-032 are done); table at the bottom of `docs/SUGGESTIONS.md`.
 
 ## Next up
 
-1. After acceptance: tag `m0.6`; start 0.7 host services and AI client skeleton (`pg-host` SecretStore/Net/Clock/Dialogs doubles, `pg-host-os` implementations, `pg-ai` adapters, circuit breaker, `redact()`, sentinel-key leak test).
-2. Prune dev scaffolding as real systems land (D-009): `probe`, `DevProbeSystem`, `DevDaySystem`, `Stream::DevWander`.
-3. Performance follow-ups: S-017, S-018, S-021.
-4. Possible later improvement: zstd levels above "fastest" if save size ever matters (needs a different encoder).
+1. After acceptance: tag `m0.7`; start 0.8 runtime and threading (sim thread, command queue, worker pool, `RenderSnapshot`, run states, autosave policy, panic guard; GUI dependencies compile-only in CI; profiling pass).
+2. 0.9 script spike (checkpoint), 0.10 app shell and graphical main menu (checkpoint: you launch the game), 0.11 Stage 0 gate.
+3. Prune dev scaffolding as real systems land (D-009).
 
 ## Shell note
 
@@ -49,3 +47,4 @@ Python is available for scripts (`scripts/check_deps.py`). Avoid bash heredocs c
 - 2026-10-06: **0.4 world state and spatial**: maps, objects + containment, pawns + occupancy, A* + cache + batch executor, MovementSystem, dev commands, replay v2 with diff/bisect, hints, ScopedThreads, `pg map` tools, golden replay v2. 160+ tests; decisions D-014..D-017; suggestions S-017..S-019.
 - 2026-10-06: **0.5 scheduler and actions skeleton**: see Current focus. Found while testing: two pawns cannot share a meeting tile (added `meet_at` + radius), the activator ends tasks at the boundary tick before the activity system runs (performing ends at `end - 1`), and a slot-length change invalidates schedules and commitments (handled). Logged D-019..D-021, S-021.
 - 2026-10-07: **0.6 persistence**: see Current focus. Findings: `Canon` key order vs RFC 8785 (D-022); only the fastest zstd level exists in the pure-Rust encoder; a replay log is tiny, so the useful compression and trimming target is the world snapshot in bundles.
+- 2026-10-07: **0.7 host services and AI client skeleton**: see Current focus. Findings: real providers return floats, so the AI boundary uses `serde_json` instead of the core parser; the keyring ecosystem changed shape (v4, per-platform store crates behind a `v1` feature); `webpki-roots` needs a data-license entry in `deny.toml`.

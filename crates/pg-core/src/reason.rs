@@ -319,16 +319,20 @@ mod tests {
                 }
             }
         }
-        let known: std::collections::BTreeSet<String> = ReasonCode::known_codes().map(str::to_owned).collect();
-        let missing: Vec<&String> = used
-            .iter()
-            .filter(|c| !known.contains(*c))
-            .collect();
-        assert!(missing.is_empty(), "codes used in the source but without a sentence: {missing:?}");
+        let known: std::collections::BTreeSet<String> =
+            ReasonCode::known_codes().map(str::to_owned).collect();
+        let missing: Vec<&String> = used.iter().filter(|c| !known.contains(*c)).collect();
+        assert!(
+            missing.is_empty(),
+            "codes used in the source but without a sentence: {missing:?}"
+        );
         let unused: Vec<&String> = known
             .iter()
             .filter(|c| !used.contains(*c) && !RESERVED.contains(&c.as_str()))
             .collect();
-        assert!(unused.is_empty(), "sentences with no code that uses them: {unused:?}");
+        assert!(
+            unused.is_empty(),
+            "sentences with no code that uses them: {unused:?}"
+        );
     }
 }

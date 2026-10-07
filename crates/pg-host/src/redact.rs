@@ -127,7 +127,10 @@ fn scrub_shapes(text: &str) -> String {
             continue;
         }
         // 2. "Bearer <token>" and "Basic <token>".
-        if let Some(scheme) = ["bearer ", "basic "].iter().find(|s| starts_with_ignore_case(rest, s)) {
+        if let Some(scheme) = ["bearer ", "basic "]
+            .iter()
+            .find(|s| starts_with_ignore_case(rest, s))
+        {
             let after = &rest[scheme.len()..];
             let t = token_len(after);
             if t >= 8 && at_boundary(text, i) {
@@ -212,7 +215,14 @@ mod tests {
         ] {
             let out = redact(&text, &[]);
             assert!(out.contains(REDACTED), "{text} -> {out}");
-            for needle in ["SENTINEL", "abcdefgh12345678", "abcdef123456", "AbCdEf123456", "AIzaSy", "abcdef1234"] {
+            for needle in [
+                "SENTINEL",
+                "abcdefgh12345678",
+                "abcdef123456",
+                "AbCdEf123456",
+                "AIzaSy",
+                "abcdef1234",
+            ] {
                 assert!(!out.contains(needle), "{needle} survived in {out}");
             }
         }
@@ -238,7 +248,16 @@ mod tests {
 
     #[test]
     fn the_scrubber_handles_unicode_and_boundaries_without_panicking() {
-        for text in ["é", "sk-é", "key=é", "x-api-key:é", "\u{1F600}sk-12345678", "Bearer \u{1F600}", "key\":\"", "a=b=c=d"] {
+        for text in [
+            "é",
+            "sk-é",
+            "key=é",
+            "x-api-key:é",
+            "\u{1F600}sk-12345678",
+            "Bearer \u{1F600}",
+            "key\":\"",
+            "a=b=c=d",
+        ] {
             let _ = redact(text, &[]);
         }
         // A prefix in the middle of a word is not a key.
@@ -249,5 +268,26 @@ mod tests {
     fn redaction_is_idempotent() {
         let once = redact(&format!("a {SENTINEL} b Bearer abcdefgh12345 c"), &[]);
         assert_eq!(redact(&once, &[]), once);
+    }
+    proptest::proptest! {
+        /// Whatever surrounds a key, and whatever the key looks like, a key we were told about is gone.
+        #[test]
+        fn a_known_key_never_survives(
+            key in "[A-Za-z0-9_.~+/=-]{8,40}",
+            before in ".{0,40}",
+            after in ".{0,40}",
+        ) {
+            let secret = Secret::new(key.clone());
+            let text = format!("{before} {key} {after}");
+            let out = redact(&text, &[&secret]);
+            proptest::prop_assert!(!out.contains(&key), "{out}");
+        }
+
+        /// Redaction never panics and never grows without bound.
+        #[test]
+        fn redaction_is_total(text in ".{0,300}") {
+            let out = redact(&text, &[]);
+            proptest::prop_assert!(out.len() <= text.len() * 2 + 16);
+        }
     }
 }

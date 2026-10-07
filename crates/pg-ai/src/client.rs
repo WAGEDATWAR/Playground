@@ -12,9 +12,7 @@ use crate::provider::{adapter_for, AiTask, Provider};
 use crate::settings::AiSettings;
 use pg_core::canon::Canon;
 use pg_core::hash::hash_canon;
-use pg_host::{
-    redact, CancelToken, Clock, Level, LogSink, Net, NetError, SecretStore,
-};
+use pg_host::{redact, CancelToken, Clock, Level, LogSink, Net, NetError, SecretStore};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -60,7 +58,9 @@ pub enum AiStatus {
     NoKey,
     Ready,
     /// The breaker is open; calls resume after `retry_in`.
-    Paused { retry_in: Duration },
+    Paused {
+        retry_in: Duration,
+    },
 }
 
 #[derive(Default)]
@@ -110,7 +110,10 @@ impl AiClient {
         if !settings.enabled {
             return AiStatus::Disabled;
         }
-        if !matches!(self.secrets.get(&settings.provider.secret_name()), Ok(Some(_))) {
+        if !matches!(
+            self.secrets.get(&settings.provider.secret_name()),
+            Ok(Some(_))
+        ) {
             return AiStatus::NoKey;
         }
         let now = self.clock.now_monotonic();
@@ -119,20 +122,35 @@ impl AiClient {
             .get(&settings.provider)
             .map(CircuitBreaker::state);
         match state {
-            Some(BreakerState::Open { until }) if until > now => AiStatus::Paused { retry_in: until - now },
+            Some(BreakerState::Open { until }) if until > now => AiStatus::Paused {
+                retry_in: until - now,
+            },
             _ => AiStatus::Ready,
         }
     }
 
     /// A tiny request that proves the key, the model and the connection work. Never cached, and it does not
     /// require AI to be switched on (the player tests before enabling).
-    pub fn test_connection(&self, settings: &AiSettings, cancel: &CancelToken) -> Result<(), AiError> {
-        let on = AiSettings { enabled: true, ..settings.clone() };
-        self.run(&on, &AiTask::connection_test(), cancel, false).map(|_| ())
+    pub fn test_connection(
+        &self,
+        settings: &AiSettings,
+        cancel: &CancelToken,
+    ) -> Result<(), AiError> {
+        let on = AiSettings {
+            enabled: true,
+            ..settings.clone()
+        };
+        self.run(&on, &AiTask::connection_test(), cancel, false)
+            .map(|_| ())
     }
 
     /// Generates text for `task`.
-    pub fn generate(&self, settings: &AiSettings, task: &AiTask, cancel: &CancelToken) -> Result<AiReply, AiError> {
+    pub fn generate(
+        &self,
+        settings: &AiSettings,
+        task: &AiTask,
+        cancel: &CancelToken,
+    ) -> Result<AiReply, AiError> {
         self.run(settings, task, cancel, true)
     }
 
@@ -147,7 +165,13 @@ impl AiClient {
         .to_hex()
     }
 
-    fn run(&self, settings: &AiSettings, task: &AiTask, cancel: &CancelToken, use_cache: bool) -> Result<AiReply, AiError> {
+    fn run(
+        &self,
+        settings: &AiSettings,
+        task: &AiTask,
+        cancel: &CancelToken,
+        use_cache: bool,
+    ) -> Result<AiReply, AiError> {
         if !settings.enabled {
             return Err(AiError::Disabled);
         }
@@ -161,24 +185,39 @@ impl AiClient {
             let mut g = lock(&self.inner);
             if use_cache {
                 if let Some((_, text)) = g.cache.iter().find(|(k, _)| *k == cache_key) {
-                    return Ok(AiReply { text: text.clone(), from_cache: true });
+                    return Ok(AiReply {
+                        text: text.clone(),
+                        from_cache: true,
+                    });
                 }
             }
-            let breaker = g.breakers.entry(provider).or_insert_with(|| CircuitBreaker::new(self.cfg.breaker));
+            let breaker = g
+                .breakers
+                .entry(provider)
+                .or_insert_with(|| CircuitBreaker::new(self.cfg.breaker));
             let permit = breaker.permit(now);
             if let Permit::No { retry_in } = permit {
                 return Err(AiError::CircuitOpen { retry_in });
             }
             let minute = Duration::from_secs(60);
-            while g.recent.front().is_some_and(|t| now.saturating_sub(*t) >= minute) {
+            while g
+                .recent
+                .front()
+                .is_some_and(|t| now.saturating_sub(*t) >= minute)
+            {
                 g.recent.pop_front();
             }
             if g.recent.len() >= self.cfg.requests_per_minute {
-                let wait = g.recent.front().map_or(minute, |t| (*t + minute).saturating_sub(now));
+                let wait = g
+                    .recent
+                    .front()
+                    .map_or(minute, |t| (*t + minute).saturating_sub(now));
                 if let Some(b) = g.breakers.get_mut(&provider) {
                     b.record_neutral();
                 }
-                return Err(AiError::RateLimit { retry_after: Some(wait) });
+                return Err(AiError::RateLimit {
+                    retry_after: Some(wait),
+                });
             }
             g.recent.push_back(now);
         }
@@ -202,18 +241,33 @@ impl AiClient {
                     g.cache.push_back((cache_key, text.clone()));
                 }
                 drop(g);
-                self.note(Level::Info, &format!("ai ok provider={} model={model}", provider.id()));
-                Ok(AiReply { text, from_cache: false })
+                self.note(
+                    Level::Info,
+                    &format!("ai ok provider={} model={model}", provider.id()),
+                );
+                Ok(AiReply {
+                    text,
+                    from_cache: false,
+                })
             }
             Err(e) => {
                 drop(g);
-                self.note(Level::Warn, &format!("ai failed provider={} model={model}: {e}", provider.id()));
+                self.note(
+                    Level::Warn,
+                    &format!("ai failed provider={} model={model}: {e}", provider.id()),
+                );
                 Err(e)
             }
         }
     }
 
-    fn attempt(&self, provider: Provider, model: &str, task: &AiTask, cancel: &CancelToken) -> Result<String, AiError> {
+    fn attempt(
+        &self,
+        provider: Provider,
+        model: &str,
+        task: &AiTask,
+        cancel: &CancelToken,
+    ) -> Result<String, AiError> {
         let key = self
             .secrets
             .get(&provider.secret_name())
@@ -227,14 +281,24 @@ impl AiClient {
             }
             let req = adapter.build_request(task, model, &key, self.cfg.timeout);
             let outcome = match self.net.request(&req, cancel) {
-                Ok(resp) if (200..300).contains(&resp.status) => adapter.parse_response(&resp.body, self.cfg.max_reply_chars),
+                Ok(resp) if (200..300).contains(&resp.status) => {
+                    adapter.parse_response(&resp.body, self.cfg.max_reply_chars)
+                }
                 Ok(resp) => Err(adapter.classify_error(&resp)),
                 Err(NetError::Timeout) => Err(AiError::Timeout),
                 Err(NetError::Offline) => Err(AiError::Offline),
                 Err(NetError::Cancelled) => Err(AiError::Cancelled),
-                Err(NetError::Tls(e)) => Err(AiError::Provider(format!("secure connection failed: {}", redact(&e, &[])))),
-                Err(NetError::Blocked(e)) => Err(AiError::Provider(format!("request blocked: {}", redact(&e, &[])))),
-                Err(NetError::Other(e)) => Err(AiError::Provider(redact(&e, &[]).chars().take(200).collect())),
+                Err(NetError::Tls(e)) => Err(AiError::Provider(format!(
+                    "secure connection failed: {}",
+                    redact(&e, &[])
+                ))),
+                Err(NetError::Blocked(e)) => Err(AiError::Provider(format!(
+                    "request blocked: {}",
+                    redact(&e, &[])
+                ))),
+                Err(NetError::Other(e)) => Err(AiError::Provider(
+                    redact(&e, &[]).chars().take(200).collect(),
+                )),
             };
             match outcome {
                 Ok(text) => return Ok(text),

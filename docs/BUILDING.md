@@ -27,7 +27,7 @@ cd Playground
 To build an exact milestone, check out its tag (tags are `m0.0`, `m0.1`, …):
 
 ```bash
-git checkout m0.6
+git checkout m0.7
 ```
 
 Go back to the latest work with `git checkout main`.
@@ -38,7 +38,7 @@ Go back to the latest work with `git checkout main`.
 cargo test --workspace
 ```
 
-The first run compiles everything (a few minutes); later runs are fast. You should see `test result: ok.` lines and no `FAILED`. At milestone 0.6 that is about 430 tests. To run only one crate or a few tests:
+The first run compiles everything (a few minutes); later runs are fast. You should see `test result: ok.` lines and no `FAILED`. At milestone 0.7 that is about 530 tests. To run only one crate or a few tests:
 
 ```bash
 cargo test -p pg-core                  # just the simulation core
@@ -107,6 +107,17 @@ cargo run -q -p pg-cli -- bugbundle run demo.pgbundle
 cargo run -q -p pg-cli -- scenario run scenarios/persistence.json
 # What changed between two content sets
 cargo run -q -p pg-cli -- content diff data/base data/base
+
+# One command that runs the developer checks and prints a single report (run from the repository root)
+cargo run -q -p pg-cli -- check
+# AI client skeleton (no network needed): providers, the exact request that would be sent, the leak check
+cargo run -q -p pg-cli -- ai providers
+cargo run -q -p pg-cli -- ai test --provider anthropic --dry-run
+cargo run -q -p pg-cli -- ai selfcheck
+# With your own key (kept in the OS credential store, never in files): set it from an environment variable,
+# then run the real connection test
+#   PowerShell:  $env:MY_KEY = "sk-..."; cargo run -q -p pg-cli -- ai key set openai --from-env MY_KEY
+cargo run -q -p pg-cli -- ai test --provider openai
 
 # The golden replay CI checks on every OS
 cargo run -q -p pg-cli -- replay golden/dev-town-3days.json --snapshot-at 12345

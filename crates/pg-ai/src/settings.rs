@@ -8,7 +8,7 @@
 use crate::provider::Provider;
 use pg_core::canon::{json, Canon};
 use pg_core::read::{ReadError, Reader, Root};
-use pg_host::{LogSink, Level, Secret, SecretError, SecretStore, Storage};
+use pg_host::{Level, LogSink, Secret, SecretError, SecretStore, Storage};
 use std::fmt;
 
 pub const DEVICE_FILE: &str = "settings/device.json";
@@ -48,7 +48,9 @@ pub fn validate_model_id(id: &str) -> Result<(), String> {
         return Err("the model id is empty".to_owned());
     }
     if id.len() > MAX_MODEL_LEN {
-        return Err(format!("the model id is longer than {MAX_MODEL_LEN} characters"));
+        return Err(format!(
+            "the model id is longer than {MAX_MODEL_LEN} characters"
+        ));
     }
     if !id
         .chars()
@@ -63,13 +65,20 @@ pub fn validate_model_id(id: &str) -> Result<(), String> {
 pub fn validate_key(text: &str) -> Result<Secret, String> {
     let t = text.trim();
     if t.len() < MIN_KEY_LEN {
-        return Err(format!("that is too short to be a key (at least {MIN_KEY_LEN} characters)"));
+        return Err(format!(
+            "that is too short to be a key (at least {MIN_KEY_LEN} characters)"
+        ));
     }
     if t.len() > MAX_KEY_LEN {
-        return Err(format!("that is too long to be a key (at most {MAX_KEY_LEN} characters)"));
+        return Err(format!(
+            "that is too long to be a key (at most {MAX_KEY_LEN} characters)"
+        ));
     }
     if !t.chars().all(|c| c.is_ascii_graphic()) {
-        return Err("a key contains only visible ASCII characters, with no spaces or line breaks".to_owned());
+        return Err(
+            "a key contains only visible ASCII characters, with no spaces or line breaks"
+                .to_owned(),
+        );
     }
     Ok(Secret::new(t))
 }
@@ -125,8 +134,11 @@ impl DeviceSettings {
         let a = ai.reader();
         a.only(&["enabled", "provider", "custom_model"])?;
         let provider_child = a.child("provider")?;
-        let provider = Provider::from_id(provider_child.reader().str()?)
-            .ok_or_else(|| provider_child.reader().err("unknown provider (openai, deepseek, anthropic or openrouter)"))?;
+        let provider = Provider::from_id(provider_child.reader().str()?).ok_or_else(|| {
+            provider_child
+                .reader()
+                .err("unknown provider (openai, deepseek, anthropic or openrouter)")
+        })?;
         let custom_model = match a.maybe("custom_model")? {
             Some(m) => {
                 let id = m.reader().str()?;
@@ -145,10 +157,14 @@ impl DeviceSettings {
     }
 
     pub fn load(storage: &dyn Storage) -> Result<DeviceSettings, SettingsError> {
-        let Some(bytes) = storage.read(DEVICE_FILE).map_err(|e| SettingsError::Io(e.to_string()))? else {
+        let Some(bytes) = storage
+            .read(DEVICE_FILE)
+            .map_err(|e| SettingsError::Io(e.to_string()))?
+        else {
             return Ok(DeviceSettings::default());
         };
-        let text = String::from_utf8(bytes).map_err(|_| SettingsError::Parse("not UTF-8".to_owned()))?;
+        let text =
+            String::from_utf8(bytes).map_err(|_| SettingsError::Parse("not UTF-8".to_owned()))?;
         let root = Root::new(json::parse(&text).map_err(|e| SettingsError::Parse(e.to_string()))?);
         DeviceSettings::from_reader(root.reader()).map_err(|e| SettingsError::Parse(e.to_string()))
     }
@@ -167,7 +183,10 @@ impl DeviceSettings {
 
     pub fn save(&self, storage: &dyn Storage) -> Result<(), SettingsError> {
         storage
-            .write_atomic(DEVICE_FILE, self.to_canon().to_canonical_string().as_bytes())
+            .write_atomic(
+                DEVICE_FILE,
+                self.to_canon().to_canonical_string().as_bytes(),
+            )
             .map_err(|e| SettingsError::Io(e.to_string()))
     }
 }
@@ -216,24 +235,50 @@ mod tests {
         let s = AiSettings::default();
         assert!(!s.enabled);
         assert_eq!(s.effective_model(), Provider::OpenAi.recommended_model());
-        let c = AiSettings { custom_model: Some("my-model".into()), ..s };
+        let c = AiSettings {
+            custom_model: Some("my-model".into()),
+            ..s
+        };
         assert_eq!(c.effective_model(), "my-model");
     }
 
     #[test]
     fn model_ids_are_validated() {
-        for ok in ["gpt-4o-mini", "anthropic/claude-3.5-sonnet", "llama3:8b", "a"] {
+        for ok in [
+            "gpt-4o-mini",
+            "anthropic/claude-3.5-sonnet",
+            "llama3:8b",
+            "a",
+        ] {
             assert!(validate_model_id(ok).is_ok(), "{ok}");
         }
-        for bad in ["", "has space", "semi;colon", "new\nline", "quote\"", &"x".repeat(101), "é"] {
+        for bad in [
+            "",
+            "has space",
+            "semi;colon",
+            "new\nline",
+            "quote\"",
+            &"x".repeat(101),
+            "é",
+        ] {
             assert!(validate_model_id(bad).is_err(), "{bad:?}");
         }
     }
 
     #[test]
     fn keys_are_validated_trimmed_and_never_echoed_in_errors() {
-        assert_eq!(validate_key("  sk-abcdef123456\n").unwrap().expose(), "sk-abcdef123456");
-        for bad in ["", "abc1234", "has space inside1", "tab\tinside1234", "émoji-key-12345", &"k".repeat(401)] {
+        assert_eq!(
+            validate_key("  sk-abcdef123456\n").unwrap().expose(),
+            "sk-abcdef123456"
+        );
+        for bad in [
+            "",
+            "abc1234",
+            "has space inside1",
+            "tab\tinside1234",
+            "émoji-key-12345",
+            &"k".repeat(401),
+        ] {
             let e = validate_key(bad).unwrap_err();
             assert!(!e.contains(bad) || bad.len() < 3, "{e}");
         }
@@ -242,14 +287,24 @@ mod tests {
     #[test]
     fn settings_round_trip_through_storage_and_never_contain_a_key() {
         let mem = MemStorage::new();
-        assert_eq!(DeviceSettings::load(&mem).unwrap(), DeviceSettings::default());
+        assert_eq!(
+            DeviceSettings::load(&mem).unwrap(),
+            DeviceSettings::default()
+        );
         let s = DeviceSettings {
-            ai: AiSettings { enabled: true, provider: Provider::Anthropic, custom_model: Some("claude-x".into()) },
+            ai: AiSettings {
+                enabled: true,
+                provider: Provider::Anthropic,
+                custom_model: Some("claude-x".into()),
+            },
         };
         s.save(&mem).unwrap();
         assert_eq!(DeviceSettings::load(&mem).unwrap(), s);
         let stored = String::from_utf8(mem.get_raw(DEVICE_FILE).unwrap()).unwrap();
-        assert_eq!(stored, r#"{"ai":{"custom_model":"claude-x","enabled":true,"provider":"anthropic"},"version":1}"#);
+        assert_eq!(
+            stored,
+            r#"{"ai":{"custom_model":"claude-x","enabled":true,"provider":"anthropic"},"version":1}"#
+        );
         assert!(!stored.to_ascii_lowercase().contains("key"));
     }
 

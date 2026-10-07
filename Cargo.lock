@@ -893,6 +893,7 @@ dependencies = [
 name = "pg-cli"
 version = "0.0.1"
 dependencies = [
+ "pg-ai",
  "pg-content",
  "pg-core",
  "pg-host",
@@ -924,6 +925,9 @@ dependencies = [
 [[package]]
 name = "pg-host"
 version = "0.0.1"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "pg-host-os"
