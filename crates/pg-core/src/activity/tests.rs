@@ -530,6 +530,28 @@ fn proposals_for_nonsense_are_rejected_without_changing_the_world() {
     assert_eq!(sim.world().commitments.len(), 0);
 }
 
+#[test]
+fn changing_the_slot_length_cancels_commitments_and_replans_the_day() {
+    let (mut sim, ids) = two_free_pawns();
+    run_to(&mut sim, 305);
+    propose(&mut sim, ids[0], ids[1], 4, 2, t(5, 5), 100_000);
+    run_to(&mut sim, 605);
+    assert_eq!(only_commitment(&sim).state, CommitState::Accepted);
+    sim.submit_now(SimInput::SettingChange(
+        crate::input::SettingChange::SlotMinutes(60),
+    ))
+    .unwrap();
+    let events = run_to(&mut sim, 1250); // the next 60-minute boundary is tick 1200
+    assert_eq!(only_commitment(&sim).state, CommitState::Cancelled);
+    assert_eq!(kinds(&events, "commitment.cancelled").len(), 1);
+    for p in &ids {
+        let s = pawn(&sim, *p).schedule.as_ref().unwrap();
+        assert_eq!(s.slots_per_day(), 24, "replanned in the new slot size");
+        assert!(s.reservations().all(|r| r.commitment.is_none()));
+        s.check_invariants().unwrap();
+    }
+}
+
 // ---- determinism --------------------------------------------------------------------------------------
 
 fn busy_sim() -> Sim {

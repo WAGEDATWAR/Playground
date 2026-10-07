@@ -27,7 +27,7 @@ cd Playground
 To build an exact milestone, check out its tag (tags are `m0.0`, `m0.1`, …):
 
 ```bash
-git checkout m0.4
+git checkout m0.5
 ```
 
 Go back to the latest work with `git checkout main`.
@@ -38,7 +38,7 @@ Go back to the latest work with `git checkout main`.
 cargo test --workspace
 ```
 
-The first run compiles everything (a few minutes); later runs are fast. You should see `test result: ok.` lines and no `FAILED`. At milestone 0.4 that is about 270 tests. To run only one crate or a few tests:
+The first run compiles everything (a few minutes); later runs are fast. You should see `test result: ok.` lines and no `FAILED`. At milestone 0.5 that is about 330 tests. To run only one crate or a few tests:
 
 ```bash
 cargo test -p pg-core                  # just the simulation core
@@ -82,6 +82,13 @@ cargo run -q --release -p pg-cli -- map bench-paths --threads 1,2,4,8
 # Simulate three days and write a replay log, then verify it (and a mid-run snapshot)
 cargo run -q -p pg-cli -- sim --seed demo --dev-map 40x30 --dev-pawns 8 --days 3 --log demo.json
 cargo run -q -p pg-cli -- replay demo.json --snapshot-at 12345
+
+# A pawn's planned day, with the reason for every slot (add --propose to arrange a meeting)
+cargo run -q -p pg-cli -- schedule explain pawn_1 --seed town --dev-map 48x36 --dev-pawns 4 --propose 400:pawn_1:pawn_2:20:2:10,10 --at 9000
+# The closed action registry
+cargo run -q -p pg-cli -- actions
+# Watch tasks and commitments happen
+cargo run -q -p pg-cli -- sim --seed town --dev-map 48x36 --dev-pawns 4 --days 1 --events task
 
 # The golden replay CI checks on every OS
 cargo run -q -p pg-cli -- replay golden/dev-town-3days.json --snapshot-at 12345

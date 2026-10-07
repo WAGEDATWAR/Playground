@@ -17,7 +17,7 @@ use pg_runtime::exec::ScopedThreads;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-const SIM_SPEC: Spec<'static> = Spec {
+pub const SIM_SPEC: Spec<'static> = Spec {
     values: &[
         "seed",
         "name",
@@ -34,6 +34,9 @@ const SIM_SPEC: Spec<'static> = Spec {
         "until",
         "object",
         "put",
+        "propose",
+        "day",
+        "at",
     ],
     switches: &["pretty"],
     optional: &["events"],
@@ -115,8 +118,42 @@ pub struct DemoSetup {
     pub objects: Vec<(String, Tile)>,
     /// `(child, owner, container)`: moves applied at tick 2.
     pub puts: Vec<(EntityId, EntityId, String)>,
+    /// Commitment proposals: `(tick, proposer, invitee, start slot, slots, place)`.
+    pub proposals: Vec<Proposal>,
     pub content: Option<Arc<ContentSet>>,
     pub threads: Option<usize>,
+}
+
+/// `--propose <tick>:<proposer>:<invitee>:<start>:<len>:<x>,<y>`.
+#[derive(Clone, Debug)]
+pub struct Proposal {
+    pub tick: u64,
+    pub proposer: EntityId,
+    pub invitee: EntityId,
+    pub start: u32,
+    pub len: u32,
+    pub at: Tile,
+}
+
+fn parse_proposal(text: &str) -> Result<Proposal, String> {
+    let bad = || format!("--propose expects tick:proposer:invitee:start:len:x,y, got '{text}'");
+    let parts: Vec<&str> = text.split(':').collect();
+    let [tick, a, b, start, len, at] = parts.as_slice() else {
+        return Err(bad());
+    };
+    let (x, y) = crate::args::parse_tile(at)?;
+    Ok(Proposal {
+        tick: tick.parse().map_err(|_| bad())?,
+        proposer: a
+            .parse()
+            .map_err(|e| format!("--propose proposer '{a}': {e}"))?,
+        invitee: b
+            .parse()
+            .map_err(|e| format!("--propose invitee '{b}': {e}"))?,
+        start: start.parse().map_err(|_| bad())?,
+        len: len.parse().map_err(|_| bad())?,
+        at: Tile::new(x, y),
+    })
 }
 
 pub fn build_demo(setup: &DemoSetup) -> Result<Sim, String> {
@@ -176,6 +213,21 @@ pub fn build_demo(setup: &DemoSetup) -> Result<Sim, String> {
     } else if !setup.objects.is_empty() || !setup.puts.is_empty() {
         return Err("--object and --put need --dev-map".into());
     }
+    for pr in &setup.proposals {
+        sim.submit(
+            pr.tick,
+            cmd(Command::DevPropose {
+                proposer: pr.proposer,
+                invitee: pr.invitee,
+                start: pr.start,
+                len: pr.len,
+                at: pr.at,
+                expires_in: u32::try_from(TICKS_PER_DAY).unwrap_or(u32::MAX),
+                reschedulable: false,
+            }),
+        )
+        .map_err(|e| e.to_string())?;
+    }
     for (tick, amount) in &setup.nudges {
         let amount = i32::try_from(*amount)
             .map_err(|_| format!("--nudge amount {amount} does not fit i32"))?;
@@ -216,6 +268,11 @@ pub fn demo_from_flags(p: &Parsed) -> Result<DemoSetup, String> {
             .all("put")
             .into_iter()
             .map(parse_put)
+            .collect::<Result<_, _>>()?,
+        proposals: p
+            .all("propose")
+            .into_iter()
+            .map(parse_proposal)
             .collect::<Result<_, _>>()?,
         nudges: p
             .all("nudge")

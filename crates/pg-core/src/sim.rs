@@ -210,7 +210,19 @@ fn apply_input(
     match &stamped.input {
         SimInput::SettingChange(SettingChange::SlotMinutes(m)) => match SlotMinutes::new(*m) {
             Ok(slot) => {
+                let changed = world.settings.slot_minutes != slot;
                 world.settings.slot_minutes = slot;
+                if changed {
+                    // Commitments are agreed in slots, so a different slot length voids them; schedules
+                    // are replanned at the next slot boundary because their length no longer matches.
+                    for id in crate::commitment::cancel_live(world, "the slot length changed") {
+                        events.push(Event {
+                            tick,
+                            kind: "commitment.cancelled".into(),
+                            detail: Canon::map([("commitment", id.to_canon())]),
+                        });
+                    }
+                }
                 events.push(Event {
                     tick,
                     kind: "setting_changed".into(),

@@ -1,8 +1,8 @@
 //! `pg`: headless developer tooling (Blueprint §20). Developer-only; never part of the shipped game.
 //!
 //! Commands so far: `selftest`, `rand`, `hash`, `id` (0.1); `sim`, `replay`, `time`, `pipeline` (0.2);
-//! `content` (0.3); `map`, plus replay `--diff` / `--bisect` and event filters (0.4). Later milestones add
-//! `schedule`, `save`, `pack`, `bench`.
+//! `content` (0.3); `map`, plus replay `--diff` / `--bisect` and event filters (0.4); `schedule explain`,
+//! `actions` (0.5). Later milestones add `save`, `pack`, `bench`.
 
 use pg_core::hash::hash_canon;
 use pg_core::id::{EntityId, Kind};
@@ -13,6 +13,7 @@ use std::process::ExitCode;
 mod args;
 mod content_cmds;
 mod map_cmds;
+mod sched_cmds;
 mod shared;
 mod sim_cmds;
 
@@ -30,6 +31,7 @@ USAGE:
     pg sim --seed <text> [--days <n> | --ticks <n>] [--name <text>] [--dev-map WxH[:style]]
            [--dev-pawns <n>] [--content <pack-dir>]... [--threads <n>] [--nudge <tick>:<amount>]...
            [--object <template>@x,y]... [--put <child>:<owner>:<container>]...
+           [--propose <tick>:<proposer>:<invitee>:<start>:<len>:<x>,<y>]...
            [--slot <tick>:<minutes>]... [--events [kind-prefix]] [--since <tick>] [--until <tick>]
            [--log <file>] [--pretty]
         Run the dev simulation headless; print the state hash at every day boundary (with per-table
@@ -50,6 +52,12 @@ USAGE:
         Run one path request on a demo map and draw the route.
     pg map bench-paths [--size WxH[:style]] [--requests <n>] [--threads 1,2,4,8] [--seed <text>]
         Solve the same batch of requests serially and on several thread counts; verifies identical results.
+    pg schedule explain <pawn> --seed <text> --dev-map WxH --dev-pawns <n> [--day <n>] [--at <tick>]
+                           [--propose ...]... [other sim flags]
+        Run the dev simulation to a tick (default: just after the day's first slot boundary) and print
+        the pawn's day: every reservation with its priority and the plain-sentence reason it is there,
+        open time, what could not be placed and why, and the pawn's commitments.
+    pg actions                List the closed action registry: ids, parameters, steps.
     pg time <tick> [--slot-minutes <m>]    Show day / clock time / slot / boundary flags for a tick.
     pg pipeline               Show the tick pipeline: systems in execution order and their cadence.
     pg content lint [pack-dir...]         Load and validate packs (default: data/base). Exit 1 on errors.
@@ -75,6 +83,8 @@ fn main() -> ExitCode {
         Some("replay") => sim_cmds::replay_cmd(&args[1..]),
         Some("time") => sim_cmds::time_cmd(&args[1..]),
         Some("pipeline") => Ok(sim_cmds::pipeline_cmd()),
+        Some("schedule") => sched_cmds::schedule_cmd(&args[1..]),
+        Some("actions") => Ok(sched_cmds::actions_cmd()),
         Some("version" | "--version" | "-V") => {
             println!("pg {}", env!("CARGO_PKG_VERSION"));
             Ok(ExitCode::SUCCESS)

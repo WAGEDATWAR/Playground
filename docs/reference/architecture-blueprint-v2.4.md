@@ -1,4 +1,4 @@
-# Playground — Architecture Blueprint v2.3
+# Playground — Architecture Blueprint v2.4
 
 **Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.1 and Roadmap v4.2. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). It is a spec, not final source; names and signatures may shift during implementation, but the contracts and invariants may not. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
 
@@ -9,6 +9,8 @@
 **v2.2 (during Phase 0):** scheduled the accepted developer-experience suggestions (`docs/SUGGESTIONS.md`): reproducibility tooling (§20, replay diff and bisect, bug bundles, scenario files), the RNG stream registry (§5.1), canonical-JSON cross-checking (§18), the content compatibility report and `pg content diff` (§4.2, §13.4), pack-authoring aids (§23.12), and the reason-code and event viewers (§20). Stage tags show when each lands.
 
 **v2.3 (during Phase 0):** scheduled three performance and simulation suggestions: path-search scratch buffers (§19), pawn-aware routing (§7.3, Stage 1) and compressed, trimmable replay logs (§20, milestone 0.6).
+
+**v2.4 (during Phase 0):** milestone 0.5 made the scheduler, commitment and action sections precise where the first implementation had to choose (§8.5 replan timing and displacement scope, §8.6 gathering radius and slot-length changes, §8.7 which parts of the action skeleton exist). No behaviour was removed.
 
 ## 0. Architectural principles
 
@@ -517,6 +519,8 @@ Script hooks and script-requested reservations enter planning only as weights an
 
 **Replanning triggers:** day start; need becomes critical; commitment accepted / cancelled; possession ends \[S4\]; map edit invalidating a destination; interruption (event, injury). `replan_from(slot)` re-runs steps 2–5 for remaining slots only, never touching completed slots.
 
+**Implementation notes (0.5):** (a) Planning runs in strict priority order, so a full `plan_day` never has a lower-priority reservation to displace; "may displace a priority 4-5 reservation" is therefore implemented by `insert_urgent`, the mid-day path used when a need becomes critical (displaced reservations return unchanged if their slots are still free, otherwise move to the first later free run, otherwise are dropped with `no_free_slot`). (b) Replans are requested by setting `Pawn.replan` and carried out at the next slot boundary (inside ReservationActivator, before activation), starting at that boundary, so a slot already under way is never rewritten; a task failure therefore replans from the following slot. (c) A started reservation is never displaced, including by a commitment. (d) Reservation ids are per-schedule counters and survive being lifted out and put back. (e) A change of slot length makes every schedule stale (it is replanned at the next boundary) and cancels live commitments, because both are expressed in slots.
+
 **Activation:** at each slot boundary ReservationActivator sets the pawn's intent to the reservation covering that slot. Unreserved slots set intent `Free`; the TaskPlanner may then pick small self-directed behavior from a data table (wander, sit), keeping unreserved time genuinely open.
 
 ### 8.6 Commitments protocol \[S2\]
@@ -532,7 +536,7 @@ proposer decides -> create Commitment{state: Proposed, expires_tick}
   -> end: Completed (memory + relationship + social restore) or Failed (no-show, blocked path)
 ```
 
-Reservations are created **only after acceptance**. A failure records a memory for both (negative impact for the pawn who was stood up) and updates affinity under the same diminishing-returns rules.
+Reservations are created **only after acceptance**, and acceptance is evaluated on copies of both schedules and committed only if both succeed (atomic). A commitment may displace priority 4-5 reservations that have not started; it never displaces a duty, urgent need, another commitment or anything under way. Two pawns cannot share a tile, so commitments use the built-in `meet_at` action: a pawn has arrived once it is within `MEET_RADIUS` (2) tiles of the place, and attendance at the end is judged by the same radius. Relationship hostility is not yet consulted (relationships arrive in Stage 1). A failure records a memory for both (negative impact for the pawn who was stood up) and updates affinity under the same diminishing-returns rules.
 
 ### 8.7 Action registry, planner and executor \[S0 skeleton, S1 actions, S10 proposals\]
 
@@ -564,6 +568,8 @@ enum Effect {                            // closed set: scripts can only produce
 ```
 
 **TaskPlanner** takes the pawn's current intent (a reservation or `Free`), selects the `ActionDef`, resolves params, checks preconditions, and instantiates a `Task` with steps. **ActivitySystem** executes the current step each tick: `MoveTo` delegates to MovementSystem; `PerformFor` counts ticks and applies per-minute effects; `Apply` runs effects atomically through the core's validation (preconditions re-checked, ranges clamped, containment enforced).
+
+**Skeleton status (0.5):** the registry, `ActionDef` (typed params, steps, `interruptible`, `ai_proposable`), `TaskPlanner` and `ActivitySystem` exist with the built-ins `move_to`, `idle_at` and `meet_at` and the step kinds `MoveTo { within }` and `PerformUntilSlotEnd`. Preconditions, permissions, costs and the `Effect` set are added with the systems that need them (Needs, Stage 1). A pack registers actions only while the registry is open; namespaced `<pack>.<name>`; a built-in may not contain a dot.
 
 **Failure handling:** any step failure ends the Task with a `ReasonCode` (`BlockedDestination`, `PathBlocked`, `PreconditionFailed`, `Interrupted`, `Unaffordable`, `Unauthorized`, `ScriptError`), writes an event, and triggers `replan_from(current_slot)`.
 

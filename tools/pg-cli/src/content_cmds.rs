@@ -203,6 +203,11 @@ fn resolve(args: &[String]) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// One-line description of a field shape, for `pg actions` and `pg content components`.
+pub fn describe_field(field: &FieldSchema) -> String {
+    describe(field)
+}
+
 fn describe(field: &FieldSchema) -> String {
     match field {
         FieldSchema::Int { min, max } => format!("int {min}..={max}"),

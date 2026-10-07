@@ -107,15 +107,17 @@ impl PlanSource for DevPlanSource {
                 });
             }
         }
-        if let Some(stroll) = DevPlanSource::tile(world, pawn, day, 1) {
-            inputs.leisure.push(LeisureOption {
-                action: walk,
-                params: Canon::map([("to", stroll.to_canon())]),
-                len: 1,
-                weight: 10,
-            });
+        for salt in 1..=3 {
+            if let Some(stroll) = DevPlanSource::tile(world, pawn, day, salt) {
+                inputs.leisure.push(LeisureOption {
+                    action: walk.clone(),
+                    params: Canon::map([("to", stroll.to_canon())]),
+                    len: 1,
+                    weight: 4,
+                });
+            }
         }
-        if let Some(spot) = DevPlanSource::tile(world, pawn, day, 2) {
+        if let Some(spot) = DevPlanSource::tile(world, pawn, day, 4) {
             inputs.leisure.push(LeisureOption {
                 action: idle,
                 params: at(spot),

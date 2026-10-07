@@ -137,7 +137,11 @@ fn replan_pass(ctx: &mut TickCtx<'_>, source: &dyn PlanSource) {
         let Some(p) = ctx.world.pawns.get(pawn) else {
             continue;
         };
-        let stale = p.schedule.as_ref().is_none_or(|s| s.day != ctx.flags.day);
+        let slots = slots_per_day(ctx.world);
+        let stale = p
+            .schedule
+            .as_ref()
+            .is_none_or(|s| s.day != ctx.flags.day || s.slots_per_day() != slots);
         if stale {
             plan_pawn(ctx, source, pawn, boundary);
             continue;
@@ -568,7 +572,9 @@ fn evaluate_proposal(ctx: &mut TickCtx<'_>, c: &Commitment) -> Outcome {
     ) else {
         return decline("a participant has no plan for today".to_owned());
     };
-    if a.day != c.day || b.day != c.day {
+    let slots = slots_per_day(ctx.world);
+    if a.day != c.day || b.day != c.day || a.slots_per_day() != slots || b.slots_per_day() != slots
+    {
         return decline("a participant has no plan for today".to_owned());
     }
     // Work on copies so a failure on either side leaves both untouched.

@@ -18,7 +18,7 @@ use pg_content::ContentSet;
 use std::sync::Arc;
 
 pub const REPLAY_FORMAT: &str = "playground-replay";
-pub const REPLAY_VERSION: u32 = 2;
+pub const REPLAY_VERSION: u32 = 3;
 
 /// Which set of systems the run used.
 pub const PROFILE_DEV: &str = "dev";

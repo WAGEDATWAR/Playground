@@ -186,6 +186,19 @@ impl ToCanon for Commitment {
     }
 }
 
+/// Cancels every live commitment (proposed, accepted or active) with `why`, returning their ids in id
+/// order. Used when something the agreements were expressed in changes underneath them.
+pub fn cancel_live(world: &mut crate::world::WorldState, why: &str) -> Vec<EntityId> {
+    let mut cancelled = Vec::new();
+    for (id, c) in world.commitments.iter_mut() {
+        let reason = ReasonCode::builtin("commitment_cancelled", [("why", Canon::str(why))]);
+        if c.transition(CommitState::Cancelled, reason).is_ok() {
+            cancelled.push(id);
+        }
+    }
+    cancelled
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
