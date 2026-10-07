@@ -7,6 +7,7 @@
 
 pub mod component;
 pub mod content_set;
+pub mod diff;
 pub mod hints;
 pub mod ids;
 pub mod manifest;
