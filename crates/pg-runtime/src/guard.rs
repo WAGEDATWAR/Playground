@@ -6,7 +6,7 @@
 //! replayable bundle, and keeps the UI alive. Panics outside a guard still reach the previous hook (the
 //! default one prints them), so other threads and tests behave as usual.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::panic::{catch_unwind, AssertUnwindSafe, PanicHookInfo};
 use std::sync::{Mutex, Once};
 
@@ -20,11 +20,12 @@ pub struct PanicReport {
 type Hook = Box<dyn Fn(&PanicHookInfo<'_>) + Sync + Send + 'static>;
 
 static INSTALL: Once = Once::new();
-static LAST: Mutex<Option<PanicReport>> = Mutex::new(None);
 static PREVIOUS: Mutex<Option<Hook>> = Mutex::new(None);
 
 thread_local! {
     static GUARDED: Cell<u32> = const { Cell::new(0) };
+    /// The report of this thread's latest guarded panic (the hook runs on the panicking thread).
+    static LAST: RefCell<Option<PanicReport>> = const { RefCell::new(None) };
 }
 
 fn payload_text(info: &PanicHookInfo<'_>) -> String {
@@ -49,7 +50,7 @@ pub fn install_hook() {
                         .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column())),
                     backtrace: std::backtrace::Backtrace::force_capture().to_string(),
                 };
-                *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some(report);
+                LAST.with(|l| *l.borrow_mut() = Some(report));
             } else if let Some(prev) = PREVIOUS.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
                 prev(info);
             }
@@ -64,9 +65,7 @@ pub fn guarded<R>(f: impl FnOnce() -> R) -> Result<R, PanicReport> {
     let result = catch_unwind(AssertUnwindSafe(f));
     GUARDED.with(|g| g.set(g.get().saturating_sub(1)));
     result.map_err(|payload| {
-        LAST.lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .take()
+        LAST.with(|l| l.borrow_mut().take())
             .unwrap_or_else(|| PanicReport {
                 message: crate::pool::panic_text(&*payload),
                 location: None,
