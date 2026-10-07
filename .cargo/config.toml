@@ -1,0 +1,14 @@
+# Build settings that affect determinism (Blueprint §23.4, §23.5; spike question 2).
+#
+# Luau is compiled from vendored C++. The compiler must not fuse `a * b + c` into one fused multiply-add,
+# because that changes the last bit of a result on CPUs that have the instruction. GCC and Clang fuse by
+# default on aarch64 (Apple silicon, ARM Linux); MSVC does not under /fp:precise. The cc crate reads
+# CXXFLAGS_<target>, so each target gets its explicit setting. The test
+# `floating_point_contraction_is_off` (pg-script) checks the result at runtime on every target in CI, and
+# native code generation is never built (checked by scripts/check_deps.py).
+[env]
+CXXFLAGS_aarch64_apple_darwin = "-ffp-contract=off"
+CXXFLAGS_x86_64_apple_darwin = "-ffp-contract=off"
+CXXFLAGS_aarch64_unknown_linux_gnu = "-ffp-contract=off"
+CXXFLAGS_x86_64_unknown_linux_gnu = "-ffp-contract=off"
+CXXFLAGS_x86_64_pc_windows_msvc = "/fp:precise"

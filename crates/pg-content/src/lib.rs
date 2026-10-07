@@ -10,6 +10,7 @@ pub mod content_set;
 pub mod diff;
 pub mod hints;
 pub mod ids;
+pub mod jsonschema;
 pub mod manifest;
 pub mod pack;
 pub mod report;

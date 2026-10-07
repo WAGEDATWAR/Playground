@@ -895,6 +895,24 @@ fn load_phase_has_a_fuel_budget_too() {
     assert!(matches!(e, VmError::OutOfFuel { .. }));
 }
 
+#[test]
+fn floating_point_contraction_is_off() {
+    // (2^27 + 1)^2 = 2^54 + 2^28 + 1 is not a double. Computed with separate multiply and add the product
+    // rounds to 2^54 + 2^28 and the sum with -(2^54 + 2^28) is 0; a fused multiply-add keeps the exact
+    // product and gives 1. The answer must be 0 on every target.
+    assert_eq!(
+        value_of(
+            "local a = 2^27 + 1 local b = a local c = -(2^54 + 2^28) local r = a * b + c return r"
+        ),
+        Val::Int(0)
+    );
+    // The same through a function boundary, so the compiler cannot see the constants.
+    assert_eq!(
+        value_of("local function f(a, b, c) return a * b + c end return f(2^27 + 1, 2^27 + 1, -(2^54 + 2^28))"),
+        Val::Int(0)
+    );
+}
+
 // ---- pg helpers ------------------------------------------------------------------------------------------------------
 
 #[test]

@@ -2433,12 +2433,14 @@ name = "pg-cli"
 version = "0.0.1"
 dependencies = [
  "pg-ai",
+ "pg-api",
  "pg-content",
  "pg-core",
  "pg-host",
  "pg-host-os",
  "pg-persist",
  "pg-runtime",
+ "pg-script",
  "serde_json",
 ]
 

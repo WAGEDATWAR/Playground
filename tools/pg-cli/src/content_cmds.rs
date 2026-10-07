@@ -81,6 +81,7 @@ pub fn content_cmd(args: &[String]) -> Result<ExitCode, String> {
         Some("resolve") => resolve(&args[1..]),
         Some("components") => Ok(components()),
         Some("diff") => diff(&args[1..]),
+        Some("schema") => crate::pack_cmds::schema_cmd(&args[1..]),
         Some(other) => Err(format!(
             "unknown content command '{other}' (try lint, list, resolve, components)"
         )),

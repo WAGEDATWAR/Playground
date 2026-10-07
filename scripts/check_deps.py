@@ -25,7 +25,8 @@ ALLOWED = {
                    "pg-worldgen", "pg-ui-model", "pg-host"},
     "pg-render": {"pg-ui-model"},
     "pg-app": {"pg-runtime", "pg-render", "pg-host-os", "pg-ui-model", "pg-host", "pg-core"},
-    "pg-cli": {"pg-runtime", "pg-host-os", "pg-core", "pg-content", "pg-persist", "pg-host", "pg-ai"},
+    "pg-cli": {"pg-runtime", "pg-host-os", "pg-core", "pg-content", "pg-persist", "pg-host", "pg-ai",
+               "pg-script", "pg-api"},
 }
 
 # External crates that only specific workspace crates may use.
@@ -62,6 +63,17 @@ def main() -> int:
     for name in ALLOWED:
         if name not in names:
             errors.append(f"{name}: listed in ALLOWED but missing from the workspace")
+
+    # The Luau binding must be built without native code generation or other numeric-risk features
+    # (Blueprint §23.4; spike question 2).
+    try:
+        tree = subprocess.check_output(
+            ["cargo", "tree", "-p", "pg-script", "-e", "features", "-i", "mlua"], text=True)
+        for bad in ("luau-jit", "luau-vector4"):
+            if f'mlua feature "{bad}"' in tree:
+                errors.append(f"mlua feature '{bad}' must not be enabled (determinism)")
+    except subprocess.CalledProcessError as e:
+        errors.append(f"cargo tree failed while checking mlua features: {e}")
 
     if errors:
         print("Dependency rule violations:")

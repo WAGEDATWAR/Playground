@@ -47,6 +47,14 @@ jobs:
       - run: cargo run -q -p pg-cli -- ai selfcheck
       - run: cargo run -q -p pg-cli -- ai test --provider anthropic --dry-run
       - run: cargo run -q -p pg-cli -- ai test --provider player2 --dry-run
+      # Scripting (0.9): cookbook packs must reproduce their golden hashes on every OS, including with every VM
+      # rebuilt at each day boundary; the API reference and editor definitions must generate.
+      - run: cargo run -q -p pg-cli -- pack lint packs/cookbook/caffeine
+      - run: cargo run -q -p pg-cli -- pack test packs/cookbook/caffeine
+      - run: cargo run -q -p pg-cli -- pack test packs/cookbook/evening_legs
+      - run: cargo run -q -p pg-cli -- pack test packs/cookbook/birthdays
+      - run: cargo run -q -p pg-cli -- pack docs --luau
+      - run: cargo run -q -p pg-cli -- content schema templates
       # Everything above in one report, as a person would run it.
       - run: cargo run -q -p pg-cli -- check
       # Parallel pathfinding must give results identical to serial on every OS (Blueprint §7.3, §19).

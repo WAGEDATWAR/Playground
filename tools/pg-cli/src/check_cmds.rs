@@ -97,6 +97,46 @@ pub fn check_cmd(rest: &[String]) -> Result<ExitCode, String> {
             needs: None,
         },
         Check {
+            name: "pack lint: caffeine",
+            args: args(&["pack", "lint", "packs/cookbook/caffeine"]),
+            needs: Some("packs/cookbook/caffeine"),
+        },
+        Check {
+            name: "pack golden + VM reload: caffeine",
+            args: args(&["pack", "test", "packs/cookbook/caffeine"]),
+            needs: Some("packs/golden/caffeine.json"),
+        },
+        Check {
+            name: "pack lint: evening_legs",
+            args: args(&["pack", "lint", "packs/cookbook/evening_legs"]),
+            needs: Some("packs/cookbook/evening_legs"),
+        },
+        Check {
+            name: "pack golden + VM reload: evening_legs",
+            args: args(&["pack", "test", "packs/cookbook/evening_legs"]),
+            needs: Some("packs/golden/evening_legs.json"),
+        },
+        Check {
+            name: "pack lint: birthdays",
+            args: args(&["pack", "lint", "packs/cookbook/birthdays"]),
+            needs: Some("packs/cookbook/birthdays"),
+        },
+        Check {
+            name: "pack golden + VM reload: birthdays",
+            args: args(&["pack", "test", "packs/cookbook/birthdays"]),
+            needs: Some("packs/golden/birthdays.json"),
+        },
+        Check {
+            name: "API docs and type definitions",
+            args: args(&["pack", "docs", "--luau"]),
+            needs: None,
+        },
+        Check {
+            name: "JSON Schema export",
+            args: args(&["content", "schema", "templates"]),
+            needs: None,
+        },
+        Check {
             name: "action registry",
             args: args(&["actions"]),
             needs: None,

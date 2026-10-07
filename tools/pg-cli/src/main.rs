@@ -17,6 +17,7 @@ mod check_cmds;
 mod content_cmds;
 mod events_cmds;
 mod map_cmds;
+mod pack_cmds;
 mod persist_cmds;
 mod runtime_cmds;
 mod sched_cmds;
@@ -95,6 +96,15 @@ USAGE:
         verification and a final save; creates the slot if absent, loads it if present.
     pg profile [--dev-map WxH] [--dev-pawns N] [--days D | --ticks N] [--threads N]
         Time every system over a headless run (default 200 pawns, one day); prints the table.
+    pg pack lint <dir> [--base dir] [--with dir]...
+        Load a pack with the base pack, lint its scripts (API names, capabilities, order-sensitive
+        iteration, module-level state) and start it in the script host.
+    pg pack test <dir> [--days N] [--pawns N] [--update] [--with dir]...
+        Run the pack headless under golden hashes (packs/golden/<id>.json), then again rebuilding every VM at
+        each day boundary; both must agree.
+    pg pack docs [--luau]     The generated API reference, or pg.d.luau for editors.
+    pg pack new <id> <dir>    Scaffold a pack.
+    pg content schema [manifest|templates]   JSON Schema for editors.
     pg tools                  The developer-tool registry (command-line and overlay tools).
     pg events list [category] | show <kind> The typed event catalog: kinds, categories, fields, default visibility.
     pg settings list | get <id> | set <id> <value> | reset <id> [--dir D]
@@ -134,6 +144,7 @@ fn main() -> ExitCode {
         Some("ai") => ai_cmds::ai_cmd(&args[1..]),
         Some("strings") => strings_cmds::strings_cmd(&args[1..]),
         Some("events") => events_cmds::events_cmd(&args[1..]),
+        Some("pack") => pack_cmds::pack_cmd(&args[1..]),
         Some("profile") => runtime_cmds::profile_cmd(&args[1..]),
         Some("run") => runtime_cmds::run_cmd(&args[1..]),
         Some("tools") => Ok(runtime_cmds::tools_cmd()),

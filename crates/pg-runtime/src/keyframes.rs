@@ -29,6 +29,9 @@ pub struct SimFactory {
     content: Option<Arc<ContentSet>>,
     threads: usize,
     profiler: Option<crate::profile::Profiler>,
+    /// Script packs to run, taken from the content; `None` when there are none or safe mode is on.
+    scripts: Option<Arc<Vec<pg_script::host::ScriptPackInput>>>,
+    script_limits: pg_script::host::ScriptLimits,
 }
 
 impl SimFactory {
@@ -50,12 +53,43 @@ impl SimFactory {
         content: Option<Arc<ContentSet>>,
         threads: usize,
     ) -> SimFactory {
+        let scripts = content.as_ref().and_then(|c| {
+            let packs: Vec<_> = c
+                .script_packs()
+                .iter()
+                .map(pg_script::host::ScriptPackInput::from_content)
+                .collect();
+            (!packs.is_empty()).then(|| Arc::new(packs))
+        });
         SimFactory {
             pipeline,
             content,
             threads: threads.max(1),
             profiler: None,
+            scripts,
+            script_limits: pg_script::host::ScriptLimits::default(),
         }
+    }
+
+    /// Safe mode (Blueprint §23.10): the same factory with every script switched off. Pack data stays in the
+    /// world as inert orphans.
+    pub fn safe_mode(&self) -> SimFactory {
+        SimFactory {
+            scripts: None,
+            ..self.clone()
+        }
+    }
+
+    pub fn with_script_limits(&self, limits: pg_script::host::ScriptLimits) -> SimFactory {
+        SimFactory {
+            script_limits: limits,
+            ..self.clone()
+        }
+    }
+
+    /// Whether this factory runs any scripts.
+    pub fn runs_scripts(&self) -> bool {
+        self.scripts.is_some()
     }
 
     /// The same factory with every pipeline it builds timed by `profiler`.
@@ -66,12 +100,19 @@ impl SimFactory {
         }
     }
 
-    fn build_pipeline(&self) -> Pipeline {
+    /// A fresh pipeline, with a fresh script host (and so fresh VMs) when packs have scripts: restoring a
+    /// snapshot, rewinding and shadow verification all rebuild every VM, which the VM-reload tests rely on.
+    fn build_pipeline(&self, seed: u64) -> (Pipeline, Option<pg_script::host::HostHooks>) {
         let mut p = (self.pipeline)();
+        let hooks = self.scripts.as_ref().and_then(|packs| {
+            pg_script::host::attach(packs, seed, self.script_limits.clone(), &mut p)
+                .ok()
+                .map(|(_, h)| h)
+        });
         if let Some(prof) = &self.profiler {
             p.set_probe(Some(prof.probe()));
         }
-        p
+        (p, hooks)
     }
 
     pub fn threads(&self) -> usize {
@@ -86,20 +127,25 @@ impl SimFactory {
         }
     }
 
-    fn configure(&self, mut sim: Sim) -> Sim {
+    fn configure(&self, mut sim: Sim, hooks: Option<pg_script::host::HostHooks>) -> Sim {
         if let Some(c) = &self.content {
             sim = sim.with_content(Arc::clone(c));
+        }
+        if let Some(h) = hooks {
+            sim.set_hooks(Some(Box::new(h)));
         }
         sim.set_executor(Box::new(ScopedThreads::new(self.threads)));
         sim
     }
 
     pub fn new_sim(&self, world: WorldState) -> Sim {
-        self.configure(Sim::new(world, self.build_pipeline()))
+        let (p, hooks) = self.build_pipeline(world.seed().0);
+        self.configure(Sim::new(world, p), hooks)
     }
 
     pub fn restore(&self, snapshot: SimSnapshot) -> Sim {
-        self.configure(Sim::restore(snapshot, self.build_pipeline()))
+        let (p, hooks) = self.build_pipeline(snapshot.world.seed().0);
+        self.configure(Sim::restore(snapshot, p), hooks)
     }
 }
 
