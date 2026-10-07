@@ -37,6 +37,8 @@ const TEMPLATES: &[(&str, &str)] = &[
     ("chore_placed", "A chore was placed at slot {slot} for {slots} slot(s) (urgency {urgency})."),
     ("chore_dropped", "A chore (urgency {urgency}) was dropped: no free slot fits it{deadline}."),
     ("leisure_chosen", "Leisure was chosen at slot {slot} for {slots} slot(s) (weight {weight} of {total})."),
+    ("moved_later", "A reservation was moved from slot {from} to slot {to} because an urgent need took its slot."),
+    ("no_free_slot", "{what} was dropped: no free slot remained today."),
     ("slots_open", "{count} slot(s) were left open."),
     ("replanned", "The rest of the day was replanned from slot {from}: {why}."),
     // task and movement failures (Blueprint §8.7)

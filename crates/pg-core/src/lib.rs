@@ -26,6 +26,7 @@ pub mod pipeline;
 pub mod reason;
 pub mod replay;
 pub mod rng;
+pub mod schedule;
 pub mod sim;
 pub mod table;
 pub mod time;
