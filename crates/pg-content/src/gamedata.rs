@@ -47,6 +47,44 @@ pub const MINUTES_PER_DAY: u32 = 1440;
 
 // ---- types ----------------------------------------------------------------------------------------------
 
+/// The capacities a need can lower (Blueprint §8.1); the core's `Capacities` record has one field for each.
+pub const CAPACITY_IDS: [&str; 6] = [
+    "consciousness",
+    "moving",
+    "manipulation",
+    "talking",
+    "eating",
+    "breathing",
+];
+
+/// What a need does to a capacity while it is low: the capacity is at most `urgent` (0 to 1000) while the need
+/// is urgent, and at most `critical` while it is critical.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Penalty {
+    pub capacity: String,
+    pub urgent: i32,
+    pub critical: i32,
+}
+
+/// A time of day a restoring activity is scheduled for as part of the daily rhythm (meals, bedtime):
+/// it may start from minute `start` to minute `end` of the day and lasts `minutes`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Routine {
+    pub start: u32,
+    pub end: u32,
+    pub minutes: u32,
+}
+
+/// How a need is restored: the action to schedule and where; `minutes` is how long an unplanned restoring
+/// activity lasts when the need has become urgent, and each `routine` entry is a regular one in the day.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NeedRestore {
+    pub action: String,
+    pub place: PlaceKind,
+    pub minutes: u32,
+    pub routine: Vec<Routine>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NeedDef {
     pub id: String,
@@ -59,6 +97,10 @@ pub struct NeedDef {
     pub active_permille: u32,
     pub urgent_below: i32,
     pub critical_below: i32,
+    pub penalties: Vec<Penalty>,
+    /// Points per hour the need recovers while the pawn cannot act at all (collapsed from exhaustion).
+    pub rest_restore_per_hour: u32,
+    pub restore: Option<NeedRestore>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -656,9 +698,110 @@ pub fn parse_needs(value: &Canon, report: &mut ValidationReport) -> BTreeMap<Str
                 "active_permille",
                 "urgent_below",
                 "critical_below",
+                "penalties",
+                "rest_restore_per_hour",
+                "restore",
             ],
             r,
         )?;
+        let mut penalties = Vec::new();
+        match o.map.get("penalties") {
+            None => {}
+            Some(Canon::List(l)) => {
+                for (i, v) in l.iter().enumerate() {
+                    let p = Obj::new(
+                        v,
+                        o.at(&format!("penalties[{i}]")),
+                        &["capacity", "urgent", "critical"],
+                        r,
+                    )?;
+                    let capacity = p.text("capacity", 24, r)?;
+                    if !CAPACITY_IDS.contains(&capacity.as_str()) {
+                        r.error(
+                            "bad_enum",
+                            p.at("capacity"),
+                            format!(
+                                "unknown capacity '{capacity}'{} (allowed: {})",
+                                hint(&capacity, CAPACITY_IDS.iter().copied()),
+                                CAPACITY_IDS.join(", ")
+                            ),
+                        );
+                        return None;
+                    }
+                    let (urgent, critical) = (
+                        i32_of(p.int("urgent", 0, 1000, None, r))?,
+                        i32_of(p.int("critical", 0, 1000, None, r))?,
+                    );
+                    if critical > urgent {
+                        r.error(
+                            "bad_range",
+                            p.at("critical"),
+                            "critical must not be higher than urgent (it is the worse state)",
+                        );
+                        return None;
+                    }
+                    penalties.push(Penalty {
+                        capacity,
+                        urgent,
+                        critical,
+                    });
+                }
+            }
+            Some(_) => {
+                r.error("type_mismatch", o.at("penalties"), "expected a list");
+                return None;
+            }
+        }
+        let restore = match o.map.get("restore") {
+            None => None,
+            Some(v) => {
+                let p = Obj::new(
+                    v,
+                    o.at("restore"),
+                    &["action", "place", "minutes", "routine"],
+                    r,
+                )?;
+                let mut routine = Vec::new();
+                match p.map.get("routine") {
+                    None => {}
+                    Some(Canon::List(l)) => {
+                        for (i, w) in l.iter().enumerate() {
+                            let w = Obj::new(
+                                w,
+                                p.at(&format!("routine[{i}]")),
+                                &["start", "end", "minutes"],
+                                r,
+                            )?;
+                            let item = Routine {
+                                start: u32_of(w.int("start", 0, 1439, None, r))?,
+                                end: u32_of(w.int("end", 0, 1439, None, r))?,
+                                minutes: u32_of(w.int("minutes", 5, 720, None, r))?,
+                            };
+                            if item.end < item.start || item.start + item.minutes > MINUTES_PER_DAY
+                            {
+                                r.error(
+                                    "bad_range",
+                                    w.path.clone(),
+                                    "a routine entry needs start <= end and must finish before midnight",
+                                );
+                                return None;
+                            }
+                            routine.push(item);
+                        }
+                    }
+                    Some(_) => {
+                        r.error("type_mismatch", p.at("routine"), "expected a list");
+                        return None;
+                    }
+                }
+                Some(NeedRestore {
+                    action: p.text("action", 48, r)?,
+                    place: parse_place(&p, "place", r)?,
+                    minutes: u32_of(p.int("minutes", 5, 720, None, r))?,
+                    routine,
+                })
+            }
+        };
         let def = NeedDef {
             id: o.id("id", r)?,
             label_key: o.text("label_key", 80, r)?,
@@ -667,6 +810,9 @@ pub fn parse_needs(value: &Canon, report: &mut ValidationReport) -> BTreeMap<Str
             active_permille: u32_of(o.int("active_permille", 0, 5000, Some(1000), r))?,
             urgent_below: i32_of(o.int("urgent_below", 1, 999, None, r))?,
             critical_below: i32_of(o.int("critical_below", 0, 998, None, r))?,
+            penalties,
+            rest_restore_per_hour: u32_of(o.int("rest_restore_per_hour", 0, 1000, Some(0), r))?,
+            restore,
         };
         if def.critical_below >= def.urgent_below {
             r.error(

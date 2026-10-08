@@ -219,3 +219,23 @@ cargo run --release -p pg-cli -- scenario run scenarios/soak-30-days.json
 
 The gate report with every clause, its evidence and its command is `docs/gates/stage-0.md`.
 
+## Needs, mood and residents (Stage 1)
+
+```bash
+# What a seed produces: households, occupations, starting relationships and shared memories.
+cargo run -q -p pg-cli -- residents generate --seed demo --count 14
+
+# Run a few residents for days on open ground and show needs, mood and capacities at the end.
+cargo run -q -p pg-cli -- sim --seed demo --dev-map 40x30:0 --dev-pawns 4 --days 3 --content data/base --needs
+
+# Watch the needs events (urgent, critical, collapsed, recovered, mood changes).
+cargo run -q -p pg-cli -- sim --seed demo --dev-map 40x30:0 --dev-pawns 4 --days 3 --content data/base --events need.
+cargo run -q -p pg-cli -- sim --seed demo --dev-map 40x30:0 --dev-pawns 4 --days 3 --content data/base --events mood.
+
+# The inheritance forest of the content, and the actions (now with what each restores).
+cargo run -q -p pg-cli -- content tree
+cargo run -q -p pg-cli -- actions
+```
+
+The numbers (decay, thresholds, mood rules, meal times) are data in `data/base/data/game/`; edit them and re-run.
+

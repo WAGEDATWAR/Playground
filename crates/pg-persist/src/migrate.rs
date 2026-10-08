@@ -161,6 +161,22 @@ fn v3_to_v4(mut c: Canon) -> Result<Canon, String> {
                 p.insert("mood".to_owned(), Canon::str("neutral"));
                 p.insert("household".to_owned(), Canon::Null);
                 p.insert("memories".to_owned(), Canon::List(Vec::new()));
+                p.insert(
+                    "capacities".to_owned(),
+                    Canon::map(
+                        [
+                            "consciousness",
+                            "moving",
+                            "manipulation",
+                            "talking",
+                            "eating",
+                            "breathing",
+                        ]
+                        .map(|k| (k, Canon::Int(1000))),
+                    ),
+                );
+                p.insert("home_tile".to_owned(), Canon::Null);
+                p.insert("idle_since".to_owned(), Canon::Null);
             }
         }
         _ => return Err("the world has no pawns table".into()),

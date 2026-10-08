@@ -29,7 +29,7 @@
   "reason.unknown_action": "No action named {action} is registered.",
   "reason.unreachable_or_too_far": "No path was found to the destination.",
   "reason.urgent_need_displaced": "The urgent {need} activity at slot {slot} displaced a lower-priority reservation ({displaced}).",
-  "reason.urgent_need_placed": "{need} is predicted to become urgent at slot {predicted}, so a restoring activity was placed at slot {slot}.",
+  "reason.urgent_need_placed": "A restoring {need} activity was wanted by slot {predicted} and was placed at slot {slot}.",
   "reason.urgent_need_unplaced": "There was no room before slot {predicted} for the urgent {need} activity, and nothing could be displaced.",
   "ui.back": "Back",
   "ui.cancel": "Cancel",

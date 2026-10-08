@@ -326,8 +326,11 @@ pub struct DutyTemplate {
 #[derive(Clone, Debug, PartialEq)]
 pub struct UrgentNeed {
     pub need: String,
-    /// The slot at which the need is predicted to reach "urgent".
+    /// The slot at which the need is predicted to reach "urgent" (or, for a routine activity, the last slot
+    /// it may start in).
     pub predicted_slot: u32,
+    /// The first slot the activity may start in (0 for no limit).
+    pub earliest: u32,
     pub action: ActionId,
     pub params: Canon,
     pub len: u32,
@@ -544,7 +547,7 @@ fn place_urgent(s: &mut DaySchedule, from: u32, inputs: &PlanInputs) {
 fn place_one_urgent(s: &mut DaySchedule, from: u32, u: &UrgentNeed) -> Option<u32> {
     // A need that is already urgent has no deadline: take the earliest run that exists.
     let before = (u.predicted_slot > from).then_some(u.predicted_slot);
-    let found = s.first_fit(from, u.len, before, None);
+    let found = s.first_fit(from.max(u.earliest), u.len, before, None);
     let Some(start) = found else {
         s.dropped.push(Dropped {
             what: format!("urgent {} activity", u.need),
@@ -820,7 +823,9 @@ pub fn reserve_commitment(
 /// (`no_free_slot`). Priorities 1 and 3 are never touched.
 pub fn insert_urgent(s: &mut DaySchedule, from: u32, u: &UrgentNeed) -> Option<u32> {
     let before = (u.predicted_slot > from).then_some(u.predicted_slot);
-    if s.first_fit(from, u.len, before, None).is_some() {
+    if s.first_fit(from.max(u.earliest), u.len, before, None)
+        .is_some()
+    {
         return place_one_urgent(s, from, u);
     }
     // Try displacing, weakest first (priority 5 before 4, lower urgency first, later start first).
@@ -837,7 +842,9 @@ pub fn insert_urgent(s: &mut DaySchedule, from: u32, u: &UrgentNeed) -> Option<u
     for (_, _, _, id) in candidates {
         let Some(r) = s.remove(id) else { continue };
         displaced.push(r);
-        if s.first_fit(from, u.len, before, None).is_some() {
+        if s.first_fit(from.max(u.earliest), u.len, before, None)
+            .is_some()
+        {
             placed = place_one_urgent(s, from, u);
             break;
         }

@@ -2,6 +2,7 @@
 //! milestone 0.4 needs position, facing and the route a pawn is following.
 
 use crate::canon::{Canon, ToCanon};
+use crate::capacity::Capacities;
 use crate::id::EntityId;
 use crate::map::{Dir4, Tile};
 use crate::read::{ReadError, Reader};
@@ -203,6 +204,13 @@ pub struct Pawn {
     pub household: Option<EntityId>,
     /// Bounded by the memory parameters; oldest first.
     pub memories: Vec<Memory>,
+    /// What the pawn can currently do (Blueprint §8.1); derived each minute by the needs system.
+    pub capacities: Capacities,
+    /// Where the pawn lives and eats and sleeps. Set by population or, failing that, to the tile the pawn
+    /// first stood on.
+    pub home_tile: Option<Tile>,
+    /// The tick since which the pawn has had nothing to do (for the `bored` mood).
+    pub idle_since: Option<u64>,
 }
 
 /// The mood a pawn has before the mood system has looked at it.
@@ -227,6 +235,9 @@ impl Pawn {
             mood: DEFAULT_MOOD.to_owned(),
             household: None,
             memories: Vec::new(),
+            capacities: Capacities::FULL,
+            home_tile: None,
+            idle_since: None,
         }
     }
 }
@@ -292,6 +303,15 @@ impl ToCanon for Pawn {
             (
                 "memories",
                 Canon::List(self.memories.iter().map(ToCanon::to_canon).collect()),
+            ),
+            ("capacities", self.capacities.to_canon()),
+            (
+                "home_tile",
+                self.home_tile.map_or(Canon::Null, |t| t.to_canon()),
+            ),
+            (
+                "idle_since",
+                self.idle_since.map_or(Canon::Null, |t| t.to_canon()),
             ),
         ])
     }
@@ -428,6 +448,9 @@ impl Pawn {
             "mood",
             "household",
             "memories",
+            "capacities",
+            "home_tile",
+            "idle_since",
         ])?;
         let facing_child = r.child("facing")?;
         let facing = Dir4::from_name(facing_child.reader().str()?)
@@ -489,6 +512,15 @@ impl Pawn {
                 .iter()
                 .map(|c| Memory::from_reader(c.reader()))
                 .collect::<Result<Vec<_>, _>>()?,
+            capacities: Capacities::from_reader(r.child("capacities")?.reader())?,
+            home_tile: match r.maybe("home_tile")? {
+                Some(c) => Some(Tile::from_reader(c.reader())?),
+                None => None,
+            },
+            idle_since: match r.maybe("idle_since")? {
+                Some(c) => Some(c.reader().u64()?),
+                None => None,
+            },
         })
     }
 }
@@ -532,7 +564,7 @@ mod tests {
         );
         assert_eq!(
             p.to_canon().to_canonical_string(),
-            r#"{"facing":"S","household":null,"id":"pawn_1","intent":"free","last_failure":null,"memories":[],"mood":"neutral","move_failure":null,"name":"Ann","needs":{},"occupation":null,"position":{"map":"map_1","tile":[1,2]},"replan":null,"route":null,"schedule":null,"task":null}"#
+            r#"{"capacities":{"breathing":1000,"consciousness":1000,"eating":1000,"manipulation":1000,"moving":1000,"talking":1000},"facing":"S","home_tile":null,"household":null,"id":"pawn_1","idle_since":null,"intent":"free","last_failure":null,"memories":[],"mood":"neutral","move_failure":null,"name":"Ann","needs":{},"occupation":null,"position":{"map":"map_1","tile":[1,2]},"replan":null,"route":null,"schedule":null,"task":null}"#
         );
     }
 }

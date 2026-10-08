@@ -198,7 +198,14 @@ fn step_ticks(ctx: &mut TickCtx<'_>, pawn: EntityId, base: u32) -> u32 {
 }
 
 fn step_one(ctx: &mut TickCtx<'_>, pawn: EntityId, settings: &MovementSettings) {
-    let needed = step_ticks(ctx, pawn, settings.move_ticks_per_tile);
+    // A pawn that cannot act stands still; one that can walks as fast as its `moving` capacity allows.
+    let Some(caps) = ctx.world.pawns.get(pawn).map(|p| p.capacities) else {
+        return;
+    };
+    if !caps.can_act() {
+        return;
+    }
+    let needed = caps.scale_step_ticks(step_ticks(ctx, pawn, settings.move_ticks_per_tile));
     // Count the tick and see whether a step is due.
     let (map, cur, next) = {
         let Some(p) = ctx.world.pawns.get_mut(pawn) else {

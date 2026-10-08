@@ -56,7 +56,7 @@ pub struct DevPlanSource;
 
 impl DevPlanSource {
     /// A seeded passable tile on the pawn's map; `day` of -1 gives the pawn's fixed workplace.
-    fn tile(world: &WorldState, pawn: EntityId, day: i64, salt: i64) -> Option<Tile> {
+    pub(crate) fn tile(world: &WorldState, pawn: EntityId, day: i64, salt: i64) -> Option<Tile> {
         let p = world.pawns.get(pawn)?;
         let map = world.maps.get(p.position.map)?;
         let rng = Rng::new(

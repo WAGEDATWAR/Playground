@@ -250,21 +250,25 @@ fn arrival_ticks(c: &Arc<ContentSet>, start_tick: u64) -> u64 {
             }),
         )
         .unwrap();
-    r.sim.run_ticks(start_tick).unwrap();
+    r.sim.run_ticks(start_tick.max(2)).unwrap();
     let pawn = EntityId::new(Kind::Pawn, 1);
     let now = r.sim.world().clock.tick();
+    // The pawn has lived its own life until now, so walk a fixed distance from wherever it stands.
+    let here = r.sim.world().pawns.get(pawn).unwrap().position.tile;
+    let goal = Tile::new(
+        if here.x < 30 {
+            here.x + 20
+        } else {
+            here.x - 20
+        },
+        here.y,
+    );
     r.sim
-        .submit(
-            now,
-            cmd(Command::DevMove {
-                pawn,
-                to: Tile::new(50, 4),
-            }),
-        )
+        .submit(now, cmd(Command::DevMove { pawn, to: goal }))
         .unwrap();
     for _ in 0..5_000 {
         r.sim.step().unwrap();
-        if r.sim.world().pawns.get(pawn).unwrap().position.tile == Tile::new(50, 4) {
+        if r.sim.world().pawns.get(pawn).unwrap().position.tile == goal {
             return r.sim.world().clock.tick() - now;
         }
     }

@@ -13,6 +13,6 @@
     { "op": "save", "slot": "migrated" },
     { "op": "corrupt", "slot": "migrated", "how": "truncate" },
     { "op": "load", "slot": "migrated", "expect": "fell_back" },
-    { "op": "expect", "pawns": 4, "hash": "9f117955" }
+    { "op": "expect", "pawns": 4, "hash": "9e550c91" }
   ]
 }

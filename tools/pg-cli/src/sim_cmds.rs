@@ -38,7 +38,7 @@ pub const SIM_SPEC: Spec<'static> = Spec {
         "day",
         "at",
     ],
-    switches: &["pretty"],
+    switches: &["pretty", "needs"],
     optional: &["events"],
 };
 
@@ -378,6 +378,9 @@ pub fn sim_cmd(args: &[String]) -> Result<ExitCode, String> {
         w.probe.days,
         w.settings.slot_minutes.get()
     );
+    if p.has("needs") {
+        print_needs(w);
+    }
     let (hits, misses) = sim.path_cache_stats();
     if hits + misses > 0 {
         println!("path cache: {hits} hits, {misses} misses");
@@ -399,6 +402,44 @@ pub fn sim_cmd(args: &[String]) -> Result<ExitCode, String> {
         println!("replay log written to {path}");
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// `pg sim --needs`: each pawn's needs, mood and capacities at the end of the run (Stage 1).
+fn print_needs(w: &pg_core::world::WorldState) {
+    let Some((_, first)) = w.pawns.iter().next() else {
+        return;
+    };
+    let ids: Vec<&String> = first.needs.keys().collect();
+    print!(
+        "
+{:<10} {:<14}",
+        "pawn", "mood"
+    );
+    for n in &ids {
+        print!(" {n:>8}");
+    }
+    println!("  capacities below full");
+    for (id, p) in w.pawns.iter() {
+        print!("{:<10} {:<14}", id.to_string(), p.mood);
+        for n in &ids {
+            print!(" {:>8}", p.needs.get(*n).copied().unwrap_or(0));
+        }
+        let low: Vec<String> = p
+            .capacities
+            .as_pairs()
+            .iter()
+            .filter(|(_, v)| *v < 1000)
+            .map(|(k, v)| format!("{k} {v}"))
+            .collect();
+        println!(
+            "  {}",
+            if low.is_empty() {
+                "-".to_owned()
+            } else {
+                low.join(", ")
+            }
+        );
+    }
 }
 
 fn dev_pipeline() -> Pipeline {

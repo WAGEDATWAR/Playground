@@ -42,7 +42,22 @@ pub struct ActionDef {
     pub ai_proposable: bool,
     /// One line for `pg actions`.
     pub summary: String,
+    /// Needs this action restores while a pawn performs it (Blueprint §8.1).
+    pub restores: Vec<Restore>,
 }
+
+/// A need an action restores while it is being performed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Restore {
+    pub need: String,
+    /// Points per game hour.
+    pub per_hour: u32,
+    /// Only counts while another pawn is within [`COMPANY_RADIUS`] tiles.
+    pub company: bool,
+}
+
+/// How near another pawn must be for company-dependent restoring (a chat, a shared meal).
+pub const COMPANY_RADIUS: u32 = 5;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RegisterError {
@@ -121,6 +136,7 @@ impl ActionRegistry {
                 interruptible: true,
                 ai_proposable: true,
                 summary: "Walk to a tile.".into(),
+                restores: Vec::new(),
             },
             ActionDef {
                 id: id("idle_at"),
@@ -136,6 +152,7 @@ impl ActionRegistry {
                 interruptible: true,
                 ai_proposable: true,
                 summary: "Walk to a tile and stay there for the reserved time.".into(),
+                restores: Vec::new(),
             },
             ActionDef {
                 id: id("meet_at"),
@@ -151,8 +168,67 @@ impl ActionRegistry {
                 interruptible: true,
                 ai_proposable: false,
                 summary: "Gather within a couple of tiles of a place (used by commitments).".into(),
+                restores: Vec::new(),
             },
         ];
+        // Actions that restore a need while they are performed (Blueprint §8.1): walk to a tile and stay.
+        let restoring =
+            |name: &str, summary: &str, within: u32, need: &str, per_hour: u32, company: bool| {
+                ActionDef {
+                    id: id(name),
+                    origin: Origin::Builtin,
+                    params: ParamSchema::new().field("at", tile()),
+                    steps: vec![
+                        StepTemplate::MoveTo {
+                            param: "at".into(),
+                            within,
+                        },
+                        StepTemplate::PerformUntilSlotEnd,
+                    ],
+                    interruptible: true,
+                    ai_proposable: true,
+                    summary: summary.to_owned(),
+                    restores: vec![Restore {
+                        need: need.to_owned(),
+                        per_hour,
+                        company,
+                    }],
+                }
+            };
+        let defs = defs.into_iter().chain([
+            restoring(
+                "eat",
+                "Walk to a tile and have a meal (restores hunger).",
+                0,
+                "hunger",
+                700,
+                false,
+            ),
+            restoring(
+                "sleep",
+                "Walk to a tile and sleep (restores energy).",
+                0,
+                "energy",
+                180,
+                false,
+            ),
+            restoring(
+                "rest",
+                "Walk to a tile and rest (restores some energy).",
+                0,
+                "energy",
+                60,
+                false,
+            ),
+            restoring(
+                "socialise",
+                "Go to a place and spend time with others (restores social while someone is near).",
+                MEET_RADIUS + 1,
+                "social",
+                300,
+                true,
+            ),
+        ]);
         for d in defs {
             // The built-in ids are distinct and valid, and the registry is open here.
             let _ = r.register(d);
@@ -311,6 +387,7 @@ mod tests {
             interruptible: true,
             ai_proposable: false,
             summary: "test".into(),
+            restores: Vec::new(),
         }
     }
 
@@ -319,7 +396,18 @@ mod tests {
         let r = ActionRegistry::builtin();
         assert!(r.is_frozen());
         let ids: Vec<&str> = r.iter().map(|d| d.id.as_str()).collect();
-        assert_eq!(ids, ["idle_at", "meet_at", "move_to"]);
+        assert_eq!(
+            ids,
+            [
+                "eat",
+                "idle_at",
+                "meet_at",
+                "move_to",
+                "rest",
+                "sleep",
+                "socialise"
+            ]
+        );
         let mut r = r;
         assert_eq!(
             r.register(pack_action("coffee", "brew")),

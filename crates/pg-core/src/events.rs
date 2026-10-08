@@ -20,6 +20,8 @@ pub enum Category {
     Schedule,
     Task,
     Commitment,
+    /// Needs, mood and what they do to a pawn.
+    Life,
     Dev,
     /// Declared by a content pack.
     Pack,
@@ -34,6 +36,7 @@ impl Category {
             Category::Schedule => "schedule",
             Category::Task => "task",
             Category::Commitment => "commitment",
+            Category::Life => "life",
             Category::Dev => "dev",
             Category::Pack => "pack",
         }
@@ -248,6 +251,46 @@ impl EventCatalog {
             true,
             "The rest of a pawn's day was replanned.",
             &[("pawn", id("pawn")), ("from", int()), ("why", text(400))],
+        );
+        add(
+            "need.urgent",
+            Life,
+            true,
+            "A need fell below its urgent level.",
+            &[("pawn", id("pawn")), ("need", text(24)), ("value", int())],
+        );
+        add(
+            "need.critical",
+            Life,
+            true,
+            "A need fell below its critical level.",
+            &[("pawn", id("pawn")), ("need", text(24)), ("value", int())],
+        );
+        add(
+            "pawn.collapsed",
+            Life,
+            true,
+            "A pawn was too exhausted to carry on and collapsed where it stood.",
+            &[("pawn", id("pawn"))],
+        );
+        add(
+            "pawn.recovered",
+            Life,
+            true,
+            "A collapsed pawn recovered enough to act again.",
+            &[("pawn", id("pawn"))],
+        );
+        add(
+            "mood.changed",
+            Life,
+            false,
+            "A pawn's mood changed.",
+            &[
+                ("pawn", id("pawn")),
+                ("from", text(24)),
+                ("to", text(24)),
+                ("rule", text(48)),
+            ],
         );
         add(
             "task.started",

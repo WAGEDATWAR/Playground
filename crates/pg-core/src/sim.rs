@@ -77,6 +77,10 @@ impl Sim {
 
     /// Gives the sim loaded content (needed by commands that create objects).
     pub fn with_content(mut self, content: Arc<ContentSet>) -> Sim {
+        // Content with game data brings the needs and mood systems (replacing the scaffolding probe).
+        if !content.game().is_empty() {
+            crate::life::install(&mut self.pipeline, Arc::new(content.game().clone()));
+        }
         self.content = Some(content);
         self
     }

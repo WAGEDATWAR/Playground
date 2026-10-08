@@ -1,5 +1,46 @@
 [
-  { "id": "hunger", "label_key": "need.hunger", "start": 800, "decay_per_hour": 55, "active_permille": 1200, "urgent_below": 300, "critical_below": 100 },
-  { "id": "energy", "label_key": "need.energy", "start": 900, "decay_per_hour": 50, "active_permille": 1300, "urgent_below": 250, "critical_below": 80 },
-  { "id": "social", "label_key": "need.social", "start": 700, "decay_per_hour": 35, "active_permille": 1000, "urgent_below": 350, "critical_below": 150 }
+  {
+    "id": "hunger", "label_key": "need.hunger", "start": 800, "decay_per_hour": 55, "active_permille": 1200,
+    "urgent_below": 300, "critical_below": 100,
+    "penalties": [
+      { "capacity": "manipulation", "urgent": 900, "critical": 600 },
+      { "capacity": "moving", "urgent": 950, "critical": 750 }
+    ],
+    "restore": {
+      "action": "eat", "place": "home", "minutes": 40,
+      "routine": [
+        { "start": 390, "end": 540, "minutes": 40 },
+        { "start": 690, "end": 840, "minutes": 40 },
+        { "start": 1050, "end": 1200, "minutes": 40 }
+      ]
+    }
+  },
+  {
+    "id": "energy", "label_key": "need.energy", "start": 900, "decay_per_hour": 50, "active_permille": 1300,
+    "urgent_below": 250, "critical_below": 80,
+    "penalties": [
+      { "capacity": "moving", "urgent": 850, "critical": 500 },
+      { "capacity": "consciousness", "urgent": 1000, "critical": 300 }
+    ],
+    "rest_restore_per_hour": 100,
+    "restore": {
+      "action": "sleep", "place": "home", "minutes": 420,
+      "routine": [
+        { "start": 0, "end": 120, "minutes": 360 },
+        { "start": 1320, "end": 1380, "minutes": 90 }
+      ]
+    }
+  },
+  {
+    "id": "social", "label_key": "need.social", "start": 700, "decay_per_hour": 35, "active_permille": 1000,
+    "urgent_below": 350, "critical_below": 150,
+    "restore": {
+      "action": "socialise", "place": "gathering", "minutes": 60,
+      "routine": [
+        { "start": 720, "end": 780, "minutes": 60 },
+        { "start": 1050, "end": 1110, "minutes": 60 },
+        { "start": 1170, "end": 1230, "minutes": 60 }
+      ]
+    }
+  }
 ]

@@ -53,6 +53,7 @@ fn commitment(n: u32, start: u32, len: u32, reschedulable: bool, created: u64) -
 fn urgent(need: &str, predicted: u32, len: u32) -> UrgentNeed {
     UrgentNeed {
         need: need.into(),
+        earliest: 0,
         predicted_slot: predicted,
         action: act("idle_at"),
         params: Canon::Null,

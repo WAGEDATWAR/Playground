@@ -289,7 +289,7 @@ impl System for TaskPlannerSystem {
             let Intent::Reservation(id) = p.intent else {
                 continue;
             };
-            if p.task.as_ref().is_some_and(|t| t.reservation == id) {
+            if p.task.as_ref().is_some_and(|t| t.reservation == id) || !p.capacities.can_act() {
                 continue;
             }
             let reservation = p

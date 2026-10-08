@@ -199,6 +199,18 @@ pub fn actions_cmd() -> ExitCode {
                 }
             );
         }
+        for r in &d.restores {
+            println!(
+                "    restores {}: {} points an hour{}",
+                r.need,
+                r.per_hour,
+                if r.company {
+                    " (while others are near)"
+                } else {
+                    ""
+                }
+            );
+        }
         let steps: Vec<String> = d
             .steps
             .iter()

@@ -29,7 +29,7 @@ const TEMPLATES: &[(&str, &str)] = &[
     ("duty_placed", "A required duty was placed at slot {slot} for {slots} slot(s)."),
     ("duty_varied", "The duty's start moved by {shift} slot(s) and its length by -{shrink} (seeded variation), giving slots {start}..{end}."),
     ("duty_dropped", "A duty at slot {slot} was dropped: it overlapped a stronger claim ({by})."),
-    ("urgent_need_placed", "{need} is predicted to become urgent at slot {predicted}, so a restoring activity was placed at slot {slot}."),
+    ("urgent_need_placed", "A restoring {need} activity was wanted by slot {predicted} and was placed at slot {slot}."),
     ("urgent_need_displaced", "The urgent {need} activity at slot {slot} displaced a lower-priority reservation ({displaced})."),
     ("urgent_need_unplaced", "There was no room before slot {predicted} for the urgent {need} activity, and nothing could be displaced."),
     ("commitment_placed", "An accepted commitment was placed at slot {slot} for {slots} slot(s)."),
@@ -237,7 +237,10 @@ mod tests {
                 ("slot", Canon::Int(28)),
             ],
         );
-        assert_eq!(r.explain(), "hunger is predicted to become urgent at slot 30, so a restoring activity was placed at slot 28.");
+        assert_eq!(
+            r.explain(),
+            "A restoring hunger activity was wanted by slot 30 and was placed at slot 28."
+        );
     }
 
     #[test]

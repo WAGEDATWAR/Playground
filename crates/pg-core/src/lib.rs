@@ -11,6 +11,7 @@
 pub use pg_canon as canon;
 pub mod action;
 pub mod activity;
+pub mod capacity;
 pub mod commands;
 pub mod commitment;
 pub mod containment;
@@ -21,6 +22,7 @@ pub mod hash;
 pub mod hooks;
 pub mod id;
 pub mod input;
+pub mod life;
 pub mod map;
 pub mod movement;
 pub mod num;

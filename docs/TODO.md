@@ -4,11 +4,13 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Stage 1 in progress.** Plan: `docs/PLAN.md` Phase 1 (1.0 to 1.9), accepted (D-038). **1.0 is implemented** (D-041): game data tables in packs, world schema 4 with the 3-to-4 migration, households, relationships and memories as state, seeded population generation, `pg content tree` (S-015), `pg residents generate`, `pg replay --rerecord`. Next is 1.1 (needs, mood and the capacities interface). Organism system settled (D-040), scheduled as Stage 2B.
+**Stage 1 in progress.** Plan: `docs/PLAN.md` Phase 1 (1.0 to 1.9), accepted (D-038). **1.0 and 1.1 are implemented** (D-041, D-042): game data tables, world schema 4, population generation; needs that decay and are restored by `eat`, `sleep`, `rest` and `socialise`, a daily rhythm of meals, bedtime and company, mood rules, capacities that slow or stop a pawn, new events and `pg sim --needs`. Next is **1.2 Town generator v1**, the first checkpoint for you. Organism system settled (D-040), scheduled as Stage 2B.
+
+**Known, scheduled:** crowded gathering places and one-tile corridors jam without pawn-aware routing (1.3, S-018); the dev town's random homes sit in corridors. Real homes and gathering places arrive with the generator (1.2).
 
 **Parked (come back later):** weather, seasons and fire (S-048, Roadmap section 12 item 8); animals and non-human humanoids (the physiology profile leaves room); anatomy extensions after Stage 2B's base (eyes and ears, neck, spine segments); customisable map sizes (Stage 3 generator controls); real art assets to replace procedural sprites.
 
-**Documentation owed:** Blueprint v3.4 (schema 4, game data tables, population, the new tools) is written at the 1.2 checkpoint together with the generator, so the "as built" text changes once.
+**Documentation owed:** Blueprint v3.4 (schema 4, game data tables, population, needs and capacities as built, the new tools and events) is written at the 1.2 checkpoint together with the generator, so the "as built" text changes once.
 
 ## Blocked / waiting on user
 
@@ -16,9 +18,9 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Next up
 
-1. 1.1 Needs, mood and capacities (replaces the dev probe system; mood rule table; the capacities interface, S-040).
-2. 1.2 Town generator v1, then the first checkpoint for you.
-3. Prune dev scaffolding as real systems land (D-009).
+1. 1.2 Town generator v1 (terrain, roads, districts, homes, gathering places, residents from the seed, controls, content rating and filter), then the checkpoint for you.
+2. 1.3 occupation schedules and pawn-aware routing.
+3. Prune dev scaffolding as real systems land (D-009; the dev probe is already out of the way when content is loaded).
 
 ## Shell note
 
