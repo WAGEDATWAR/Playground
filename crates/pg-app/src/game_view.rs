@@ -134,7 +134,11 @@ pub struct RenderStats {
     pub zoom: f32,
 }
 
+/// Scroll points that make one zoom step (a wheel notch is about this much).
+const SCROLL_PER_STEP: f32 = 40.0;
+
 pub struct GameView {
+    scroll: f32,
     camera: Camera,
     fitted: Option<EntityId>,
     /// The player moved the camera: stop re-framing the map as the window changes.
@@ -153,6 +157,7 @@ pub struct GameView {
 impl Default for GameView {
     fn default() -> GameView {
         GameView {
+            scroll: 0.0,
             camera: Camera::default(),
             fitted: None,
             moved: false,
@@ -252,10 +257,14 @@ impl GameView {
             self.moved = true;
         }
         if let Some(hover) = response.hover_pos() {
-            let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-            if scroll.abs() > 0.5 {
+            // egui spreads one wheel notch over several frames; collect it and take one zoom step per notch
+            // (otherwise every frame of the same notch would step again).
+            self.scroll += ui.input(|i| i.smooth_scroll_delta.y);
+            while self.scroll.abs() >= SCROLL_PER_STEP {
+                let up = self.scroll > 0.0;
+                self.scroll -= SCROLL_PER_STEP.copysign(self.scroll);
                 let z = self.camera.zoom;
-                let target = if scroll > 0.0 {
+                let target = if up {
                     if z < 16.0 {
                         (z * 1.25).min(16.0)
                     } else {
@@ -276,6 +285,8 @@ impl GameView {
                 self.camera.zoom = snap_zoom(self.camera.zoom);
                 self.moved = true;
             }
+        } else {
+            self.scroll = 0.0;
         }
         self.camera.clamp_to(map.width(), map.height());
         self.track(snap);
