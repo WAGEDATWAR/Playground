@@ -89,7 +89,7 @@ pub const TYPES: &[ApiType] = &[
     },
     ApiType {
         name: "Entity",
-        definition: "{ id: string, kind: string, x: number, y: number, get: (self: Entity, component: string) -> { [string]: number }? }",
+        definition: "{ id: string, kind: string, x: number, y: number, needs: { [string]: number }?, mood: string?, outgoing: number?, occupation: string?, get: (self: Entity, component: string) -> { [string]: number }? }",
     },
     ApiType {
         name: "Context",
@@ -322,6 +322,36 @@ HookPoint {
     default: 1000,
     since: "0.1",
     summary: "Scales the change a conversation makes to a relationship, in permille (1000 leaves it alone, 0 cancels it). The pair's daily cap still applies afterwards.",
+    context: "pawn: Entity (the lower id of the pair)",
+},
+HookPoint {
+    id: "need.decay_modifier",
+    combiner: Combiner::ProductPermille,
+    min: 500,
+    max: 2000,
+    default: 1000,
+    since: "0.1",
+    summary: "Scales how fast all of a pawn's needs fall, in permille (1000 is normal, 700 means the pawn needs to eat, sleep and socialise less often, 1500 more often). Asked once a game minute for each pawn.",
+    context: "pawn: Entity",
+},
+HookPoint {
+    id: "mood.comfort_shift",
+    combiner: Combiner::Sum,
+    min: -300,
+    max: 300,
+    default: 0,
+    since: "0.1",
+    summary: "Added to each need level the mood rules look at, so a positive answer makes a pawn feel better off than its needs say and a negative one worse off. Needs and their effects on what a pawn can do are unchanged; only the mood is. Asked once a game minute for each pawn.",
+    context: "pawn: Entity",
+},
+HookPoint {
+    id: "conversation.chance_modifier",
+    combiner: Combiner::ProductPermille,
+    min: 0,
+    max: 2000,
+    default: 1000,
+    since: "0.1",
+    summary: "Scales the chance that two residents who are free to talk start a conversation, in permille (0 means never, 2000 twice as likely). Asked for each pair that could talk, once a game minute.",
     context: "pawn: Entity (the lower id of the pair)",
 }];
 

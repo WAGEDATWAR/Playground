@@ -67,6 +67,7 @@ jobs:
       - run: cargo run -q -p pg-cli -- pack test packs/cookbook/caffeine
       - run: cargo run -q -p pg-cli -- pack test packs/cookbook/evening_legs
       - run: cargo run -q -p pg-cli -- pack test packs/cookbook/birthdays
+      - run: cargo run -q -p pg-cli -- pack test packs/cookbook/hardy
       - run: cargo run -q -p pg-cli -- pack docs --luau
       - run: cargo run -q -p pg-cli -- content schema templates
       # Stage 0 gate scenarios (0.11): the sample town, a migrated fixture and a world with script packs, each

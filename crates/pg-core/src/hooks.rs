@@ -15,6 +15,59 @@ pub trait HookHost: Send {
     /// the question is about; `world` is a read-only view. No answers means "no opinion".
     fn ask(&mut self, point: &'static HookPoint, world: &WorldState, subject: EntityId)
         -> Vec<i64>;
+
+    /// Like [`HookHost::ask`], but says which pack gave each answer, and changes nothing: no errors are
+    /// recorded, nothing is metered. For explaining to a person what packs are doing to a pawn (the
+    /// inspector); the simulation never uses it. The default is no explanation.
+    fn explain(
+        &mut self,
+        _point: &'static HookPoint,
+        _world: &WorldState,
+        _subject: EntityId,
+    ) -> Vec<(String, i64)> {
+        Vec::new()
+    }
+}
+
+/// What packs are doing to one pawn through one hook point: each pack's answer and the combined, clamped value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HookEffect {
+    pub point: &'static str,
+    pub resolved: i64,
+    /// `(pack id, its answer)` in load order.
+    pub packs: Vec<(String, i64)>,
+}
+
+/// The combined, clamped answer of the packs at `point` for `subject`, or `None` when nothing is installed
+/// that answers (so callers keep their normal arithmetic when there are no packs).
+pub fn resolved(
+    hooks: &mut Option<Box<dyn HookHost>>,
+    point: Option<&'static HookPoint>,
+    world: &WorldState,
+    subject: EntityId,
+) -> Option<i64> {
+    let (point, host) = (point?, hooks.as_mut()?);
+    let answers = host.ask(point, world, subject);
+    if answers.is_empty() {
+        None
+    } else {
+        Some(resolve(point, &answers))
+    }
+}
+
+/// `need.decay_modifier`: permille scaling how fast needs fall.
+pub fn need_decay() -> Option<&'static HookPoint> {
+    pg_api::hook_point("need.decay_modifier")
+}
+
+/// `mood.comfort_shift`: points added to the need levels the mood rules read.
+pub fn mood_comfort() -> Option<&'static HookPoint> {
+    pg_api::hook_point("mood.comfort_shift")
+}
+
+/// `conversation.chance_modifier`: permille scaling the chance a pair starts talking.
+pub fn conversation_chance() -> Option<&'static HookPoint> {
+    pg_api::hook_point("conversation.chance_modifier")
 }
 
 /// Combines the packs' answers with the point's combiner and clamps them to the engine's range.

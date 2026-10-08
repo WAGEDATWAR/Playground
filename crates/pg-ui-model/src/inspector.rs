@@ -71,6 +71,16 @@ pub struct ResidentView {
     pub memories: Vec<MemoryRow>,
     pub relationships: Vec<RelationshipRow>,
     pub conversations: Vec<ConversationRow>,
+    /// What content packs are doing to this resident right now.
+    pub pack_effects: Vec<PackEffectRow>,
+}
+
+/// One hook point's effect: the combined value and which pack gave which answer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PackEffectRow {
+    pub point: String,
+    pub value: i64,
+    pub packs: Vec<(String, i64)>,
 }
 
 /// The inspector's window contents.
@@ -194,6 +204,26 @@ pub fn tree(v: &ResidentView, t: Text) -> Tree {
     if talks.is_empty() {
         talks.push(Widget::Note(t("ui.inspect.none", &[])));
     }
+    if !v.pack_effects.is_empty() {
+        w.push(Widget::Group {
+            title: t("ui.inspect.pack_effects", &[]),
+            children: v
+                .pack_effects
+                .iter()
+                .map(|e| {
+                    let by: Vec<String> = e.packs.iter().map(|(p, a)| format!("{p} {a}")).collect();
+                    Widget::Note(t(
+                        "ui.inspect.effect",
+                        &[
+                            ("point", &e.point),
+                            ("value", &e.value.to_string()),
+                            ("packs", &by.join(", ")),
+                        ],
+                    ))
+                })
+                .collect(),
+        });
+    }
     w.push(Widget::Group {
         title: t("ui.inspect.conversations", &[]),
         children: talks,
@@ -238,6 +268,11 @@ mod tests {
                 affinity: 320,
                 last_topic: Some("food".into()),
             }],
+            pack_effects: vec![PackEffectRow {
+                point: "need.decay_modifier".into(),
+                value: 700,
+                packs: vec![("hardy".into(), 700)],
+            }],
             conversations: vec![ConversationRow {
                 summary_key: Some("memory.conversation.food".into()),
                 other: "Tess".into(),
@@ -273,6 +308,7 @@ mod tests {
             "ui.inspect.personality{trait=ui.inspect.trait.outgoing}",
             "Tess: Same here.",
             "ui.inspect.rebuilt",
+            "ui.inspect.effect{point=need.decay_modifier,value=700,packs=hardy 700}",
         ] {
             assert!(snap.contains(want), "missing {want:?} in\n{snap}");
         }

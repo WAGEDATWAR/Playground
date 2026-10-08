@@ -480,7 +480,16 @@ fn start_new(ctx: &mut TickCtx<'_>, params: &ConversationParams, start_affinity:
         let affinity = known_affinity(ctx.world, *a_id, b_id, start_affinity);
         // The more outgoing the pair, the likelier they start talking (and the more reserved, the less).
         let sociable = 1000 + (i64::from(a.outgoing) + i64::from(b.outgoing)) / 2;
+        let by_packs = crate::hooks::resolved(
+            &mut ctx.services.hooks,
+            crate::hooks::conversation_chance(),
+            &*ctx.world,
+            *a_id,
+        )
+        .unwrap_or(1000);
         let chance = ((i64::from(params.chance_permille) + i64::from(affinity) / 5) * sociable
+            / 1000
+            * by_packs
             / 1000)
             .clamp(0, 1000);
         let shared = shared_memory_topic(a, *a_id, b_id);

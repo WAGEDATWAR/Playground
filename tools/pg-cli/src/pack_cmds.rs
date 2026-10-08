@@ -453,6 +453,7 @@ fn bench(args: &[String]) -> Result<ExitCode, String> {
             "packs/cookbook/caffeine".into(),
             "packs/cookbook/evening_legs".into(),
             "packs/cookbook/birthdays".into(),
+            "packs/cookbook/hardy".into(),
         ]
     } else {
         p.positional.clone()

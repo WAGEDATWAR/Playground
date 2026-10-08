@@ -4,7 +4,7 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Stage 1: 1.6 accepted (`m1.6`); 1.7 is under way.** Done so far in 1.7 (D-053): click a resident to open the inspector (needs, mood, what they remember and why, relationships, recent conversations) and see speech bubbles for conversations it can hear; `cargo run -p pg-app -- --demo inspector`. Still to do in 1.7: town journal (observation and possession modes only), Mods screen, native dialogs, AccessKit, main-menu backdrop, personality slice, console extras, S-054/S-057. S-069 social report is also open.
+**Stage 1: 1.8 is implemented: the second checkpoint for you (D-062).** Try the sample pack in the game: `cargo run -p pg-app -- --pack packs/cookbook/hardy`, click a resident, and look for the "What content packs are doing" section (it lists three effects for a resident with grit and none for the others). `pg api`-style docs: `pg pack docs`. Cost numbers: `pg pack bench`. Remaining before the Stage 1 gate (1.9): the UI layout pass and AccessKit (D-061), the scale and save-size checks (S-061, S-064), and the Mods menu items listed above.
 
 **Known, scheduled:** the map view still draws generated towns with the painter-based view (the real renderer is 1.6); building roles are not yet drawn differently; conversation bubbles and the inspector panel come with 1.6/1.7 (the data and `pg residents inspect` exist now).
 
@@ -17,6 +17,10 @@ The repository is public (D-047), so GitHub Actions minutes are free again. Loca
 ## Blocked / waiting on user
 
 - [x] (done 2026-10-07, id in `pg_ai::login::CLIENT_ID`; terms at `player2.game/devtos` still worth a read before release) **Register a Player2 `client_id`** for this game (Roadmap §12 item 8) and confirm the API base URL and terms (`player2.game/devtos`). Until then `pg ai login player2` uses a placeholder the provider will likely refuse. Not blocking 0.8.
+
+## Mods menu: not built yet (for the polish pass, you asked to note these)
+
+The Mods screen (D-060, D-061) is a first stage. Missing, to do in the UI polish pass or sooner if needed: the base game's size and file count in its tile; authorship, description, website and licence fields (the manifest has none yet, so they need a manifest change first); a pack's own settings page (the manifest already declares pack settings); enabling a pack's dependencies for you (today a missing dependency triggers the fallback to the base game); updating an installed pack in place, with the version change shown; a pack list per world (which packs a world was made with, and a warning when they differ); showing why a pack failed with a "copy error" button and the line number; search and sort for long lists; drag to reorder load order; a compatibility badge (API version, engine version); screenshots or an icon per pack; a confirmation before Remove; and keyboard handling for the unrolled tile's checkboxes (covered by the AccessKit pass).
 
 ## Remaining 1.7 work, in the order we will do it
 

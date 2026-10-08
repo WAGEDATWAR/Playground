@@ -240,6 +240,15 @@ cargo run -q -p pg-cli -- ai dialogue-test --seed demo --reply '["Hello.","Hi th
 cargo run -q -p pg-cli -- ai dialogue-test --tone cozy --filter off
 ```
 
+### The sample pack (1.8)
+
+```bash
+cargo run -p pg-app -- --pack packs/cookbook/hardy     # play with it; click a resident, see "What content packs are doing"
+cargo run -q -p pg-cli -- pack test packs/cookbook/hardy   # its golden, with every VM rebuilt each day
+cargo run --release -q -p pg-cli -- pack bench         # what the cookbook packs cost per tick
+cargo run -q -p pg-cli -- pack docs                    # the API reference (hook points included)
+```
+
 ### The 1.4b tools
 
 ```bash

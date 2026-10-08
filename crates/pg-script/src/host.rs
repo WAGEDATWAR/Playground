@@ -404,6 +404,20 @@ impl ScriptHost {
         if let Some(p) = world.pawns.get(entity) {
             e.push(("x".to_owned(), Val::Int(i64::from(p.position.tile.x))));
             e.push(("y".to_owned(), Val::Int(i64::from(p.position.tile.y))));
+            // What scripts may read about a pawn (API 0.1): its needs, mood, personality and job.
+            e.push((
+                "needs".to_owned(),
+                Val::map(
+                    p.needs
+                        .iter()
+                        .map(|(k, v)| (k.clone(), Val::Int(i64::from(*v)))),
+                ),
+            ));
+            e.push(("mood".to_owned(), Val::Str(p.mood.clone())));
+            e.push(("outgoing".to_owned(), Val::Int(i64::from(p.outgoing))));
+            if let Some(o) = &p.occupation {
+                e.push(("occupation".to_owned(), Val::Str(o.template.clone())));
+            }
         }
         Val::map(e)
     }
@@ -636,12 +650,15 @@ impl ScriptHost {
         self.failed_now.clear();
     }
 
+    /// The answers of the packs at `point`, with the pack that gave each. With `explain` set, nothing
+    /// is recorded or metered and a failing hook is just skipped, so asking changes nothing.
     fn answer_hook(
         &mut self,
         point: &'static HookPoint,
         world: &WorldState,
         subject: EntityId,
-    ) -> Vec<i64> {
+        explain: bool,
+    ) -> Vec<(String, i64)> {
         let mut answers = Vec::new();
         let tick = world.clock.tick();
         let per_call = self.limits.fuel_per_call;
@@ -676,11 +693,12 @@ impl ScriptHost {
             for h in handlers {
                 match pack.vm.call(h, &args, Fuel(per_call)) {
                     Ok(r) => {
-                        if let Some(m) = &self.meter {
+                        if let (Some(m), false) = (&self.meter, explain) {
                             m.record_call(&pack_id, &format!("hook {}", point.id), r.fuel);
                         }
                         match r.value {
-                            Val::Int(v) => answers.push(v),
+                            Val::Int(v) => answers.push((pack_id.clone(), v)),
+                            _ if explain => break,
                             other => {
                                 self.pending.push(PendingError {
                                     pack: pack_id.clone(),
@@ -694,6 +712,7 @@ impl ScriptHost {
                             }
                         }
                     }
+                    Err(_) if explain => break,
                     Err(e) => {
                         self.pending.push(PendingError {
                             pack: pack_id.clone(),
@@ -751,7 +770,20 @@ impl HookHost for HostHooks {
         world: &WorldState,
         subject: EntityId,
     ) -> Vec<i64> {
-        lock(&self.0).answer_hook(point, world, subject)
+        lock(&self.0)
+            .answer_hook(point, world, subject, false)
+            .into_iter()
+            .map(|(_, v)| v)
+            .collect()
+    }
+
+    fn explain(
+        &mut self,
+        point: &'static HookPoint,
+        world: &WorldState,
+        subject: EntityId,
+    ) -> Vec<(String, i64)> {
+        lock(&self.0).answer_hook(point, world, subject, true)
     }
 }
 

@@ -494,3 +494,82 @@ fn what_a_pack_prints_while_loading_is_not_lost() {
     );
     assert!(lines.contains(&("Warn", "[loud] (while loading) a deprecated option".into())));
 }
+
+#[test]
+fn the_hardy_pack_makes_gritty_residents_need_less_often_and_the_inspector_can_say_why() {
+    let c = content(&["hardy"]);
+    let mut r = town(&c, 14);
+    let (mut gritty_total, mut gritty_n, mut plain_total, mut plain_n) = (0i64, 0i64, 0i64, 0i64);
+    let mut explained = false;
+    for step in 0..(4 * 48) {
+        r.sim.run_ticks(300).unwrap();
+        if step < 48 {
+            continue; // the first day: grit is still being handed out
+        }
+        let ids: Vec<EntityId> = r.sim.world().pawns.iter().map(|(id, _)| id).collect();
+        for id in ids {
+            let grit = {
+                let host = lock(&r.host);
+                let def = host.schemas().get("hardy.hardy").unwrap();
+                r.sim.world().ext.fields_of(def, id)["grit"]
+            };
+            let needs: i64 = r
+                .sim
+                .world()
+                .pawns
+                .get(id)
+                .unwrap()
+                .needs
+                .values()
+                .map(|v| i64::from(*v))
+                .sum();
+            if grit > 0 {
+                gritty_total += needs;
+                gritty_n += 1;
+                if !explained {
+                    let effects = r.sim.explain_hooks(id);
+                    let decay = effects
+                        .iter()
+                        .find(|e| e.point == "need.decay_modifier")
+                        .expect("the hardy pack answers");
+                    assert_eq!(decay.packs.len(), 1);
+                    assert_eq!(decay.packs[0].0, "hardy");
+                    assert!((600..1000).contains(&decay.resolved), "{decay:?}");
+                    assert!(effects
+                        .iter()
+                        .any(|e| e.point == "mood.comfort_shift" && e.resolved > 0));
+                    explained = true;
+                }
+            } else {
+                plain_total += needs;
+                plain_n += 1;
+            }
+        }
+    }
+    assert!(explained, "somebody got grit");
+    assert!(
+        gritty_n > 20 && plain_n > 20,
+        "{gritty_n} gritty samples, {plain_n} plain"
+    );
+    let (g, p) = (gritty_total / gritty_n, plain_total / plain_n);
+    assert!(g > p, "gritty residents stay better off: {g} against {p}");
+}
+
+#[test]
+fn asking_the_hooks_to_explain_changes_nothing() {
+    let c = content(&["hardy"]);
+    let run = |explain: bool| {
+        let mut r = town(&c, 10);
+        for _ in 0..40 {
+            r.sim.run_ticks(300).unwrap();
+            if explain {
+                let ids: Vec<EntityId> = r.sim.world().pawns.iter().map(|(id, _)| id).collect();
+                for id in ids {
+                    let _ = r.sim.explain_hooks(id);
+                }
+            }
+        }
+        r.sim.world().state_hash()
+    };
+    assert_eq!(run(false), run(true));
+}

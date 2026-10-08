@@ -86,6 +86,14 @@ impl System for NeedsSystem {
             .map(|(id, p)| (id, p.position.map, p.position.tile))
             .collect();
         for id in pawn_ids(ctx.world) {
+            // Packs may make a pawn's needs fall slower or faster (bounded; 1000 is normal).
+            let decay_permille = crate::hooks::resolved(
+                &mut ctx.services.hooks,
+                crate::hooks::need_decay(),
+                &*ctx.world,
+                id,
+            )
+            .unwrap_or(1000);
             let Some(p) = ctx.world.pawns.get_mut(id) else {
                 continue;
             };
@@ -114,10 +122,12 @@ impl System for NeedsSystem {
             for (need, def) in &self.data.needs {
                 let old = p.needs.get(need).copied().unwrap_or(def.start);
                 let mut v = old;
-                v -= per_minute(
-                    minute,
-                    decay_rate(def.decay_per_hour, def.active_permille, walking),
-                );
+                let rate = decay_rate(def.decay_per_hour, def.active_permille, walking);
+                let rate = u32::try_from(
+                    u64::from(rate) * u64::try_from(decay_permille).unwrap_or(1000) / 1000,
+                )
+                .unwrap_or(rate);
+                v -= per_minute(minute, rate);
                 if !was_able {
                     v += per_minute(minute, def.rest_restore_per_hour);
                 }
@@ -220,22 +230,24 @@ impl MoodSystem {
 }
 
 /// Whether `cond` holds for the pawn at `tick`.
-fn holds(cond: &MoodCond, p: &crate::pawn::Pawn, data: &GameData, tick: u64) -> bool {
+fn holds(cond: &MoodCond, p: &crate::pawn::Pawn, data: &GameData, tick: u64, shift: i32) -> bool {
     match cond {
         MoodCond::NeedCritical { need } => match (data.needs.get(need), p.needs.get(need)) {
-            (Some(def), Some(v)) => *v < def.critical_below,
+            (Some(def), Some(v)) => v.saturating_add(shift) < def.critical_below,
             _ => false,
         },
-        MoodCond::AnyNeedUrgent => data
-            .needs
-            .iter()
-            .any(|(n, def)| p.needs.get(n).is_some_and(|v| *v < def.urgent_below)),
+        MoodCond::AnyNeedUrgent => data.needs.iter().any(|(n, def)| {
+            p.needs
+                .get(n)
+                .is_some_and(|v| v.saturating_add(shift) < def.urgent_below)
+        }),
         MoodCond::AllNeedsAbove { value } => {
             !data.needs.is_empty()
-                && data
-                    .needs
-                    .keys()
-                    .all(|n| p.needs.get(n).is_some_and(|v| v > value))
+                && data.needs.keys().all(|n| {
+                    p.needs
+                        .get(n)
+                        .is_some_and(|v| v.saturating_add(shift) > *value)
+                })
         }
         MoodCond::Memory {
             tone,
@@ -269,6 +281,15 @@ impl System for MoodSystem {
         let tick = ctx.flags.tick;
         let rules = self.data.ordered_rules();
         for id in pawn_ids(ctx.world) {
+            // Packs may nudge how well off a pawn feels (bounded).
+            let shift = crate::hooks::resolved(
+                &mut ctx.services.hooks,
+                crate::hooks::mood_comfort(),
+                &*ctx.world,
+                id,
+            )
+            .and_then(|v| i32::try_from(v).ok())
+            .unwrap_or(0);
             let Some(p) = ctx.world.pawns.get_mut(id) else {
                 continue;
             };
@@ -281,7 +302,7 @@ impl System for MoodSystem {
             }
             let decided = rules
                 .iter()
-                .find(|r| r.when.iter().all(|c| holds(c, p, &self.data, tick)));
+                .find(|r| r.when.iter().all(|c| holds(c, p, &self.data, tick, shift)));
             let Some(rule) = decided else { continue };
             if p.mood != rule.mood {
                 let from = std::mem::replace(&mut p.mood, rule.mood.clone());

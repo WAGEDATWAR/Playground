@@ -331,5 +331,7 @@
   "ui.mods.disable": "Disable",
   "ui.mods.open": "Open Package",
   "ui.mods.details": "Version {version}, {id}, {files} files, {size}, hash {hash}",
-  "ui.mods.details_short": "Version {version}, {id}, hash {hash}"
+  "ui.mods.details_short": "Version {version}, {id}, hash {hash}",
+  "ui.inspect.pack_effects": "What content packs are doing",
+  "ui.inspect.effect": "{point}: {value} (by {packs})"
 }

@@ -218,6 +218,16 @@ pub fn check_cmd(rest: &[String]) -> Result<ExitCode, String> {
             needs: Some("packs/golden/birthdays.json"),
         },
         Check {
+            name: "pack lint: hardy",
+            args: args(&["pack", "lint", "packs/cookbook/hardy"]),
+            needs: Some("packs/cookbook/hardy"),
+        },
+        Check {
+            name: "pack golden + VM reload: hardy",
+            args: args(&["pack", "test", "packs/cookbook/hardy"]),
+            needs: Some("packs/golden/hardy.json"),
+        },
+        Check {
             name: "API docs and type definitions",
             args: args(&["pack", "docs", "--luau"]),
             needs: None,

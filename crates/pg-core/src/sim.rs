@@ -94,6 +94,29 @@ impl Sim {
         self.services.exec = exec;
     }
 
+    /// What packs are doing to `subject` right now, hook point by hook point (only points some pack answers).
+    /// Read-only in effect: it asks the hooks in the way that records nothing (`HookHost::explain`), for the
+    /// inspector; the simulation itself never calls it.
+    pub fn explain_hooks(&mut self, subject: crate::id::EntityId) -> Vec<crate::hooks::HookEffect> {
+        let Some(host) = self.services.hooks.as_mut() else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for point in pg_api::HOOK_POINTS {
+            let packs = host.explain(point, &self.world, subject);
+            if packs.is_empty() {
+                continue;
+            }
+            let answers: Vec<i64> = packs.iter().map(|(_, v)| *v).collect();
+            out.push(crate::hooks::HookEffect {
+                point: point.id,
+                resolved: point.resolve(&answers),
+                packs,
+            });
+        }
+        out
+    }
+
     /// Installs the host that answers pack hooks (the script host).
     pub fn set_hooks(&mut self, hooks: Option<Box<dyn crate::hooks::HookHost>>) {
         self.services.hooks = hooks;

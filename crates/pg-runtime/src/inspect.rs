@@ -19,7 +19,9 @@ fn given(full: &str) -> String {
 }
 
 /// What the inspector shows for `id`, or `None` if there is no such resident.
-pub fn resident_view(sim: &Sim, id: EntityId) -> Option<ResidentView> {
+pub fn resident_view(sim: &mut Sim, id: EntityId) -> Option<ResidentView> {
+    let effects = sim.explain_hooks(id);
+    let sim: &Sim = sim;
     let world = sim.world();
     let p = world.pawns.get(id)?;
     let content = sim.content();
@@ -124,6 +126,14 @@ pub fn resident_view(sim: &Sim, id: EntityId) -> Option<ResidentView> {
         memories,
         relationships,
         conversations,
+        pack_effects: effects
+            .into_iter()
+            .map(|e| pg_ui_model::inspector::PackEffectRow {
+                point: e.point.to_owned(),
+                value: e.resolved,
+                packs: e.packs,
+            })
+            .collect(),
     })
 }
 
@@ -166,7 +176,7 @@ mod tests {
         let mut sim = town();
         sim.run_ticks(20_000).unwrap();
         let id = EntityId::new(pg_core::id::Kind::Pawn, 1);
-        let v = resident_view(&sim, id).unwrap();
+        let v = resident_view(&mut sim, id).unwrap();
         assert_eq!(v.id, id);
         assert!(v.needs.len() >= 3 && v.occupation.is_some());
         assert!(!v.memories.is_empty() && v.memories.len() <= MEMORIES);
@@ -185,6 +195,6 @@ mod tests {
         );
         assert!(v.conversations.len() <= CONVERSATIONS);
         assert!(v.conversations.iter().all(|c| !c.lines.is_empty()));
-        assert!(resident_view(&sim, EntityId::new(pg_core::id::Kind::Pawn, 999)).is_none());
+        assert!(resident_view(&mut sim, EntityId::new(pg_core::id::Kind::Pawn, 999)).is_none());
     }
 }

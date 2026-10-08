@@ -653,7 +653,7 @@ impl SimLoop {
                 &events,
                 &self.day_hash,
             );
-            snap.resident = focus.and_then(|f| crate::inspect::resident_view(&self.sim, f));
+            snap.resident = focus.and_then(|f| crate::inspect::resident_view(&mut self.sim, f));
             snap.bubbles = bubbles;
             snap.journal = std::sync::Arc::clone(&self.journal_view);
             snap.keyframes = self.ring.ticks();
