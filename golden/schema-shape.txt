@@ -15,6 +15,16 @@ world.id_counters.hh: int
 world.id_counters.map: int
 world.id_counters.mem: int
 world.id_counters.pawn: int
+world.journal: list
+world.journal[]: map
+world.journal[].args: map
+world.journal[].args.a: text
+world.journal[].args.b: text
+world.journal[].args.label_key: text
+world.journal[].args.topic_key: text
+world.journal[].kind: text
+world.journal[].tick: int
+world.journal[].weight: int
 world.maps: map
 world.maps.*: map
 world.maps.*.blocked: text

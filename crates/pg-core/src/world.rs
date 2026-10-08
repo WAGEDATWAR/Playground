@@ -195,6 +195,8 @@ pub struct WorldState {
     pub pawns: Table<Pawn>,
     pub households: Table<Household>,
     pub relationships: Relationships,
+    /// What happened in the town that is worth noticing, newest last (D-058).
+    pub journal: crate::journal::Journal,
     pub commitments: Table<Commitment>,
     pub town: Town,
     pub probe: Probe,
@@ -222,6 +224,7 @@ impl WorldState {
             pawns: Table::new(),
             households: Table::new(),
             relationships: Relationships::new(),
+            journal: crate::journal::Journal::new(),
             commitments: Table::new(),
             town: Town::default(),
             probe: Probe::default(),
@@ -335,6 +338,7 @@ impl WorldState {
             ("commitments", table("commitments")),
             ("households", table("households")),
             ("id_counters", hash_value(&self.id_counters)),
+            ("journal", hash_value(&self.journal)),
             ("maps", table("maps")),
             ("meta", hash_value(&self.meta)),
             ("objects", table("objects")),
@@ -413,6 +417,7 @@ impl ToCanon for WorldState {
             ("pawns", self.pawns.to_canon()),
             ("households", self.households.to_canon()),
             ("relationships", self.relationships.to_canon()),
+            ("journal", self.journal.to_canon()),
             ("commitments", self.commitments.to_canon()),
             ("town", self.town.to_canon()),
             ("probe", self.probe.to_canon()),
@@ -499,6 +504,7 @@ impl WorldState {
             "pawns",
             "households",
             "relationships",
+            "journal",
             "commitments",
             "town",
             "probe",
@@ -583,6 +589,10 @@ impl WorldState {
                 }
                 rels
             },
+            journal: match r.maybe("journal")? {
+                Some(c) => crate::journal::Journal::from_reader(c.reader())?,
+                None => crate::journal::Journal::new(),
+            },
             commitments: read_table(&r, "commitments", Commitment::from_reader, |c| c.id)?,
             town: Town::from_reader(r.child("town")?.reader())?,
             probe,
@@ -649,7 +659,7 @@ mod tests {
         let w = WorldState::new("Town", "seed");
         assert_eq!(
             w.to_canon().to_canonical_string(),
-            r#"{"clock":{"tick":0},"commitments":{},"households":{},"id_counters":{},"maps":{},"meta":{"name":"Town","seed_text":"seed"},"objects":{},"pawns":{},"probe":{"days":0,"minutes":0,"value":0},"relationships":{},"rng_counters":{},"schema":4,"settings":{"movement":{"max_repaths":3,"max_wait_ticks":20,"move_ticks_per_tile":2,"path_expansion_cap":20000},"slot_minutes":30,"tone":"standard"},"town":{"buildings":[],"districts":[],"gathering":[],"starting_hash":null}}"#
+            r#"{"clock":{"tick":0},"commitments":{},"households":{},"id_counters":{},"journal":[],"maps":{},"meta":{"name":"Town","seed_text":"seed"},"objects":{},"pawns":{},"probe":{"days":0,"minutes":0,"value":0},"relationships":{},"rng_counters":{},"schema":4,"settings":{"movement":{"max_repaths":3,"max_wait_ticks":20,"move_ticks_per_tile":2,"path_expansion_cap":20000},"slot_minutes":30,"tone":"standard"},"town":{"buildings":[],"districts":[],"gathering":[],"starting_hash":null}}"#
         );
     }
 

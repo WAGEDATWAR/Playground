@@ -74,6 +74,18 @@ fn pins() -> Vec<Pin> {
             kind: Kind::Pack(p),
         });
     }
+    v.push(Pin {
+        name: "saved world shape".into(),
+        kind: Kind::Schema,
+    });
+    v.push(Pin {
+        name: "fixture: world-v3 (migrated)".into(),
+        kind: Kind::FixtureV3,
+    });
+    v.push(Pin {
+        name: "fixture: world-v4".into(),
+        kind: Kind::FixtureV4,
+    });
     let mut scenarios: Vec<String> = std::fs::read_dir("scenarios")
         .into_iter()
         .flatten()
@@ -92,18 +104,6 @@ fn pins() -> Vec<Pin> {
     v.push(Pin {
         name: "town generator starting hash".into(),
         kind: Kind::Town,
-    });
-    v.push(Pin {
-        name: "saved world shape".into(),
-        kind: Kind::Schema,
-    });
-    v.push(Pin {
-        name: "fixture: world-v3 (migrated)".into(),
-        kind: Kind::FixtureV3,
-    });
-    v.push(Pin {
-        name: "fixture: world-v4".into(),
-        kind: Kind::FixtureV4,
     });
     v
 }

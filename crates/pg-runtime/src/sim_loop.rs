@@ -124,7 +124,7 @@ type SaveJob = JobHandle<Result<SaveReport, String>>;
 
 pub struct SimLoop {
     /// What happened in the town worth noticing (milestone 1.7), and its last published form.
-    journal: crate::journal::Journal,
+    journal_stamp: (usize, Option<u64>),
     journal_view: Arc<Vec<pg_ui_model::journal::JournalEntry>>,
     factory: SimFactory,
     sim: Sim,
@@ -160,7 +160,10 @@ impl SimLoop {
             next_seq: 0,
         });
         let state = RunState::Paused;
-        let first = RenderSnapshot::build(sim.world(), state, None, &[], "");
+        let journal_stamp = crate::journal::stamp(sim.world());
+        let journal_view = Arc::new(crate::journal::view(sim.world()));
+        let mut first = RenderSnapshot::build(sim.world(), state, None, &[], "");
+        first.journal = Arc::clone(&journal_view);
         let mut ring = KeyframeRing::new(cfg.keyframe_interval_ticks, cfg.keyframe_capacity);
         ring.push(Keyframe::capture(&sim, 0));
         SimLoop {
@@ -180,8 +183,8 @@ impl SimLoop {
             shadows: Vec::new(),
             shadow_span: None,
             day_hash: String::new(),
-            journal: crate::journal::Journal::new(),
-            journal_view: Arc::new(Vec::new()),
+            journal_stamp,
+            journal_view,
             dirty: false,
         }
     }
@@ -341,8 +344,10 @@ impl SimLoop {
                     self.day_hash = h.short();
                 }
                 self.to_console(&report.events);
-                if self.journal.observe(&report.events, self.sim.world()) {
-                    self.journal_view = std::sync::Arc::new(self.journal.entries());
+                let stamp = crate::journal::stamp(self.sim.world());
+                if stamp != self.journal_stamp {
+                    self.journal_stamp = stamp;
+                    self.journal_view = std::sync::Arc::new(crate::journal::view(self.sim.world()));
                     self.dirty = true;
                 }
                 if let Some(d) = &self.services.dialogue {

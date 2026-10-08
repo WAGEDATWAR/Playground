@@ -150,6 +150,7 @@ fn v3_to_v4(mut c: Canon) -> Result<Canon, String> {
     }
     world.insert("households".to_owned(), Canon::Map(Default::default()));
     world.insert("relationships".to_owned(), Canon::Map(Default::default()));
+    world.insert("journal".to_owned(), Canon::List(Vec::new()));
     world.insert(
         "town".to_owned(),
         Canon::map([

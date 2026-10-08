@@ -23,6 +23,7 @@ pub mod hash;
 pub mod hooks;
 pub mod id;
 pub mod input;
+pub mod journal;
 pub mod life;
 pub mod map;
 pub mod memory;

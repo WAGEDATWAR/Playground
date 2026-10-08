@@ -202,11 +202,14 @@ impl<'a> TickCtx<'a> {
 
     /// Records an event for this tick.
     pub fn emit(&mut self, kind: impl Into<String>, detail: Canon) {
-        self.report.events.push(Event {
+        let event = Event {
             tick: self.flags.tick,
             kind: kind.into(),
             detail,
-        });
+        };
+        // The town journal is part of the world: notable events write it as they happen.
+        crate::journal::record(self.world, &event);
+        self.report.events.push(event);
     }
 
     /// Marks an entity as changed this tick.
