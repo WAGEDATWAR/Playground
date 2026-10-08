@@ -239,3 +239,21 @@ cargo run -q -p pg-cli -- actions
 
 The numbers (decay, thresholds, mood rules, meal times) are data in `data/base/data/game/`; edit them and re-run.
 
+
+## The town generator (Stage 1, 1.2)
+
+```bash
+# Generate a town and draw it (H home, S shop, O office, C civic, @ gathering place, h a resident's home tile).
+cargo run -q -p pg-cli -- worldgen preview --seed demo --size 64x48 --water 18 --residents 14
+
+# The same town, lived in: a few days with needs, mood and capacities at the end.
+cargo run -q -p pg-cli -- sim --seed demo --town 64x48 --residents 14 --days 4 --content data/base --needs
+
+# See it on screen: create a world from the main menu (the New world screen has the size, residents,
+# water and content-tone controls), or open one straight away.
+cargo run -p pg-app -- --demo game
+```
+
+The size of buildings, the street spacing and the share of each building role are data in
+`data/base/data/game/worldgen.json`. `pg check` includes a pinned starting hash for one seed so the generator is
+proved identical on all three systems.

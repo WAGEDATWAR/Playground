@@ -1,8 +1,8 @@
-# Playground — Architecture Blueprint v3.3
+# Playground — Architecture Blueprint v3.4
 
 **Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.2 and Roadmap v4.9. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). Where a part is built, the text describes it **as built** and the code is the authority on names and signatures; where it is not built yet, the sketch is a contract whose invariants may not change. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems and the presentation layer. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
 
-**Status (v3.3):** organism decisions folded in (D-040): cardiac-output pressure model, physiology profile inputs (height, weight, sex, age, fitness; species left open), ordered anatomy extensions, generic substances. **Status (v3.2):** adds the organism system as a contract (§8.9, Stage 2B), emotional-only moods (§8.2), the capacities interface (§8.1) and the injury model (§16.5) built on the organism; nothing already built changes. **Status (v3.1):** the document describes the system **as built through milestone 0.10** (the end of Stage 0 apart from the gate, 0.11). Notes that earlier versions kept per milestone have been folded into the sections they belong to, text that disagreed with the code was corrected (listed in `docs/DECISIONS.md` D-035), and the presentation layer (§14) was rewritten around the three-layer UI that was built.
+**Status (v3.4):** the as-built text now covers Stage 1 through milestone 1.2: schema 4 (residents, households, relationships, memories, the town), game data tables (§4.7), needs, mood and capacities (§8.1, §8.2), the town generator (§12.1) and pawn-aware routing (§7.3); decisions D-041 to D-043. **Status (v3.3):** organism decisions folded in (D-040): cardiac-output pressure model, physiology profile inputs (height, weight, sex, age, fitness; species left open), ordered anatomy extensions, generic substances. **Status (v3.2):** adds the organism system as a contract (§8.9, Stage 2B), emotional-only moods (§8.2), the capacities interface (§8.1) and the injury model (§16.5) built on the organism; nothing already built changes. **Status (v3.1):** the document describes the system **as built through milestone 0.10** (the end of Stage 0 apart from the gate, 0.11). Notes that earlier versions kept per milestone have been folded into the sections they belong to, text that disagreed with the code was corrected (listed in `docs/DECISIONS.md` D-035), and the presentation layer (§14) was rewritten around the three-layer UI that was built.
 
 ### Revision history
 
@@ -20,6 +20,7 @@
 | 2.8 | ScriptVm spike outcome (0.9): compiler configuration, no string caps, extension data semantics, quarantine as world state, the `ScriptVm` trait as built (D-031) | §23 |
 | 2.9 | App shell and main menu (0.10): the three-layer UI (D-033) | §14 |
 | 3.0 | Consolidation: as-built description through 0.10, notes folded into their sections, corrections (D-035) | whole document |
+| 3.4 | Stage 1 as built through 1.2: schema 4, game data tables, needs, mood and capacities, population and town generation, pawn-aware routing, new tools and events (D-041 to D-043) | §4.5 to §4.7, §7.3, §8.1, §8.2, §12.1, §13.5, §14.3, §20, App. B and C |
 | 3.3 | Organism questions answered: profile inputs, anatomy extension order, species left open, generic substances (D-040) | §8.9 |
 | 3.2 | Organism system (pawn health) as a Stage 2B contract; emotional-only moods; capacities interface in Stage 1 (D-038, D-039) | §8.1, §8.2, §8.9, §16.5, §22, §23.8, App. B |
 | 3.1 | Review of the Stage 0 build (0.11): in-game layout, drawers and their placement rules, developer mode, saving only in the pause menu (D-037) | §14, App. C |
@@ -312,6 +313,12 @@ struct Commitment { id: CommitmentId, proposer: EntityId, invitee: EntityId, day
 
 All authoritative numbers are integers (`i32`, or `i64`/`u64` for ticks and day indexes) or fixed-point newtypes (§5.2). Domain values are newtypes (`Permille`, `NeedValue`, `Affinity`) with checked or saturating constructors so out-of-range values cannot be represented.
 
+### 4.7 Game data tables \[S1\]
+
+Numbers and lists the systems read are data in a pack's `data/game/` folder (milestone 1.0): `needs.json`, `mood.json`, `memory.json`, `relationships.json`, `occupations.json`, `names.json`, `residents.json` and `worldgen.json`. Everything is integers. Each file is validated with the path of every problem and a "did you mean" hint, entries are identified by `id`, a later pack's entry with an existing id replaces it (and the report says so), and the merged whole is cross-checked (a mood rule names a real mood and need, a resident a real occupation, relationship labels cover -1000 to 1000, duties fit in a day and do not overlap, roles and district kinds are known); the core adds the check that every action an occupation or need uses exists in the action registry. String keys the data refers to must exist in the string table (a warning otherwise). The data is hashed with the rest of the pack, so a world records which tuning it was made with.
+
+**Needs** (`needs.json`) carry their decay per game hour and an active multiplier, urgent and critical thresholds, the capacities they lower at each threshold, a passive recovery for a pawn that cannot act, and a `restore` block: the action, the place kind (`home`, `workplace`, `gathering`, `anywhere`), how long an unplanned restoring activity lasts, and the day's **routine** (start window and duration of meals, bedtime and company). **Mood** is a list of moods and an ordered rule table (`need_critical`, `any_need_urgent`, `all_needs_above`, `memory` with a tone, window and importance, `idle_hours`; the first rule whose conditions all hold decides). **Memory** parameters, **relationship** labels with hysteresis and the daily cap, **occupations** (duties and leisure with seeded variation bounds), **names** and authored **residents** complete the people; `worldgen.json` holds the town generator's sizes and role weights.
+
 ## 5. Determinism \[S0\]
 
 ### 5.1 Randomness
@@ -463,7 +470,7 @@ Tile arrays are flat, row-major, indexed `y*w+x`. Editing a tile marks its chunk
 - **Parallel batches:** each tick, path requests are collected, solved in parallel on the worker pool (a pure function of map, endpoints and `map_edit_version`), and applied in ascending pawn id order. Because requests are pure, results are identical regardless of thread count.
 - **Caching:** key `(map_id, from, to, map_edit_version)`; bounded LRU. Cache is derived and never saved.
 - **Scaling \[S11 if profiling needs it\]:** hierarchical pathfinding over 16×16 chunks with portal edges; the abstract route is computed first, then refined per chunk. A golden test compares its path cost against flat A\*.
-- **Pawn-aware routing \[S1\]:** search ignores other pawns today (a pawn behind a stationary pawn waits, sidesteps, and finally fails with `path_blocked`). From Stage 1, when pawns genuinely stand still (working, sleeping, talking), idle pawns count as temporary obstacles, or tiles they occupy carry a small crowd cost, so pawns route around them. The cache key then includes an occupancy version, and results stay a pure function of their inputs, so parallel solving remains identical to serial.
+- **Pawn-aware routing \[S1, built in 1.2\]:** the first solve of a route ignores other pawns and is cached as above. When a pawn has been blocked (it waited, sidestepped and asks to re-solve), the re-solve treats the tiles of pawns that are standing still (no route) as obstacles, other than the goal, and walks around them (`find_path_avoiding`, uncached because the obstacle set changes every tick, deterministic because it depends only on the world at that tick); if no way around exists it falls back to the plain path and waits as before. This replaced a jam of residents at gathering places and doors, and turned most `path_blocked` failures into short detours.
 - **Cross-map \[S6\]:** route over the portal graph (Dijkstra on portals, cost = in-map path length), then path inside each map.
 
 ### 7.4 Movement step \[S0\]
@@ -496,6 +503,8 @@ Decay rates are permille per minute and tunable. Activities declare `needs_resto
 
 **Capacities (interface built in Stage 1).** Consequences of needs are not hard-coded into movement or scheduling. The core derives a small record of integer permille capacities per pawn each minute (`consciousness`, `moving`, `manipulation`, `talking`, `eating`, `breathing`; sight and hearing later) and movement, the scheduler, conversation and actions read only that record (for example `movement.speed_modifier` scales by `moving`; an action declares which capacities it needs). In Stage 1 the record is filled from needs; from Stage 2B the organism (§8.9) produces it and the needs shortcut is removed. Hunger, energy and social stay as the player-readable needs.
 
+**As built (1.1).** `NeedsSystem` runs every game minute in the Needs slot (and `MoodSystem` in the Mood slot); both are installed when content with game data is given to a `Sim`, replacing the scaffolding probe. A need decays by `per_minute(minute, rate)`, the difference of two whole-minute totals on the global minute counter, so 55 points an hour is exactly 55 over any 60 minutes with nothing to carry, save or hash; walking raises the rate by the need's active multiplier. Restoring is a property of **actions**: `ActionDef.restores` lists the needs an action restores per hour while it is being performed (and whether another pawn must be within five tiles); the built-in actions `eat`, `sleep`, `rest` and `socialise` do this. A pawn that cannot act recovers at the need's passive rate. Crossing below urgent or critical raises `need.urgent` or `need.critical` and asks for a replan. The day's rhythm comes from each need's `restore.routine`: the day planner places a restoring activity for each window (a new `UrgentNeed.earliest` bound with the window's last start as its deadline), and a need that is already urgent adds an unplanned one at once. Capacities are derived from the needs each minute (the lowest cap per capacity); a pawn whose consciousness falls below 500 collapses where it stands (task and route cleared), recovers slowly, and stays down until its energy is back at the urgent level, so it never flickers at a threshold. `Pawn.capacities` is saved and hashed; movement speed scales with `moving` and a pawn that cannot act neither walks nor starts tasks.
+
 ### 8.2 Mood \[S1\]
 
 Mood is a small enum derived each minute by an ordered rule table (first match wins), for example:
@@ -508,6 +517,8 @@ Mood is a small enum derived each minute by an ordered rule table (first match w
 6. otherwise → `neutral`
 
 Moods are **emotional states only**. Physical states such as exhaustion and starvation are body conditions (capacities now, organism conditions from Stage 2B), not moods. From Stage 2B the rule table may also read pain and conditions as inputs.
+
+**As built (1.1).** The rule table is `mood.json`, evaluated for every pawn each game minute (the first rule whose conditions all hold decides); a change raises `mood.changed` with the rule's id. Memories made before the world began (tick 0) do not move anyone's mood. `idle_since` on the pawn feeds the `bored` rule (nothing planned and nothing being done for the rule's hours).
 
 The list and thresholds are data and are tuned in play. Packs may append rules at declared priorities through `mood.rules`; engine rules at priority 1 (critical needs) cannot be pre-empted. Mood influences conversation tone and activity choice weights, never hard rules.
 
@@ -788,6 +799,8 @@ Stages are pure functions `fn(GenContext) -> GenContext` with named RNG streams,
 
 The generator is deterministic: `(params, content refs)` always yields an identical `WorldState`. Independent regions may be generated in parallel when each uses keyed streams and results are merged in a fixed order. Generation runs as a worker-pool job with a progress report.
 
+**As built (1.2).** `pg-core::worldgen` implements the pipeline as pure functions of `(seed, parameters, game data)` with an attempt number mixed into every stream; the order is terrain, districts, main roads, local streets, buildings, plazas, people, validation, retried up to eight times. Differences from the sketch above: terrain is integer value noise with a quantile water threshold (the requested share of the map, limited by `max_water_percent`), a sandy shore and only the largest landmass kept; districts are zoned by nearest centre (the zone number is stored in the map); main roads join the districts by a spanning tree plus a few loops, routed by A\* over jittered costs with sidewalks beside them; each non-park district gets a street grid; **buildings stand along the streets** (a sidewalk, a yard tile that is the entrance, then a footprint of blocked tiles with a one-tile gap to its neighbours) instead of being cut from lots, with roles drawn from the district's weights, which gives the same density without a separate plot step (plots return with the property system in Stage 6); plazas are paved floor at the centre of the commercial and park districts and are the **gathering places**. Residents come from `plan_population` (§4.7): each household gets a home building and each resident a tile of their own in its yard (open ground only, so a resident asleep never blocks a one-tile passage), and residents whose occupation has duties get a workplace tile in the yard of a non-home building. `Town` (districts, buildings with their entrances, gathering places and the starting hash) is hashed state. Validation (`validate_world`, also run after load and edits) checks that a gathering place exists, buildings are inside the map and do not overlap, and that every entrance, home, workplace and gathering place is reachable from the main plaza over open ground. Generation is the command `GenerateTown { w, h, water, residents, tone }`, so it is in the input log and replays, and it stores the world's **starting hash** (§12.4). The tone preset (`cozy`, `standard`, `mature`) is chosen here and kept in the world settings.
+
 ### 12.2 Editor \[S3\]
 
 `TownDesign` is a template-level document (maps, plots, buildings, object placements, optional resident definitions, initial mayor \[S9\]). Editing is a stack of reversible `EditCommand`s (paint terrain, draw road, define plot, place building, place object, copy / paste, delete, generate-region), giving undo / redo. The editor reuses worldgen stage functions for 'generate here'. The editor UI is built with egui over the same `ui-model` state.
@@ -865,6 +878,7 @@ A failure at any step leaves the previous manifest and generation intact.
 - Every migration ships with a fixture (old save) and a test asserting the migrated save validates and its derived hash equals a recorded golden.
 - Migrations are **additive-first**: add fields with defaults, then deprecate. IDs are never changed by a migration.
 - Saves from a **newer** schema than the app knows are refused with a clear message, never partially loaded.
+- **Shipped chain:** 3 to 4 (Stage 1): pawns gain occupation, needs, mood, household, memories, capacities, home and workplace tiles and the idle marker; the world gains households, relationships and the town; the settings gain the tone preset. `fixtures/saves/world-v3.json` never changes and its recorded hash is the hash of the migrated world; `world-v4.json` is a generated town that has lived for a day and a half and loads directly. Schema 4 may still grow during Stage 1 (it has not shipped), and the fixtures are refreshed with a decision entry when it does.
 - **Pack component data** migrates through pack-supplied pure migration functions (§23.10) run in the sandbox; a failing pack migration refuses the load (offering safe mode), never partially applies.
 
 ### 13.6 Export and import \[S0 world, S11 packs\]
@@ -934,7 +948,7 @@ Both print redacted: a typed key shows only as a length in `UiEvent` and as `<re
 **Screens** (`pg-ui-model::app`): `Boot`, `CrashPrompt`, `MainMenu`, `NewWorld`, `SavedWorlds`, `Options`, `AiOptions`, `InGame`, `Pause`; later screens (inspector, town creation, mods, editor) extend the same machine. The model keeps a stack, so Options opened from the main menu or from the pause menu both return where they came from.
 
 - **Main menu:** Continue (the newest world that is not damaged; disabled when there is none), New world, Saved worlds, Options, Quit.
-- **New world:** name, seed (empty means random), map size (small 48x36, medium 64x48, large 96x72) and residents (0 to 50) with validation.
+- **New world:** name, seed (empty means random), map size (small 48x36, medium 64x48, large 96x72), residents (0 to 50, default 14), water (percent of the map, 0 to 50, default 18) and the content tone (Cozy, Standard by default, Mature), with validation. Creating a world generates the town (§12.1) and shows why if it cannot.
 - **Saved worlds:** one row per world (name, day, residents, a damaged marker); the selected row shows its picture and details; Load, Export, Delete (with a confirmation that Escape cancels) and Import.
 - **Options:** **generated** from the settings registry, grouped by the first part of the setting id: a toggle for a boolean, a slider for a range, a choice for an enumeration, a text field for text, a note on restart-required settings. AI settings have their own screen.
 - **AI options:** provider choice; for pasted-key providers a secret field with save and remove; for Player2 the sign-in flow (explanation, code and link, open in browser, waiting, cancel, failure with retry, signed in with sign out); the model field or a note that the provider chooses; a connection test with its result. The game states that it plays fully without AI.
@@ -1092,6 +1106,7 @@ Developer tools are registered once in `pg-runtime::devtools` (id, title, catego
 | Configuration | The settings registry (list, get, set, reset), string tables (lint, show, pseudo) | `pg settings`, `pg strings` |
 | Content and packs | Content lint, list, resolve, components, hash, JSON Schema export; pack lint (API names, capabilities, order-sensitive loops, module-level state), pack test under golden hashes, generated API reference and `pg.d.luau`, scaffolding; "did you mean" hints everywhere | `pg content ...`, `pg pack lint\|test\|docs\|new\|bench` |
 | AI | Provider list, key status, settings, a dry run that prints the exact request (with the credential hidden), a leak self-check | `pg ai ...` |
+| Residents and towns | The population a seed produces (households, occupations, relationships, memories); a generated town drawn as text with its statistics and a pinned starting hash; needs, mood and capacities at the end of a run; the content inheritance tree; the actions with what each restores; re-recording a golden replay | `pg residents generate`, `pg worldgen preview`, `pg sim --needs` and `--town`, `pg content tree`, `pg actions`, `pg replay --rerecord` |
 | One report | The checks above that need no setup, in one table; CI runs the same | `pg check` |
 | App | Scripted headless session; open on a screen; shadow verification | `pg-app --smoke`, `--demo <screen>`, `--shadow <n>` |
 
@@ -1465,6 +1480,8 @@ The **catalog** (`pg events list`, as built through 0.10, 28 kinds): `input_reje
 
 Planned: `conversation_closed`, `need_critical`, `mood_changed`, `memory_created`, `memory_expired`, `relationship_label_changed`, `possessed` / `released` \[S4\], later `transaction`, `birth`, `death`, `offense`, `injury`, `election_result`, `construction_started`. Packs register additional types as `<pack_id>.<type>` with all required filter variants.
 
+Life events (Stage 1): `need.urgent`, `need.critical`, `pawn.collapsed`, `pawn.recovered`, `mood.changed` (category `life`) and `town.generated` (category `world`).
+
 Organism events \[S2B\]: `organism.attribute_added`, `organism.attribute_removed`, `organism.state_changed` (alive, unconscious, critical, arrest, dead), `organism.unconscious`, `organism.regained_consciousness`, `organism.resuscitated`, `death`; each has an intensity tier and filter variants for its text.
 
 ## Appendix C. Key settings (data-driven, tunable)
@@ -1477,7 +1494,8 @@ Organism events \[S2B\]: `organism.attribute_added`, `organism.attribute_removed
 | `talk_range`, `hear_range` | 2, 8 tiles | world |
 | `max_memories`, `persist_threshold` | 200, tuned | world |
 | `tone_preset` | standard | world |
-| `graphic_filter` | on | device |
+| `content.graphic_filter` | on | device |
+| `water` (new-world control, percent of the map) | 18 (0 to 50) | world creation |
 | `aging_multiplier` | 1 | world \[S7\] |
 | `births_enabled`, `move_ins_enabled`, `population_cap` | off, off, tuned | world \[S7\] |
 | `ai_timeout_ms`, `ai_rpm_cap`, `ai_cooldowns` | 8000, tuned, tuned | device |

@@ -21,6 +21,6 @@
     { "op": "save", "slot": "main" },
     { "op": "corrupt", "slot": "main", "how": "flip" },
     { "op": "load", "slot": "main", "expect": "fell_back" },
-    { "op": "expect", "pawns": 10, "day": 5, "hash": "14ff24c1" }
+    { "op": "expect", "pawns": 10, "day": 5, "hash": "66731a85" }
   ]
 }

@@ -1,0 +1,17 @@
+{
+  "tiles_per_district": 450,
+  "min_districts": 3,
+  "max_districts": 9,
+  "block_min": 14,
+  "block_max": 16,
+  "building_min": 3,
+  "building_max": 4,
+  "gap_permille": 150,
+  "max_water_percent": 55,
+  "roles": {
+    "residential": { "home": 90, "shop": 6, "office": 4 },
+    "commercial": { "shop": 55, "office": 35, "home": 10 },
+    "civic": { "civic": 70, "office": 20, "home": 10 },
+    "park": {}
+  }
+}

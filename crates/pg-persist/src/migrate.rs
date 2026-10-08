@@ -150,6 +150,21 @@ fn v3_to_v4(mut c: Canon) -> Result<Canon, String> {
     }
     world.insert("households".to_owned(), Canon::Map(Default::default()));
     world.insert("relationships".to_owned(), Canon::Map(Default::default()));
+    world.insert(
+        "town".to_owned(),
+        Canon::map([
+            ("districts", Canon::List(Vec::new())),
+            ("buildings", Canon::List(Vec::new())),
+            ("gathering", Canon::List(Vec::new())),
+            ("starting_hash", Canon::Null),
+        ]),
+    );
+    match world.get_mut("settings") {
+        Some(Canon::Map(s)) => {
+            s.insert("tone".to_owned(), Canon::str("standard"));
+        }
+        _ => return Err("the world has no settings".into()),
+    }
     match world.get_mut("pawns") {
         Some(Canon::Map(pawns)) => {
             for (id, pawn) in pawns.iter_mut() {
@@ -176,6 +191,7 @@ fn v3_to_v4(mut c: Canon) -> Result<Canon, String> {
                     ),
                 );
                 p.insert("home_tile".to_owned(), Canon::Null);
+                p.insert("workplace".to_owned(), Canon::Null);
                 p.insert("idle_since".to_owned(), Canon::Null);
             }
         }
@@ -314,6 +330,7 @@ mod tests {
     fn the_3_to_4_step_is_additive_and_refuses_what_is_not_a_schema_3_world() {
         let v3 = Canon::map([
             ("schema", Canon::Int(3)),
+            ("settings", Canon::map([("slot_minutes", Canon::Int(30))])),
             (
                 "pawns",
                 Canon::map([("pawn_1", Canon::map([("name", Canon::str("Ann"))]))]),
@@ -332,9 +349,14 @@ mod tests {
         assert!(v4.get("households").is_some() && v4.get("relationships").is_some());
         for bad in [
             Canon::map([("schema", Canon::Int(3))]),
-            Canon::map([("schema", Canon::Int(3)), ("pawns", Canon::List(vec![]))]),
             Canon::map([
                 ("schema", Canon::Int(3)),
+                ("settings", Canon::map::<String>([])),
+                ("pawns", Canon::List(vec![])),
+            ]),
+            Canon::map([
+                ("schema", Canon::Int(3)),
+                ("settings", Canon::map::<String>([])),
                 ("pawns", Canon::map([("pawn_1", Canon::Int(1))])),
             ]),
         ] {

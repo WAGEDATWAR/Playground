@@ -20,6 +20,18 @@ use pg_content::ContentSet;
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Command {
+    /// Generates the town (milestone 1.2, Blueprint §12.1): the map, districts, roads, buildings and
+    /// `residents` people with their households and relationships, from the world's seed. Needs content
+    /// with game data and a world that has no map yet.
+    GenerateTown {
+        w: i32,
+        h: i32,
+        /// Percent of the map that is water.
+        water: u32,
+        residents: u32,
+        /// `cozy`, `standard` or `mature`.
+        tone: String,
+    },
     /// **Dev:** adds `amount` to the dev probe value.
     DevNudge { amount: i32 },
     /// **Dev:** creates an overworld map of `w`×`h` tiles. `style` 0 is open grass; 1 is a generated town
@@ -101,6 +113,20 @@ fn text_of(c: &Canon, key: &str) -> Result<String, CanonError> {
 impl ToCanon for Command {
     fn to_canon(&self) -> Canon {
         match self {
+            Command::GenerateTown {
+                w,
+                h,
+                water,
+                residents,
+                tone,
+            } => Canon::map([
+                ("type", Canon::str("generate_town")),
+                ("w", w.to_canon()),
+                ("h", h.to_canon()),
+                ("water", water.to_canon()),
+                ("residents", residents.to_canon()),
+                ("tone", tone.to_canon()),
+            ]),
             Command::DevNudge { amount } => Canon::map([
                 ("type", Canon::str("dev_nudge")),
                 ("amount", amount.to_canon()),
@@ -177,6 +203,13 @@ impl Command {
             .as_str()
             .ok_or_else(|| CanonError::new("command type must be text"))?;
         match ty {
+            "generate_town" => Ok(Command::GenerateTown {
+                w: int_of(c, "w")?,
+                h: int_of(c, "h")?,
+                water: u32_of(c, "water")?,
+                residents: u32_of(c, "residents")?,
+                tone: text_of(c, "tone")?,
+            }),
             "dev_nudge" => Ok(Command::DevNudge {
                 amount: int_of(c, "amount")?,
             }),
@@ -264,6 +297,48 @@ pub(crate) fn apply(
     events: &mut Vec<Event>,
 ) {
     match cmd {
+        Command::GenerateTown {
+            w,
+            h,
+            water,
+            residents,
+            tone,
+        } => {
+            let Some(content) = content else {
+                events.push(rejected(tick, "generate_town", "no content is loaded"));
+                return;
+            };
+            let Some(tone) = crate::world::TonePreset::parse(tone) else {
+                events.push(rejected(
+                    tick,
+                    "generate_town",
+                    "the tone is cozy, standard or mature",
+                ));
+                return;
+            };
+            let params = crate::worldgen::GenParams {
+                width: *w,
+                height: *h,
+                water_percent: *water,
+                residents: usize::try_from(*residents).unwrap_or(usize::MAX),
+                tone,
+            };
+            match crate::worldgen::generate_town(world, content.game(), &params) {
+                Ok(out) => events.push(event(
+                    tick,
+                    "town.generated",
+                    Canon::map([
+                        ("map", out.map.to_canon()),
+                        ("districts", (out.districts as u64).to_canon()),
+                        ("buildings", (out.buildings as u64).to_canon()),
+                        ("residents", (out.residents as u64).to_canon()),
+                        ("attempt", out.attempt.to_canon()),
+                        ("hash", Canon::str(out.starting_hash)),
+                    ]),
+                )),
+                Err(e) => events.push(rejected(tick, "generate_town", &e.to_string())),
+            }
+        }
         Command::DevNudge { amount } => {
             world.probe.value = world.probe.value.saturating_add(i64::from(*amount));
             events.push(event(

@@ -389,6 +389,8 @@ impl AppController {
         seed: &str,
         size: MapSize,
         residents: u32,
+        water: u32,
+        tone: &str,
     ) -> Result<(String, WorldState), String> {
         let seed_text = if seed.is_empty() {
             format!("seed-{}", self.svc.clock.wall_clock_iso())
@@ -402,20 +404,47 @@ impl AppController {
             actor: None,
             cmd: c,
         };
-        sim.submit(0, cmd(Command::DevCreateMap { w, h, style: 1 }))
-            .map_err(|e| e.to_string())?;
-        for i in 0..residents {
+        let generated = self
+            .content
+            .as_ref()
+            .is_some_and(|c| c.game().worldgen.is_some());
+        if generated {
             sim.submit(
                 0,
-                cmd(Command::DevSpawnPawn {
-                    map: EntityId::new(Kind::Map, 1),
-                    at: None,
-                    name: format!("Resident {}", i + 1),
+                cmd(Command::GenerateTown {
+                    w,
+                    h,
+                    water,
+                    residents,
+                    tone: tone.to_owned(),
                 }),
             )
             .map_err(|e| e.to_string())?;
+        } else {
+            // Content without game data (a stripped-down test pack): the old scaffolding town.
+            sim.submit(0, cmd(Command::DevCreateMap { w, h, style: 1 }))
+                .map_err(|e| e.to_string())?;
+            for i in 0..residents {
+                sim.submit(
+                    0,
+                    cmd(Command::DevSpawnPawn {
+                        map: EntityId::new(Kind::Map, 1),
+                        at: None,
+                        name: format!("Resident {}", i + 1),
+                    }),
+                )
+                .map_err(|e| e.to_string())?;
+            }
         }
-        sim.run_ticks(1).map_err(|e| e.to_string())?;
+        let report = sim.step().map_err(|e| e.to_string())?;
+        if let Some(e) = report.events.iter().find(|e| e.kind == "input_rejected") {
+            let why = e
+                .detail
+                .get("reason")
+                .and_then(pg_core::canon::Canon::as_str)
+                .unwrap_or("the town could not be generated");
+            return Err(format!("The town could not be generated: {why}"));
+        }
         let world = sim.world().clone();
         let id = self.unique_world_id(name);
         let thumb = thumbnail_png(&world);
@@ -526,7 +555,9 @@ impl AppController {
                 seed,
                 size,
                 residents,
-            } => match self.create_world(&name, &seed, size, residents) {
+                water,
+                tone,
+            } => match self.create_world(&name, &seed, size, residents, water, &tone) {
                 Ok((id, world)) => vec![self.open(&id, world)],
                 Err(e) => vec![UiEvent::Failed(e)],
             },

@@ -49,6 +49,23 @@ pub fn check_cmd(rest: &[String]) -> Result<ExitCode, String> {
             needs: Some("data/base"),
         },
         Check {
+            name: "town generator (pinned starting hash)",
+            args: args(&[
+                "worldgen",
+                "preview",
+                "--seed",
+                "gate-town",
+                "--size",
+                "64x48",
+                "--residents",
+                "14",
+                "--no-map",
+                "--expect",
+                "af34654d",
+            ]),
+            needs: Some("data/base"),
+        },
+        Check {
             name: "string tables",
             args: args(&["strings", "lint"]),
             needs: Some("data/base"),

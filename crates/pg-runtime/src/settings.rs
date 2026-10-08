@@ -44,6 +44,14 @@ pub fn device_registry() -> SettingsRegistry {
     );
     let _ = r.register("ui.vsync", Field::boolean(true), Scope::Device, false);
     let _ = r.register("dev.enabled", Field::boolean(false), Scope::Device, false);
+    // The graphic-content filter is global and on by default (Design Document section 9); it changes how
+    // things are described and drawn, never what happens.
+    let _ = r.register(
+        "content.graphic_filter",
+        Field::boolean(true),
+        Scope::Device,
+        false,
+    );
     let _ = r.register("ui.language", Field::text(16, "en"), Scope::Device, false);
     let _ = register_ai_settings(&mut r);
     r
@@ -107,6 +115,7 @@ mod tests {
             "ai.custom_model",
             "ai.enabled",
             "ai.provider",
+            "content.graphic_filter",
             "dev.enabled",
             "time.autosave_minutes",
             "time.pause_on_focus_loss",

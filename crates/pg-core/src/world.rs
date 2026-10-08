@@ -17,6 +17,7 @@ use crate::rng::Seed;
 use crate::social::{Household, Relationship, Relationships};
 use crate::table::Table;
 use crate::time::{Clock, SlotMinutes};
+use crate::town::Town;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -54,10 +55,38 @@ impl Default for MovementSettings {
     }
 }
 
+/// The world's tone preset (Design Document section 9): how likely serious events are. It never changes what an
+/// event does, only how often it happens, and it is separate from the graphic-content filter, which is a
+/// device setting and only changes how things are described and drawn.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub enum TonePreset {
+    Cozy,
+    #[default]
+    Standard,
+    Mature,
+}
+
+impl TonePreset {
+    pub const ALL: [TonePreset; 3] = [TonePreset::Cozy, TonePreset::Standard, TonePreset::Mature];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            TonePreset::Cozy => "cozy",
+            TonePreset::Standard => "standard",
+            TonePreset::Mature => "mature",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<TonePreset> {
+        TonePreset::ALL.into_iter().find(|t| t.name() == s)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorldSettings {
     pub slot_minutes: SlotMinutes,
     pub movement: MovementSettings,
+    pub tone: TonePreset,
 }
 
 impl Default for WorldSettings {
@@ -65,6 +94,7 @@ impl Default for WorldSettings {
         WorldSettings {
             slot_minutes: SlotMinutes::DEFAULT,
             movement: MovementSettings::default(),
+            tone: TonePreset::Standard,
         }
     }
 }
@@ -166,6 +196,7 @@ pub struct WorldState {
     pub households: Table<Household>,
     pub relationships: Relationships,
     pub commitments: Table<Commitment>,
+    pub town: Town,
     pub probe: Probe,
     /// Pack-defined component values and pack health (empty without packs, and then not hashed).
     pub ext: crate::ext::ExtStore,
@@ -192,6 +223,7 @@ impl WorldState {
             households: Table::new(),
             relationships: Relationships::new(),
             commitments: Table::new(),
+            town: Town::default(),
             probe: Probe::default(),
             ext: crate::ext::ExtStore::new(),
             occupancy: Occupancy::new(),
@@ -311,6 +343,7 @@ impl WorldState {
             ("relationships", table("relationships")),
             ("rng_counters", hash_value(&self.rng_counters)),
             ("settings", hash_value(&self.settings)),
+            ("town", hash_value(&self.town)),
         ];
         // Extension data joins the hash only when there is some, so worlds without packs keep their hashes.
         if !self.ext.is_empty() {
@@ -350,6 +383,7 @@ impl ToCanon for WorldSettings {
         Canon::map([
             ("movement", self.movement.to_canon()),
             ("slot_minutes", self.slot_minutes.get().to_canon()),
+            ("tone", Canon::str(self.tone.name())),
         ])
     }
 }
@@ -380,6 +414,7 @@ impl ToCanon for WorldState {
             ("households", self.households.to_canon()),
             ("relationships", self.relationships.to_canon()),
             ("commitments", self.commitments.to_canon()),
+            ("town", self.town.to_canon()),
             ("probe", self.probe.to_canon()),
         ]);
         if let (false, Canon::Map(m)) = (self.ext.is_empty(), &mut doc) {
@@ -465,6 +500,7 @@ impl WorldState {
             "households",
             "relationships",
             "commitments",
+            "town",
             "probe",
             "ext",
         ])?;
@@ -484,7 +520,7 @@ impl WorldState {
         };
         let settings_c = r.child("settings")?;
         let s = settings_c.reader();
-        s.only(&["movement", "slot_minutes"])?;
+        s.only(&["movement", "slot_minutes", "tone"])?;
         let m_c = s.child("movement")?;
         let m = m_c.reader();
         m.only(&[
@@ -494,7 +530,10 @@ impl WorldState {
             "path_expansion_cap",
         ])?;
         let slot_c = s.child("slot_minutes")?;
+        let tone_c = s.child("tone")?;
         let settings = WorldSettings {
+            tone: TonePreset::parse(tone_c.reader().str()?)
+                .ok_or_else(|| tone_c.reader().err("expected cozy, standard or mature"))?,
             slot_minutes: SlotMinutes::new(slot_c.reader().u32()?)
                 .map_err(|e| slot_c.reader().err(e.to_string()))?,
             movement: MovementSettings {
@@ -545,6 +584,7 @@ impl WorldState {
                 rels
             },
             commitments: read_table(&r, "commitments", Commitment::from_reader, |c| c.id)?,
+            town: Town::from_reader(r.child("town")?.reader())?,
             probe,
             ext: match r.maybe("ext")? {
                 Some(c) => crate::ext::ExtStore::from_reader(c.reader())?,
@@ -609,7 +649,7 @@ mod tests {
         let w = WorldState::new("Town", "seed");
         assert_eq!(
             w.to_canon().to_canonical_string(),
-            r#"{"clock":{"tick":0},"commitments":{},"households":{},"id_counters":{},"maps":{},"meta":{"name":"Town","seed_text":"seed"},"objects":{},"pawns":{},"probe":{"days":0,"minutes":0,"value":0},"relationships":{},"rng_counters":{},"schema":4,"settings":{"movement":{"max_repaths":3,"max_wait_ticks":20,"move_ticks_per_tile":2,"path_expansion_cap":20000},"slot_minutes":30}}"#
+            r#"{"clock":{"tick":0},"commitments":{},"households":{},"id_counters":{},"maps":{},"meta":{"name":"Town","seed_text":"seed"},"objects":{},"pawns":{},"probe":{"days":0,"minutes":0,"value":0},"relationships":{},"rng_counters":{},"schema":4,"settings":{"movement":{"max_repaths":3,"max_wait_ticks":20,"move_ticks_per_tile":2,"path_expansion_cap":20000},"slot_minutes":30,"tone":"standard"},"town":{"buildings":[],"districts":[],"gathering":[],"starting_hash":null}}"#
         );
     }
 

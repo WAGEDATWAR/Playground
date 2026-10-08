@@ -209,6 +209,8 @@ pub struct Pawn {
     /// Where the pawn lives and eats and sleeps. Set by population or, failing that, to the tile the pawn
     /// first stood on.
     pub home_tile: Option<Tile>,
+    /// Where the pawn works, if it has a job with a place (set by population).
+    pub workplace: Option<Tile>,
     /// The tick since which the pawn has had nothing to do (for the `bored` mood).
     pub idle_since: Option<u64>,
 }
@@ -237,6 +239,7 @@ impl Pawn {
             memories: Vec::new(),
             capacities: Capacities::FULL,
             home_tile: None,
+            workplace: None,
             idle_since: None,
         }
     }
@@ -308,6 +311,10 @@ impl ToCanon for Pawn {
             (
                 "home_tile",
                 self.home_tile.map_or(Canon::Null, |t| t.to_canon()),
+            ),
+            (
+                "workplace",
+                self.workplace.map_or(Canon::Null, |t| t.to_canon()),
             ),
             (
                 "idle_since",
@@ -450,6 +457,7 @@ impl Pawn {
             "memories",
             "capacities",
             "home_tile",
+            "workplace",
             "idle_since",
         ])?;
         let facing_child = r.child("facing")?;
@@ -517,6 +525,10 @@ impl Pawn {
                 Some(c) => Some(Tile::from_reader(c.reader())?),
                 None => None,
             },
+            workplace: match r.maybe("workplace")? {
+                Some(c) => Some(Tile::from_reader(c.reader())?),
+                None => None,
+            },
             idle_since: match r.maybe("idle_since")? {
                 Some(c) => Some(c.reader().u64()?),
                 None => None,
@@ -564,7 +576,7 @@ mod tests {
         );
         assert_eq!(
             p.to_canon().to_canonical_string(),
-            r#"{"capacities":{"breathing":1000,"consciousness":1000,"eating":1000,"manipulation":1000,"moving":1000,"talking":1000},"facing":"S","home_tile":null,"household":null,"id":"pawn_1","idle_since":null,"intent":"free","last_failure":null,"memories":[],"mood":"neutral","move_failure":null,"name":"Ann","needs":{},"occupation":null,"position":{"map":"map_1","tile":[1,2]},"replan":null,"route":null,"schedule":null,"task":null}"#
+            r#"{"capacities":{"breathing":1000,"consciousness":1000,"eating":1000,"manipulation":1000,"moving":1000,"talking":1000},"facing":"S","home_tile":null,"household":null,"id":"pawn_1","idle_since":null,"intent":"free","last_failure":null,"memories":[],"mood":"neutral","move_failure":null,"name":"Ann","needs":{},"occupation":null,"position":{"map":"map_1","tile":[1,2]},"replan":null,"route":null,"schedule":null,"task":null,"workplace":null}"#
         );
     }
 }

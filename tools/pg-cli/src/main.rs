@@ -26,6 +26,7 @@ mod settings_cmds;
 mod shared;
 mod sim_cmds;
 mod strings_cmds;
+mod worldgen_cmds;
 
 const USAGE: &str = "\
 pg - Playground developer tool
@@ -119,6 +120,8 @@ USAGE:
     pg pipeline               Show the tick pipeline: systems in execution order and their cadence.
     pg content lint [pack-dir...]         Load and validate packs (default: data/base). Exit 1 on errors.
     pg content tree [--dot] [pack-dir...] Which template extends which, with each pack (or Graphviz).
+    pg worldgen preview [--seed S] [--size WxH] [--water PERCENT] [--residents N] [--tone T] [--no-map] [--expect HASH]
+                                          Generate a town and draw it: districts, roads, buildings, plazas, homes.
     pg residents generate [--seed S] [--count N] [--content dir]...
                                           The people a seed produces: households, occupations, starting
                                           relationships and shared memories.
@@ -140,6 +143,7 @@ fn main() -> ExitCode {
         Some("id") => id_cmd(&args[1..]),
         Some("content") => content_cmds::content_cmd(&args[1..]),
         Some("residents") => residents_cmds::residents_cmd(&args[1..]),
+        Some("worldgen") => worldgen_cmds::worldgen_cmd(&args[1..]),
         Some("map") => map_cmds::map_cmd(&args[1..]),
         Some("sim") => sim_cmds::sim_cmd(&args[1..]),
         Some("replay") => sim_cmds::replay_cmd(&args[1..]),

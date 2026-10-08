@@ -28,6 +28,9 @@ pub const SIM_SPEC: Spec<'static> = Spec {
         "log",
         "dev-map",
         "dev-pawns",
+        "town",
+        "residents",
+        "water",
         "content",
         "threads",
         "since",
@@ -116,6 +119,8 @@ pub struct DemoSetup {
     pub name: String,
     pub map: Option<(i32, i32, u8)>,
     pub pawns: u32,
+    /// `--town WxH [--residents N] [--water P]`: a generated town instead of the dev map: `(w, h, water, residents)`.
+    pub town: Option<(i32, i32, u32, u32)>,
     pub nudges: Vec<(u64, i64)>,
     pub slots: Vec<(u64, i64)>,
     /// `(template, tile)`: objects spawned on map_1 at tick 1.
@@ -172,6 +177,22 @@ pub fn build_demo(setup: &DemoSetup) -> Result<Sim, String> {
         actor: None,
         cmd: c,
     };
+    if let Some((w, h, water, residents)) = setup.town {
+        if setup.map.is_some() {
+            return Err("use either --town or --dev-map, not both".into());
+        }
+        sim.submit(
+            0,
+            cmd(Command::GenerateTown {
+                w,
+                h,
+                water,
+                residents,
+                tone: "standard".into(),
+            }),
+        )
+        .map_err(|e| e.to_string())?;
+    }
     if let Some((w, h, style)) = setup.map {
         sim.submit(0, cmd(Command::DevCreateMap { w, h, style }))
             .map_err(|e| e.to_string())?;
@@ -187,10 +208,10 @@ pub fn build_demo(setup: &DemoSetup) -> Result<Sim, String> {
             )
             .map_err(|e| e.to_string())?;
         }
-    } else if setup.pawns > 0 {
+    } else if setup.pawns > 0 && setup.town.is_none() {
         return Err("--dev-pawns needs --dev-map (pawns live on a map)".into());
     }
-    if setup.map.is_some() {
+    if setup.map.is_some() || setup.town.is_some() {
         let map = EntityId::new(Kind::Map, 1);
         for (template, at) in &setup.objects {
             sim.submit(
@@ -262,6 +283,19 @@ pub fn demo_from_flags(p: &Parsed) -> Result<DemoSetup, String> {
         seed,
         name: p.one("name").unwrap_or("Dev Town").to_owned(),
         map,
+        town: p
+            .one("town")
+            .map(|t| {
+                parse_size(t).map(|(w, h, _)| {
+                    (
+                        w,
+                        h,
+                        p.parse::<u32>("water").ok().flatten().unwrap_or(18),
+                        p.parse::<u32>("residents").ok().flatten().unwrap_or(14),
+                    )
+                })
+            })
+            .transpose()?,
         pawns: p.parse::<u32>("dev-pawns")?.unwrap_or(0),
         objects: p
             .all("object")

@@ -18,9 +18,10 @@
 use crate::canon::{Canon, ToCanon};
 use crate::id::EntityId;
 use crate::map::{Dir4, Tile};
-use crate::path::{solve_cached, PathJob, PathOutcome};
+use crate::path::{find_path_avoiding, solve_cached, PathJob, PathOutcome};
 use crate::pipeline::{System, TickCtx};
 use crate::world::MovementSettings;
+use std::collections::BTreeSet;
 
 pub struct MovementSystem;
 
@@ -76,6 +77,29 @@ fn resolve_repaths(ctx: &mut TickCtx<'_>, settings: &MovementSettings) {
         return;
     }
 
+    // A pawn that has already been blocked once routes around the pawns who are standing still (S-018);
+    // everyone else is solved as one cached batch. The tiles of standing pawns are the same for every
+    // pawn this tick, so the obstacle-aware solves are plain, ordered, deterministic searches.
+    let standing: BTreeSet<Tile> = ctx
+        .world
+        .pawns
+        .iter()
+        .filter(|(_, p)| p.route.is_none())
+        .map(|(_, p)| p.position.tile)
+        .collect();
+    let blocked_before = |id: EntityId| {
+        ctx.world
+            .pawns
+            .get(id)
+            .and_then(|p| p.route.as_ref())
+            .is_some_and(|r| !r.path.is_empty())
+    };
+    let aware: BTreeSet<EntityId> = wanting
+        .iter()
+        .map(|(id, ..)| *id)
+        .filter(|id| blocked_before(*id))
+        .collect();
+
     // Solve the whole batch at once. Jobs borrow the maps and the cost table; the executor and cache are
     // separate fields of the services, so all three can be borrowed together.
     let outcomes: Vec<Option<PathOutcome>> = {
@@ -85,8 +109,32 @@ fn resolve_repaths(ctx: &mut TickCtx<'_>, settings: &MovementSettings) {
         } = &mut *ctx.services;
         let mut jobs = Vec::new();
         let mut slot_of_job = Vec::new();
-        for (i, (_, map_id, from, goal)) in wanting.iter().enumerate() {
+        let mut aware_out: Vec<(usize, PathOutcome)> = Vec::new();
+        for (i, (id, map_id, from, goal)) in wanting.iter().enumerate() {
             if let Some(map) = world.maps.get(*map_id) {
+                if aware.contains(id) {
+                    let mut around = find_path_avoiding(
+                        map,
+                        costs,
+                        *from,
+                        *goal,
+                        settings.path_expansion_cap,
+                        &standing,
+                    );
+                    // Nowhere to go but through them: fall back to the plain path and wait as before.
+                    if !around.is_found() {
+                        around = find_path_avoiding(
+                            map,
+                            costs,
+                            *from,
+                            *goal,
+                            settings.path_expansion_cap,
+                            &BTreeSet::new(),
+                        );
+                    }
+                    aware_out.push((i, around));
+                    continue;
+                }
                 jobs.push(PathJob {
                     map,
                     costs,
@@ -101,6 +149,11 @@ fn resolve_repaths(ctx: &mut TickCtx<'_>, settings: &MovementSettings) {
         let mut out: Vec<Option<PathOutcome>> = vec![None; wanting.len()];
         for (job_index, outcome) in solved.into_iter().enumerate() {
             if let Some(slot) = slot_of_job.get(job_index).and_then(|&s| out.get_mut(s)) {
+                *slot = Some(outcome);
+            }
+        }
+        for (i, outcome) in aware_out {
+            if let Some(slot) = out.get_mut(i) {
                 *slot = Some(outcome);
             }
         }

@@ -2,7 +2,7 @@
   "format": "playground-scenario",
   "version": 1,
   "name": "30-day soak with scripts and shadow verification",
-  "description": "A 20-resident town with the cookbook script packs runs 30 game days. Every day is re-simulated from its starting snapshot on a different thread count and must give the same hash; the world state and the daily script cost must stay bounded; the population and the input log must not change.",
+  "description": "A generated 20-resident town (64x48) with the cookbook script packs runs 30 game days. Every day is re-simulated from its starting snapshot on a different thread count and must give the same hash; the world state and the daily script cost must stay bounded; the population and the input log must not change.",
   "world": {
     "name": "Soak Town",
     "seed": "soak",
@@ -15,14 +15,8 @@
   },
   "steps": [
     {
-      "op": "create_map",
-      "w": 48,
-      "h": 36,
-      "style": 1
-    },
-    {
-      "op": "spawn_pawns",
-      "count": 20
+      "op": "command",
+      "cmd": { "type": "generate_town", "w": 64, "h": 48, "water": 18, "residents": 20, "tone": "standard" }
     },
     {
       "op": "soak",
@@ -34,7 +28,7 @@
       "op": "expect",
       "pawns": 20,
       "day": 30,
-      "hash": "53903456"
+      "hash": "b7ad2760"
     },
     {
       "op": "reload",

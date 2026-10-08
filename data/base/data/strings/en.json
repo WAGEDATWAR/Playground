@@ -194,5 +194,12 @@
   "relationship.close_friend": "Close friend",
   "memory.start.household": "Shared a home with {other}.",
   "memory.start.coworkers": "Worked alongside {other} for a while.",
-  "memory.start.neighbors": "Got to know {other} around town."
+  "memory.start.neighbors": "Got to know {other} around town.",
+  "ui.new.water": "Water (percent of the map)",
+  "ui.new.tone": "Content tone",
+  "ui.new.tone.cozy": "Cozy",
+  "ui.new.tone.standard": "Standard",
+  "ui.new.tone.mature": "Mature",
+  "ui.options.group.content": "Content",
+  "settings.content.graphic_filter": "Graphic content filter (less descriptive detail and visual intensity)"
 }

@@ -314,8 +314,16 @@ pub fn resolve_place(
     let p = world.pawns.get(pawn)?;
     match kind {
         PlaceKind::Home => Some(p.home_tile.unwrap_or(p.position.tile)),
-        PlaceKind::Workplace => DevPlanSource::tile(world, pawn, -1, 0),
-        PlaceKind::Gathering => plaza(world, p.position.map),
+        PlaceKind::Workplace => p
+            .workplace
+            .or_else(|| DevPlanSource::tile(world, pawn, -1, 0)),
+        PlaceKind::Gathering => world
+            .town
+            .gathering
+            .iter()
+            .copied()
+            .min_by_key(|t| (t.manhattan(p.position.tile), t.y, t.x))
+            .or_else(|| plaza(world, p.position.map)),
         PlaceKind::Anywhere => {
             DevPlanSource::tile(world, pawn, i64::try_from(day).unwrap_or(i64::MAX), 5)
         }

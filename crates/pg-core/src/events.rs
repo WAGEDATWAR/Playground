@@ -253,6 +253,20 @@ impl EventCatalog {
             &[("pawn", id("pawn")), ("from", int()), ("why", text(400))],
         );
         add(
+            "town.generated",
+            World,
+            true,
+            "The town was generated from the world's seed.",
+            &[
+                ("map", id("map")),
+                ("districts", int()),
+                ("buildings", int()),
+                ("residents", int()),
+                ("attempt", int()),
+                ("hash", text(64)),
+            ],
+        );
+        add(
             "need.urgent",
             Life,
             true,

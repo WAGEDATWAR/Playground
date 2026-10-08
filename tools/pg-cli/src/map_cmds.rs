@@ -68,6 +68,9 @@ const SHOW_SPEC: Spec<'static> = Spec {
         "name",
         "dev-map",
         "dev-pawns",
+        "town",
+        "residents",
+        "water",
         "content",
         "threads",
         "ticks",
@@ -84,10 +87,10 @@ const SHOW_SPEC: Spec<'static> = Spec {
 fn show(args: &[String]) -> Result<ExitCode, String> {
     let p = parse(args, &SHOW_SPEC)?;
     let mut setup: DemoSetup = demo_from_flags(&p)?;
-    if setup.map.is_none() {
+    if setup.map.is_none() && setup.town.is_none() {
         setup.map = Some((48, 32, 1));
     }
-    if setup.pawns == 0 && p.one("dev-pawns").is_none() {
+    if setup.pawns == 0 && p.one("dev-pawns").is_none() && setup.town.is_none() {
         setup.pawns = 8;
     }
     let ticks = p.parse::<u64>("ticks")?.unwrap_or(600);

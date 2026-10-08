@@ -18,7 +18,7 @@ use crate::map::{Dir4, MapData, MoveCosts, Tile};
 use crate::world::WorldState;
 use pg_content::{ContentSet, TemplateId};
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, BinaryHeap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque};
 use std::fmt;
 
 pub const DEFAULT_EXPANSION_CAP: u32 = 20_000;
@@ -68,6 +68,21 @@ pub fn find_path(
     from: Tile,
     to: Tile,
     expansion_cap: u32,
+) -> PathOutcome {
+    find_path_avoiding(map, costs, from, to, expansion_cap, &BTreeSet::new())
+}
+
+/// Like [`find_path`], but never steps on a tile in `avoid` (other than the goal itself): pawns that stand
+/// still (working, sleeping, talking) are obstacles to walk around rather than a wall to wait at (S-018).
+/// The result is a pure function of its inputs, but because `avoid` changes from tick to tick it is not
+/// cached; the movement system asks for it only when a pawn has been blocked.
+pub fn find_path_avoiding(
+    map: &MapData,
+    costs: &MoveCosts,
+    from: Tile,
+    to: Tile,
+    expansion_cap: u32,
+    avoid: &BTreeSet<Tile>,
 ) -> PathOutcome {
     if costs.step_cost(map, to).is_none() {
         return PathOutcome::BlockedDestination;
@@ -130,6 +145,9 @@ pub fn find_path(
         };
         for dir in Dir4::ALL {
             let next = dir.step(tile);
+            if next != to && avoid.contains(&next) {
+                continue;
+            }
             let Some(step) = costs.step_cost(map, next) else {
                 continue;
             };
@@ -559,6 +577,49 @@ mod tests {
             DEFAULT_EXPANSION_CAP
         )
         .is_found());
+    }
+
+    #[test]
+    fn avoiding_tiles_goes_around_them_but_may_still_end_on_one_and_reports_a_wall() {
+        let m = map(9, 5);
+        let costs = MoveCosts::default();
+        let straight = find_path(&m, &costs, t(0, 2), t(8, 2), DEFAULT_EXPANSION_CAP);
+        let PathOutcome::Found { path: direct, .. } = &straight else {
+            panic!("{straight:?}");
+        };
+        assert!(direct.contains(&t(4, 2)));
+        // Standing pawns across the middle of the way: the path bends around them and is longer.
+        let wall: BTreeSet<Tile> = [t(4, 1), t(4, 2), t(4, 3)].into_iter().collect();
+        let around = find_path_avoiding(&m, &costs, t(0, 2), t(8, 2), DEFAULT_EXPANSION_CAP, &wall);
+        let PathOutcome::Found { path, .. } = &around else {
+            panic!("{around:?}");
+        };
+        assert!(path.iter().all(|p| !wall.contains(p)) && path.len() > direct.len());
+        assert_eq!(path.last(), Some(&t(8, 2)));
+        // The goal itself may be an avoided tile (somebody is standing at the destination).
+        let to_wall =
+            find_path_avoiding(&m, &costs, t(0, 2), t(4, 2), DEFAULT_EXPANSION_CAP, &wall);
+        assert!(to_wall.is_found(), "{to_wall:?}");
+        // A wall across the whole map cannot be avoided.
+        let full: BTreeSet<Tile> = (0..5).map(|y| t(4, y)).collect();
+        let blocked =
+            find_path_avoiding(&m, &costs, t(0, 2), t(8, 2), DEFAULT_EXPANSION_CAP, &full);
+        assert!(
+            matches!(blocked, PathOutcome::Unreachable { .. }),
+            "{blocked:?}"
+        );
+        // With nothing to avoid it is the plain search.
+        assert_eq!(
+            find_path_avoiding(
+                &m,
+                &costs,
+                t(0, 2),
+                t(8, 2),
+                DEFAULT_EXPANSION_CAP,
+                &BTreeSet::new()
+            ),
+            straight
+        );
     }
 
     #[test]

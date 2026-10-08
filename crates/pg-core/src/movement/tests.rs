@@ -370,3 +370,43 @@ fn many_wanderers_keep_occupancy_consistent_and_replay_identically() {
     d.run_ticks(3000 - 1234).unwrap();
     assert_eq!(d.world().state_hash(), a.world().state_hash());
 }
+
+#[test]
+fn a_blocked_pawn_routes_around_pawns_that_stand_still_instead_of_giving_up() {
+    // A wall of three standing pawns across the straight route (S-018): the walker is blocked, then re-solves
+    // with the standing pawns as obstacles and goes around them.
+    let (mut sim, map) = setup(16, 9);
+    for y in [3, 4, 5] {
+        spawn(&mut sim, map, 7, y, "Stander");
+    }
+    let walker = spawn(&mut sim, map, 2, 4, "Walker");
+    go(&mut sim, walker, 12, 4);
+    let (steps, kinds) = run_until(&mut sim, 4_000, |s| pos(s, walker) == t(12, 4));
+    assert_eq!(pos(&sim, walker), t(12, 4), "arrived after {steps} ticks");
+    assert!(
+        !kinds.iter().any(|k| k == "move.failed"),
+        "it never gave up: {kinds:?}"
+    );
+    assert_consistent(&sim);
+}
+
+#[test]
+fn with_no_way_around_a_blocked_pawn_still_waits_and_fails_as_before() {
+    // A one-tile corridor with a standing pawn in it: there is no way around, so the old behaviour holds.
+    let (mut sim, map) = setup(12, 3);
+    for x in 0..12 {
+        edit_blocked(&mut sim, map, x, 0, true);
+        edit_blocked(&mut sim, map, x, 2, true);
+    }
+    sim.run_ticks(2).unwrap();
+    spawn(&mut sim, map, 6, 1, "Sleeper");
+    let walker = spawn(&mut sim, map, 1, 1, "Walker");
+    go(&mut sim, walker, 10, 1);
+    let (_, kinds) = run_until(&mut sim, 6_000, |s| !walking(s, walker));
+    assert!(
+        kinds.iter().any(|k| k == "move.failed"),
+        "the corridor stays blocked: {kinds:?}"
+    );
+    assert_ne!(pos(&sim, walker), t(10, 1));
+    assert_consistent(&sim);
+}

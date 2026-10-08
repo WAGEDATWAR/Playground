@@ -203,7 +203,7 @@ fn keyboard_only_new_world_flow_creates_a_world() {
     let mut m = boot(Vec::new(), None);
     assert!(press(&mut m, Key::Enter).is_empty());
     assert!(matches!(m.screen(), Screen::NewWorld(_)));
-    // Name field, seed field, size, residents, create, back.
+    // Name field, seed field, size, residents, water, tone, create, back.
     assert_eq!(m.focus(), Some("new.name"));
     m.update(UiEvent::Text("new.name".into(), "  Maple Creek ".into()));
     m.update(UiEvent::Text("new.seed".into(), "abc".into()));
@@ -217,6 +217,10 @@ fn keyboard_only_new_world_flow_creates_a_world() {
         press(&mut m, Key::Right);
     }
     press(&mut m, Key::Tab);
+    assert_eq!(m.focus(), Some("new.water"));
+    press(&mut m, Key::Tab);
+    assert_eq!(m.focus(), Some("new.tone"));
+    press(&mut m, Key::Tab);
     assert_eq!(m.focus(), Some("new.create"));
     let fx = press(&mut m, Key::Enter);
     assert_eq!(
@@ -225,7 +229,9 @@ fn keyboard_only_new_world_flow_creates_a_world() {
             name: "Maple Creek".into(),
             seed: "abc".into(),
             size: MapSize::Medium,
-            residents: 15,
+            residents: 19,
+            water: 18,
+            tone: "standard".into(),
         }]
     );
     m.update(UiEvent::WorldOpened {

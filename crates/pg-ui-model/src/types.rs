@@ -237,6 +237,10 @@ pub enum AppEffect {
         seed: String,
         size: MapSize,
         residents: u32,
+        /// Percent of the map that is water.
+        water: u32,
+        /// `cozy`, `standard` or `mature`.
+        tone: String,
     },
     LoadWorld(String),
     DeleteWorld(String),
@@ -288,7 +292,12 @@ impl fmt::Debug for AppEffect {
                 seed,
                 size,
                 residents,
-            } => write!(f, "CreateWorld({name}, {seed}, {size:?}, {residents})"),
+                water,
+                tone,
+            } => write!(
+                f,
+                "CreateWorld({name}, {seed}, {size:?}, {residents}, water {water}, {tone})"
+            ),
             AppEffect::LoadWorld(i) => write!(f, "LoadWorld({i})"),
             AppEffect::DeleteWorld(i) => write!(f, "DeleteWorld({i})"),
             AppEffect::ExportWorld(i) => write!(f, "ExportWorld({i})"),

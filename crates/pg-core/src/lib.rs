@@ -43,5 +43,7 @@ pub mod sim;
 pub mod social;
 pub mod table;
 pub mod time;
+pub mod town;
 pub mod vectors;
 pub mod world;
+pub mod worldgen;

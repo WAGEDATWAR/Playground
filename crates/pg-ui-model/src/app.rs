@@ -33,6 +33,10 @@ pub struct NewWorldForm {
     pub seed: String,
     pub size: MapSize,
     pub residents: i64,
+    /// Percent of the map that is water.
+    pub water: i64,
+    /// `cozy`, `standard` or `mature` (the default).
+    pub tone: String,
     /// String-table key of the validation problem, if any.
     pub error: Option<&'static str>,
 }
@@ -43,7 +47,9 @@ impl Default for NewWorldForm {
             name: "New Town".to_owned(),
             seed: String::new(),
             size: MapSize::Small,
-            residents: 10,
+            residents: 14,
+            water: 18,
+            tone: "standard".to_owned(),
             error: None,
         }
     }

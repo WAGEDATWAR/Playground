@@ -53,21 +53,54 @@ fn the_v4_fixture_loads_directly_to_its_recorded_hash_and_writes_back_identicall
     assert_eq!(world.state_hash().to_hex(), expected_hash.trim());
     assert_eq!(world.to_canon().to_canonical_string(), text.trim_end());
     assert!(world.pawns.len() >= 4);
+    assert!(!world.town.buildings.is_empty() && !world.households.is_empty());
+    assert!(world.pawns.iter().all(|(_, p)| p.home_tile.is_some()));
 }
 
 #[test]
 #[ignore = "writes the fixture; run on purpose when the schema changes"]
 fn regenerate_v4_fixture() {
-    let world = crate::testkit::world_at(21_000);
+    use pg_content::{load_pack, ComponentRegistry, ContentSet, DirPack, Limits};
+    use pg_core::commands::Command;
+    use pg_core::input::SimInput;
+    use pg_core::sim::Sim;
+    // A generated town that has lived for a day and a half: residents, households, relationships,
+    // memories, needs, moods, schedules and the town layout are all in it.
+    let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/base");
+    let pack = load_pack(&DirPack::new(base), &Limits::default()).unwrap();
+    let content =
+        std::sync::Arc::new(ContentSet::build(vec![pack], ComponentRegistry::builtin()).unwrap());
+    let mut sim =
+        Sim::with_dev_systems(WorldState::new("Fixture Town", "fixture-v4")).with_content(content);
+    sim.submit(
+        0,
+        SimInput::Command {
+            actor: None,
+            cmd: Command::GenerateTown {
+                w: 48,
+                h: 36,
+                water: 15,
+                residents: 10,
+                tone: "standard".into(),
+            },
+        },
+    )
+    .unwrap();
+    sim.run_ticks(21_000).unwrap();
+    let world = sim.world().clone();
     std::fs::create_dir_all(dir()).unwrap();
     std::fs::write(
         dir().join("world-v4.json"),
-        world.to_canon().to_canonical_string() + "\n",
+        world.to_canon().to_canonical_string()
+            + "
+",
     )
     .unwrap();
     std::fs::write(
         dir().join("world-v4.hash"),
-        world.state_hash().to_hex() + "\n",
+        world.state_hash().to_hex()
+            + "
+",
     )
     .unwrap();
 }

@@ -30,8 +30,9 @@ pub const RELATIONSHIPS_FILE: &str = "data/game/relationships.json";
 pub const OCCUPATIONS_FILE: &str = "data/game/occupations.json";
 pub const NAMES_FILE: &str = "data/game/names.json";
 pub const RESIDENTS_FILE: &str = "data/game/residents.json";
+pub const WORLDGEN_FILE: &str = "data/game/worldgen.json";
 
-pub const KNOWN_FILES: [&str; 7] = [
+pub const KNOWN_FILES: [&str; 8] = [
     NEEDS_FILE,
     MOOD_FILE,
     MEMORY_FILE,
@@ -39,6 +40,7 @@ pub const KNOWN_FILES: [&str; 7] = [
     OCCUPATIONS_FILE,
     NAMES_FILE,
     RESIDENTS_FILE,
+    WORLDGEN_FILE,
 ];
 
 /// Needs and affinity use this scale (Blueprint §8.1).
@@ -266,6 +268,34 @@ pub struct NamePools {
     pub family: Vec<String>,
 }
 
+/// The kinds of district the generator lays out.
+pub const DISTRICT_KINDS: [&str; 4] = ["residential", "commercial", "civic", "park"];
+
+/// The roles a building can have (exterior shells in Stage 1).
+pub const BUILDING_ROLES: [&str; 4] = ["home", "shop", "office", "civic"];
+
+/// How the town generator lays out streets, lots and buildings (Blueprint §12.1). Sizes are in tiles
+/// (about one metre each).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorldgenParams {
+    /// One district per this many tiles of map, between `min_districts` and `max_districts`.
+    pub tiles_per_district: u32,
+    pub min_districts: u32,
+    pub max_districts: u32,
+    /// Spacing of the local streets inside a district.
+    pub block_min: u32,
+    pub block_max: u32,
+    /// Side length of a building's footprint.
+    pub building_min: u32,
+    pub building_max: u32,
+    /// Share of building spots (permille) left empty.
+    pub gap_permille: u32,
+    /// The most water the generator controls allow (percent of the map).
+    pub max_water_percent: u32,
+    /// Building role weights per district kind.
+    pub roles: BTreeMap<String, BTreeMap<String, u32>>,
+}
+
 /// A resident written by hand (a scenario, a sample pack, a scripted town).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResidentDef {
@@ -287,6 +317,7 @@ pub struct GameData {
     pub occupations: BTreeMap<String, OccupationDef>,
     pub names: NamePools,
     pub residents: BTreeMap<String, ResidentDef>,
+    pub worldgen: Option<WorldgenParams>,
 }
 
 impl GameData {
@@ -379,6 +410,16 @@ impl GameData {
         }
         if other.relationships.is_some() {
             self.relationships = other.relationships;
+        }
+        if other.worldgen.is_some() {
+            if self.worldgen.is_some() {
+                report.warn(
+                    "overrides",
+                    from.to_owned(),
+                    format!("pack '{from}' replaces the earlier town generator parameters"),
+                );
+            }
+            self.worldgen = other.worldgen;
         }
         for g in other.names.given {
             if !self.names.given.contains(&g) {
@@ -1256,6 +1297,134 @@ pub fn parse_residents(
     unique(items, RESIDENTS_FILE, "resident", report)
 }
 
+pub fn parse_worldgen(value: &Canon, report: &mut ValidationReport) -> Option<WorldgenParams> {
+    let o = Obj::new(
+        value,
+        WORLDGEN_FILE,
+        &[
+            "tiles_per_district",
+            "min_districts",
+            "max_districts",
+            "block_min",
+            "block_max",
+            "building_min",
+            "building_max",
+            "gap_permille",
+            "max_water_percent",
+            "roles",
+        ],
+        report,
+    )?;
+    let mut roles: BTreeMap<String, BTreeMap<String, u32>> = BTreeMap::new();
+    match o.map.get("roles") {
+        Some(Canon::Map(kinds)) => {
+            for (kind, weights) in kinds {
+                if !DISTRICT_KINDS.contains(&kind.as_str()) {
+                    report.error(
+                        "bad_enum",
+                        format!("{}.{kind}", o.at("roles")),
+                        format!(
+                            "unknown district kind '{kind}'{} (allowed: {})",
+                            hint(kind, DISTRICT_KINDS.iter().copied()),
+                            DISTRICT_KINDS.join(", ")
+                        ),
+                    );
+                    continue;
+                }
+                let Canon::Map(ws) = weights else {
+                    report.error(
+                        "type_mismatch",
+                        format!("{}.{kind}", o.at("roles")),
+                        "expected an object of role weights",
+                    );
+                    continue;
+                };
+                let mut out = BTreeMap::new();
+                for (role, w) in ws {
+                    let path = format!("{}.{kind}.{role}", o.at("roles"));
+                    if !BUILDING_ROLES.contains(&role.as_str()) {
+                        report.error(
+                            "bad_enum",
+                            path,
+                            format!(
+                                "unknown building role '{role}'{} (allowed: {})",
+                                hint(role, BUILDING_ROLES.iter().copied()),
+                                BUILDING_ROLES.join(", ")
+                            ),
+                        );
+                        continue;
+                    }
+                    match w {
+                        Canon::Int(i) if (0..=10_000).contains(i) => {
+                            out.insert(role.clone(), u32::try_from(*i).unwrap_or(0));
+                        }
+                        _ => report.error(
+                            "bad_range",
+                            path,
+                            "a weight is a whole number from 0 to 10000",
+                        ),
+                    }
+                }
+                roles.insert(kind.clone(), out);
+            }
+        }
+        _ => report.error(
+            "missing_field",
+            o.at("roles"),
+            "this field is required (an object)",
+        ),
+    }
+    let p = WorldgenParams {
+        tiles_per_district: u32_of(o.int("tiles_per_district", 100, 100_000, None, report))?,
+        min_districts: u32_of(o.int("min_districts", 1, 30, None, report))?,
+        max_districts: u32_of(o.int("max_districts", 1, 30, None, report))?,
+        block_min: u32_of(o.int("block_min", 6, 40, None, report))?,
+        block_max: u32_of(o.int("block_max", 6, 40, None, report))?,
+        building_min: u32_of(o.int("building_min", 2, 12, None, report))?,
+        building_max: u32_of(o.int("building_max", 2, 12, None, report))?,
+        gap_permille: u32_of(o.int("gap_permille", 0, 900, Some(150), report))?,
+        max_water_percent: u32_of(o.int("max_water_percent", 0, 80, Some(55), report))?,
+        roles,
+    };
+    let ranges = [
+        (
+            "min_districts",
+            "max_districts",
+            p.min_districts,
+            p.max_districts,
+        ),
+        ("block_min", "block_max", p.block_min, p.block_max),
+        (
+            "building_min",
+            "building_max",
+            p.building_min,
+            p.building_max,
+        ),
+    ];
+    let mut ok = true;
+    for (lo, hi, a, b) in ranges {
+        if a > b {
+            report.error(
+                "bad_range",
+                o.at(lo),
+                format!("{lo} must not be larger than {hi}"),
+            );
+            ok = false;
+        }
+    }
+    // Buildings face the street from both sides of a block, with a sidewalk and a yard in front, so the
+    // streets must be far enough apart for two rows of them.
+    if p.block_min < 2 * (p.building_max + 3) {
+        report.error(
+            "bad_range",
+            o.at("block_min"),
+            "blocks must leave room for two rows of buildings: at least twice the largest building plus six",
+        );
+        ok = false;
+    }
+    ok.then_some(p)
+}
+
 /// Parses whichever of the known files exist in `files` (path to parsed JSON). Files under
 /// `data/game/` that are not known produce a warning.
 pub fn parse_files(files: &BTreeMap<String, Canon>, report: &mut ValidationReport) -> GameData {
@@ -1273,6 +1442,7 @@ pub fn parse_files(files: &BTreeMap<String, Canon>, report: &mut ValidationRepor
             OCCUPATIONS_FILE => data.occupations = parse_occupations(value, report),
             NAMES_FILE => data.names = parse_names(value, report),
             RESIDENTS_FILE => data.residents = parse_residents(value, report),
+            WORLDGEN_FILE => data.worldgen = parse_worldgen(value, report),
             other => report.warn(
                 "unknown_game_file",
                 other.to_owned(),

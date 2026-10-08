@@ -466,11 +466,9 @@ fn the_plan_source_adds_the_days_routine_and_an_urgent_need_is_wanted_at_once() 
 
 #[test]
 fn residents_look_after_themselves_over_several_days() {
-    // Open ground: crowded gathering places and one-tile corridors are a routing problem (pawn-aware
-    // routing, milestone 1.3), not a needs problem, so this checks the needs loop on its own.
-    let mut sim =
-        Sim::with_dev_systems(WorldState::new("Dev", "look-after")).with_content(content());
-    submit_town(&mut sim, 4, 0);
+    // The dev town has a pond, roads and one-tile passages; pawns that stand still do not trap each other
+    // (pawn-aware routing, S-018), so six residents eat, sleep and never collapse.
+    let mut sim = dev_town(6, "look-after");
     let mut lowest = (1000, 1000, 1000);
     let (mut collapsed, mut ate, mut slept) = (0, 0, 0);
     for _ in 0..(4 * 1440) {
@@ -502,7 +500,7 @@ fn residents_look_after_themselves_over_several_days() {
         "nobody collapsed; lowest (hunger, energy, social) = {lowest:?}"
     );
     assert!(
-        ate >= 30 && slept >= 16,
+        ate >= 45 && slept >= 24,
         "everyone ate and slept most days: ate {ate}, slept {slept}"
     );
     assert!(lowest.0 > 0 && lowest.1 > 0, "lowest {lowest:?}");

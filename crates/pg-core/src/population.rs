@@ -359,19 +359,39 @@ fn plan_relationships(data: &GameData, seed: Seed, plan: &mut PopulationPlan) {
     plan.relationships.sort_by_key(|r| (r.a, r.b));
 }
 
-/// Puts `plan` into `world`: pawns on `tiles` (one per resident, in order) of `map`, their households,
-/// starting relationships and shared memories. Returns the new pawns' ids in resident order. Refuses
-/// before changing anything if there are too few tiles.
+/// Where each resident lives and works: one entry per resident, in plan order.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PlacePlan {
+    /// The tile each resident calls home (they start the world standing on it).
+    pub homes: Vec<Tile>,
+    /// Where each resident works, if their occupation has a place.
+    pub workplaces: Vec<Option<Tile>>,
+}
+
+impl PlacePlan {
+    /// Everyone at home on the given tiles, with no workplaces (tests and tools).
+    pub fn at(homes: Vec<Tile>) -> PlacePlan {
+        PlacePlan {
+            workplaces: vec![None; homes.len()],
+            homes,
+        }
+    }
+}
+
+/// Puts `plan` into `world`: pawns standing on their home tiles of `map`, their households, starting
+/// relationships and shared memories. Returns the new pawns' ids in resident order. Refuses before changing
+/// anything if there are too few tiles.
 pub fn apply_population(
     world: &mut WorldState,
     data: &GameData,
     plan: &PopulationPlan,
     map: EntityId,
-    tiles: &[Tile],
+    places: &PlacePlan,
 ) -> Result<Vec<EntityId>, WorldError> {
-    if tiles.len() < plan.residents.len() {
+    if places.homes.len() < plan.residents.len() {
         return Err(WorldError::NotPassable(Tile::new(-1, -1)));
     }
+    let tiles = &places.homes;
     let memory: Option<&MemoryParams> = data.memory.as_ref();
     let rel_params: Option<&RelationshipParams> = data.relationships.as_ref();
 
@@ -384,6 +404,8 @@ pub fn apply_population(
                 variation: r.variation,
             });
             p.needs = r.needs.clone();
+            p.home_tile = Some(*tile);
+            p.workplace = places.workplaces.get(ids.len()).copied().flatten();
         }
         ids.push(id);
     }
@@ -577,7 +599,7 @@ mod tests {
         let m = w.create_map(MapKind::Overworld, 20, 20).unwrap();
         let p = plan_population(&d, w.seed(), n).unwrap();
         let tiles: Vec<Tile> = (0..n as i32).map(|i| Tile::new(i % 20, i / 20)).collect();
-        let ids = apply_population(&mut w, &d, &p, m, &tiles).unwrap();
+        let ids = apply_population(&mut w, &d, &p, m, &PlacePlan::at(tiles)).unwrap();
         (w, ids)
     }
 
@@ -666,7 +688,7 @@ mod tests {
             let mut w = WorldState::new("T", &seed);
             let m = w.create_map(MapKind::Overworld, 10, 10).unwrap();
             let tiles: Vec<Tile> = (0..n as i32).map(|i| Tile::new(i % 10, i / 10)).collect();
-            apply_population(&mut w, &d, &p, m, &tiles).unwrap();
+            apply_population(&mut w, &d, &p, m, &PlacePlan::at(tiles)).unwrap();
             proptest::prop_assert_eq!(w.pawns.len(), n);
         }
     }
@@ -678,7 +700,9 @@ mod tests {
         let m = w.create_map(MapKind::Overworld, 10, 10).unwrap();
         let p = plan_population(&d, w.seed(), 5).unwrap();
         let before = w.state_hash();
-        assert!(apply_population(&mut w, &d, &p, m, &[Tile::new(0, 0)]).is_err());
+        assert!(
+            apply_population(&mut w, &d, &p, m, &PlacePlan::at(vec![Tile::new(0, 0)])).is_err()
+        );
         assert_eq!(w.state_hash(), before);
     }
 }

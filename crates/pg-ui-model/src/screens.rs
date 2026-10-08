@@ -120,6 +120,22 @@ fn new_world(f: &NewWorldForm, t: Text) -> Tree {
             max: 50,
             value: f.residents,
         },
+        Widget::Slider {
+            id: "new.water".into(),
+            label: t("ui.new.water", &[]),
+            min: 0,
+            max: 50,
+            value: f.water,
+        },
+        Widget::Choice {
+            id: "new.tone".into(),
+            label: t("ui.new.tone", &[]),
+            options: ["cozy", "standard", "mature"]
+                .iter()
+                .map(|v| ((*v).to_owned(), t(&format!("ui.new.tone.{v}"), &[])))
+                .collect(),
+            value: f.tone.clone(),
+        },
     ];
     if let Some(e) = f.error {
         w.push(Widget::Label(t(e, &[])));
@@ -588,6 +604,8 @@ fn new_create(m: &mut AppModel) -> Vec<AppEffect> {
         seed: f.seed.trim().to_owned(),
         size: f.size,
         residents: u32::try_from(f.residents).unwrap_or(0),
+        water: u32::try_from(f.water).unwrap_or(0),
+        tone: f.tone.clone(),
     }]
 }
 
@@ -739,6 +757,14 @@ pub(crate) fn choose(m: &mut AppModel, id: &str, v: &str) -> Vec<AppEffect> {
             }
             Vec::new()
         }
+        ("new", "new.tone") => {
+            if let Screen::NewWorld(f) = m.screen_mut() {
+                if ["cozy", "standard", "mature"].contains(&v) {
+                    f.tone = v.to_owned();
+                }
+            }
+            Vec::new()
+        }
         ("ai", "ai.provider") => {
             if !m.ai_state().providers.iter().any(|p| p.id == v) {
                 return Vec::new();
@@ -767,6 +793,12 @@ pub(crate) fn slide(m: &mut AppModel, id: &str, v: i64) -> Vec<AppEffect> {
         ("new", "new.residents") => {
             if let Screen::NewWorld(f) = m.screen_mut() {
                 f.residents = v.clamp(0, 50);
+            }
+            Vec::new()
+        }
+        ("new", "new.water") => {
+            if let Screen::NewWorld(f) = m.screen_mut() {
+                f.water = v.clamp(0, 50);
             }
             Vec::new()
         }

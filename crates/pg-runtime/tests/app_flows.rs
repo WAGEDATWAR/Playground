@@ -240,7 +240,7 @@ fn the_pause_menu_leaves_the_world_and_lists_it() {
     let mut d = m.launch(&c);
     d.click("main.new");
     d.click("new.create");
-    d.settle(|d| d.model.hud().pawns == 10);
+    d.settle(|d| d.model.hud().pawns == 14);
     d.send(UiEvent::Key(Key::Escape));
     assert!(matches!(d.model.screen(), Screen::Pause));
     d.click("pause.menu");
@@ -249,7 +249,7 @@ fn the_pause_menu_leaves_the_world_and_lists_it() {
     assert_eq!(d.model.worlds().len(), 1, "the list was refreshed");
     d.click("main.saved");
     let t = d.text();
-    assert!(t.contains("New Town: day 0, 10 residents"), "{t}");
+    assert!(t.contains("New Town: day 0, 14 residents"), "{t}");
     no_missing_strings(&t);
 }
 
@@ -259,7 +259,7 @@ fn losing_focus_pauses_and_saves_and_the_player_resumes() {
     let mut d = m.launch(&content(&[]));
     d.click("main.new");
     d.click("new.create");
-    d.settle(|d| d.model.hud().pawns == 10);
+    d.settle(|d| d.model.hud().pawns == 14);
     d.click("hud.speed.3x");
     d.settle(|d| d.model.hud().running);
     d.send(UiEvent::FocusLost);
@@ -441,7 +441,7 @@ fn export_import_and_delete_round_trip_a_world() {
     d.click("main.new");
     d.type_into("new.name", "Exported Town");
     d.click("new.create");
-    d.settle(|d| d.model.hud().pawns == 10);
+    d.settle(|d| d.model.hud().pawns == 14);
     d.send(UiEvent::Key(Key::Escape));
     d.click("pause.menu");
     d.click("main.saved");
@@ -489,7 +489,7 @@ fn a_damaged_save_is_recovered_or_refused_with_a_reason_and_other_worlds_are_unt
     d.click("main.new");
     d.type_into("new.name", "Fragile");
     d.click("new.create");
-    d.settle(|d| d.model.hud().pawns == 10);
+    d.settle(|d| d.model.hud().pawns == 14);
     d.send(UiEvent::Key(Key::Escape));
     d.click("pause.save");
     d.settle(|d| d.model.hud().status.contains("Saved"));
@@ -633,7 +633,7 @@ fn every_string_key_a_screen_asks_for_exists_and_none_is_blank() {
     d.click("main.new");
     d.click("new.create");
     grab(&d);
-    d.settle(|d| d.model.hud().pawns == 10);
+    d.settle(|d| d.model.hud().pawns == 14);
     grab(&d);
     d.dev_mode();
     d.send(UiEvent::Key(Key::F3));
@@ -681,7 +681,7 @@ fn the_pseudo_locale_transforms_every_screen_and_keeps_the_arguments() {
     let mut d = m.launch(&c);
     d.click("main.new");
     d.click("new.create");
-    d.settle(|d| d.model.hud().pawns == 10);
+    d.settle(|d| d.model.hud().pawns == 14);
     d.send(UiEvent::Key(Key::Escape));
     d.click("pause.menu");
     d.click("main.options");
@@ -710,7 +710,7 @@ fn the_reason_explorer_and_shadow_verification_show_up_in_the_overlay() {
     d.ctl.set_shadow_threads(Some(2));
     d.click("main.new");
     d.click("new.create");
-    d.settle(|d| d.model.hud().pawns == 10);
+    d.settle(|d| d.model.hud().pawns == 14);
     d.click("hud.speed.27x");
     d.settle(|d| d.model.hud().running);
     d.play(&m, 24);
@@ -726,4 +726,48 @@ fn the_reason_explorer_and_shadow_verification_show_up_in_the_overlay() {
         "spans were verified: {}",
         data.shadow
     );
+}
+
+#[test]
+fn the_new_world_controls_shape_the_generated_town() {
+    use pg_core::map::{Tile, WATER};
+    use pg_core::world::TonePreset;
+    use pg_persist::store::{LoadOptions, SlotStore};
+    let m = Machine::new();
+    let c = content(&[]);
+    let mut d = m.launch(&c);
+    d.click("main.new");
+    d.type_into("new.name", "Shoreline");
+    d.type_into("new.seed", "controls");
+    d.send(UiEvent::Choose("new.size".into(), "small".into()));
+    d.send(UiEvent::Slide("new.residents".into(), 12));
+    d.send(UiEvent::Slide("new.water".into(), 30));
+    d.send(UiEvent::Choose("new.tone".into(), "cozy".into()));
+    d.click("new.create");
+    d.settle(|d| d.model.hud().pawns == 12);
+    let store = SlotStore::new(m.storage.as_ref());
+    let world = store
+        .load("shoreline", &LoadOptions::default())
+        .unwrap()
+        .world;
+    assert_eq!(world.settings.tone, TonePreset::Cozy);
+    assert_eq!(world.pawns.len(), 12);
+    assert!(!world.town.buildings.is_empty() && !world.town.gathering.is_empty());
+    let (_, map) = world.maps.iter().next().unwrap();
+    assert_eq!((map.width(), map.height()), (48, 36));
+    let water = (0..map.height())
+        .flat_map(|y| (0..map.width()).map(move |x| Tile::new(x, y)))
+        .filter(|t| map.terrain_at(*t) == Some(WATER))
+        .count();
+    assert!(
+        water * 100 / 1728 >= 25,
+        "30 percent water asked for, got {water} tiles"
+    );
+    assert!(pg_core::worldgen::validate_world(&world).is_ok());
+    // The picture saved for the Saved Worlds list is of the town.
+    d.send(UiEvent::Key(Key::Escape));
+    d.click("pause.menu");
+    let listed = d.model.worlds().first().and_then(|w| w.thumbnail.clone());
+    let picture = listed.and_then(|name| d.ctl.thumbnail_image(&name));
+    assert!(picture.is_some_and(|(w, h, _)| w > 0 && h > 0));
 }
