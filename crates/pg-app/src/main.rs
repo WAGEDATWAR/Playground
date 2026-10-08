@@ -7,7 +7,7 @@
 //!          --pack <dir>       also load a content pack (developer use, repeatable)
 //!          --no-vsync         do not wait for the display
 //!          --shadow <n>       re-run every keyframe span on n threads and compare (developer)
-//!          --demo <screen>    open straight on a screen (new, options, ai, saved, game, inspector, pause, overlay)
+//!          --demo <screen>    open straight on a screen (new, options, ai, saved, game, inspector, journal, pause, overlay)
 //! ```
 
 mod app;

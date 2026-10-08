@@ -22,7 +22,7 @@ The repository is public (D-047), so GitHub Actions minutes are free again. Loca
 
 1. ~~**S-069 social report and S-067 console extras**~~ done (D-054) (easy, small, no state changes): the report is the tuning aid for the next step; the console extras are model and shell only.
 2. ~~**Social refinement batch: S-056 personality, S-057 per-turn tone and line bands, S-054 remember-when callbacks**~~ done (D-055) (medium; changes saved state, so one re-pin for all three, tuned with the social report).
-3. **S-058 town journal** (medium; built from the event catalog's severities; observation and possession modes only, D-048).
+3. ~~**S-058 town journal**~~ done (D-056) (medium; built from the event catalog's severities; observation and possession modes only, D-048).
 4. **S-039 main-menu backdrop** (medium; reuses the renderer and a tiny seeded town; pure polish, so after the screens settle).
 5. **S-037 native dialogs with `rfd`** (medium; new dependency and licence check, per-OS behaviour; import, export and pack installation).
 6. **Mods screen** (largest; list, enable and disable, capability approval, errors, safe-mode launch; needs the enabled set saved and the loader to honour it).

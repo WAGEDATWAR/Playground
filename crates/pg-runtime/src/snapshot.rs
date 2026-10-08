@@ -52,6 +52,8 @@ pub struct RenderSnapshot {
     pub resident: Option<pg_ui_model::inspector::ResidentView>,
     /// What residents are saying right now: `(speaker, text)` for conversations someone can hear.
     pub bubbles: Vec<(EntityId, String)>,
+    /// The town journal, oldest first (milestone 1.7).
+    pub journal: std::sync::Arc<Vec<pg_ui_model::journal::JournalEntry>>,
 }
 
 /// How many recent events a snapshot carries.
@@ -118,6 +120,7 @@ impl RenderSnapshot {
             keyframe_hash: prev.map_or_else(String::new, |p| p.keyframe_hash.clone()),
             resident: None,
             bubbles: Vec::new(),
+            journal: prev.map_or_else(Default::default, |p| std::sync::Arc::clone(&p.journal)),
             failures: world
                 .pawns
                 .iter()

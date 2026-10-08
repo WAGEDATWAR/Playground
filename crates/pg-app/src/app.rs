@@ -153,6 +153,11 @@ impl App {
                 self.dispatch(UiEvent::Key(pg_ui_model::Key::Console));
                 self.dispatch(UiEvent::Toggle("console.type.debug".into(), true));
             }
+            "journal" => {
+                start_world(self);
+                click(self, "hud.speed.27x");
+                self.dispatch(UiEvent::Key(pg_ui_model::Key::Journal));
+            }
             "inspector" => {
                 start_world(self);
                 // Focus the first resident, as if it had been clicked.
@@ -235,6 +240,10 @@ impl App {
         let tree = self.model.tree(&t);
         let hud = self.model.hud_parts(&t);
         let overlay = self.model.overlay_tree(&t);
+        let journal = (self.model.journal_visible())
+            .then(|| self.controller.snapshot())
+            .flatten()
+            .map(|s| pg_ui_model::journal::tree(&s.journal, &t));
         let inspector = self.controller.snapshot().and_then(|s| {
             s.resident
                 .as_ref()
@@ -377,6 +386,20 @@ impl App {
                         .max_height(560.0)
                         .show(ui, |ui| {
                             let drawn = draw_tree(ui, &i, None, &self.overlay_tracker, &mut images);
+                            events.extend(drawn.events);
+                        });
+                });
+        }
+        if let Some(j) = journal {
+            egui::Window::new("Town journal")
+                .title_bar(false)
+                .default_width(380.0)
+                .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-8.0, 40.0))
+                .show(&ctx, |ui| {
+                    egui::ScrollArea::vertical()
+                        .max_height(480.0)
+                        .show(ui, |ui| {
+                            let drawn = draw_tree(ui, &j, None, &self.overlay_tracker, &mut images);
                             events.extend(drawn.events);
                         });
                 });

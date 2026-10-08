@@ -283,5 +283,16 @@
   "ui.inspect.personality": "Personality: {trait}",
   "ui.inspect.trait.outgoing": "outgoing",
   "ui.inspect.trait.reserved": "reserved",
-  "ui.inspect.trait.balanced": "balanced"
+  "ui.inspect.trait.balanced": "balanced",
+  "ui.hud.journal": "Journal",
+  "ui.journal.title": "Town journal",
+  "ui.journal.empty": "Nothing worth writing down yet.",
+  "ui.journal.when": "Day {day}, {time}",
+  "ui.journal.close": "Close",
+  "journal.label": "{a} and {b} are now {label}.",
+  "journal.collapsed": "{pawn} collapsed from exhaustion.",
+  "journal.recovered": "{pawn} got back on their feet.",
+  "journal.critical": "{pawn} is in a bad way: {need} is critical.",
+  "journal.talk_warm": "{a} and {b} {topic} and grew closer.",
+  "journal.talk_sour": "{a} and {b} {topic} and it left a sour taste."
 }

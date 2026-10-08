@@ -123,6 +123,9 @@ pub enum LoopEvent {
 type SaveJob = JobHandle<Result<SaveReport, String>>;
 
 pub struct SimLoop {
+    /// What happened in the town worth noticing (milestone 1.7), and its last published form.
+    journal: crate::journal::Journal,
+    journal_view: Arc<Vec<pg_ui_model::journal::JournalEntry>>,
     factory: SimFactory,
     sim: Sim,
     ring: KeyframeRing,
@@ -177,6 +180,8 @@ impl SimLoop {
             shadows: Vec::new(),
             shadow_span: None,
             day_hash: String::new(),
+            journal: crate::journal::Journal::new(),
+            journal_view: Arc::new(Vec::new()),
             dirty: false,
         }
     }
@@ -336,6 +341,10 @@ impl SimLoop {
                     self.day_hash = h.short();
                 }
                 self.to_console(&report.events);
+                if self.journal.observe(&report.events, self.sim.world()) {
+                    self.journal_view = std::sync::Arc::new(self.journal.entries());
+                    self.dirty = true;
+                }
                 if let Some(d) = &self.services.dialogue {
                     d.after_tick(&report.events, &mut self.sim, report.tick);
                 }
@@ -641,6 +650,7 @@ impl SimLoop {
             );
             snap.resident = focus.and_then(|f| crate::inspect::resident_view(&self.sim, f));
             snap.bubbles = bubbles;
+            snap.journal = std::sync::Arc::clone(&self.journal_view);
             snap.keyframes = self.ring.ticks();
             snap.keyframe_hash = self
                 .ring

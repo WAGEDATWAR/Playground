@@ -10,6 +10,7 @@ pub mod dialogue;
 pub mod exec;
 pub mod guard;
 pub mod inspect;
+pub mod journal;
 pub mod keyframes;
 pub mod pool;
 pub mod profile;

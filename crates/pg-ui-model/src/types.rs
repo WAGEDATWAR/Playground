@@ -22,6 +22,8 @@ pub enum Key {
     F3,
     /// The backtick key: toggles the developer console.
     Console,
+    /// The J key: toggles the town journal.
+    Journal,
 }
 
 /// One saved world as the Saved Worlds list shows it (suggestion S-024), built from the manifest alone.

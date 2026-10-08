@@ -1026,7 +1026,10 @@ fn the_in_game_screen_has_a_top_bar_bottom_right_controls_and_a_notice_for_a_ret
             .collect()
     };
     assert!(ids(&p.top).is_empty(), "the top bar is information only");
-    assert_eq!(ids(&p.controls), ["hud.pause", "hud.speed", "hud.menu"]);
+    assert_eq!(
+        ids(&p.controls),
+        ["hud.pause", "hud.speed", "hud.journal", "hud.menu"]
+    );
     assert!(p.dialog.is_empty());
     m.update(UiEvent::Hud(HudInfo {
         suspended: true,
@@ -1187,4 +1190,34 @@ fn the_console_is_not_part_of_the_keyboard_focus_order_of_the_screen() {
     press(&mut m, Key::Console);
     m.append_console(vec![log_entry(1, Severity::Info, "x")]);
     assert_eq!(m.tree(&show).focus_order().len(), before);
+}
+
+#[test]
+fn the_journal_opens_from_its_button_or_the_j_key_in_a_world_and_closes_again() {
+    let mut m = boot(Vec::new(), None);
+    press(&mut m, Key::Journal);
+    assert!(!m.journal_visible(), "there is no world yet");
+    let mut m = in_world();
+    assert!(!m.journal_visible());
+    click(&mut m, "hud.journal");
+    assert!(m.journal_visible());
+    click(&mut m, "journal.close");
+    assert!(!m.journal_visible());
+    press(&mut m, Key::Journal);
+    assert!(m.journal_visible());
+    press(&mut m, Key::Journal);
+    assert!(!m.journal_visible());
+    // The pause menu is not the journal's place: the key does nothing there.
+    click(&mut m, "hud.menu");
+    press(&mut m, Key::Journal);
+    assert!(!m.journal_visible());
+    // A new world starts with it closed.
+    press(&mut m, Key::Escape);
+    press(&mut m, Key::Journal);
+    assert!(m.journal_visible());
+    m.update(UiEvent::Hud(HudInfo {
+        world_name: "Other".into(),
+        ..HudInfo::default()
+    }));
+    assert!(m.journal_visible(), "the same world carries on");
 }

@@ -124,6 +124,10 @@ pub struct AppModel {
     open_drawer: Option<String>,
     overlay: Overlay,
     console: ConsoleModel,
+    /// The town journal window is open.
+    journal_open: bool,
+    /// How the world is being played; the journal is for observation and possession modes only.
+    mode: crate::journal::Mode,
 }
 
 impl Default for AppModel {
@@ -152,6 +156,8 @@ impl AppModel {
             open_drawer: None,
             overlay: Overlay::default(),
             console: ConsoleModel::default(),
+            journal_open: false,
+            mode: crate::journal::Mode::Observation,
         }
     }
 
@@ -173,6 +179,19 @@ impl AppModel {
 
     pub fn worlds(&self) -> &[WorldEntry] {
         &self.worlds
+    }
+
+    /// Whether the journal window should be drawn.
+    pub fn journal_visible(&self) -> bool {
+        self.journal_open && self.in_world && crate::journal::available(self.mode)
+    }
+
+    pub fn set_journal_open(&mut self, open: bool) {
+        self.journal_open = open;
+    }
+
+    pub fn toggle_journal(&mut self) {
+        self.journal_open = !self.journal_open;
     }
 
     pub fn console(&self) -> &ConsoleModel {
@@ -408,6 +427,7 @@ impl AppModel {
                 self.in_world = true;
                 // Every world starts with the console's filters at their defaults (Debug off).
                 self.console.reset_filters();
+                self.journal_open = false;
                 self.reset_to(Screen::InGame);
                 Vec::new()
             }
@@ -497,6 +517,15 @@ impl AppModel {
             }
             return Vec::new();
         }
+        if k == Key::Journal {
+            if self.in_world
+                && crate::journal::available(self.mode)
+                && matches!(self.screen, Screen::InGame)
+            {
+                self.journal_open = !self.journal_open;
+            }
+            return Vec::new();
+        }
         if k == Key::Escape && self.console.visible() {
             self.console.hide();
             return Vec::new();
@@ -524,7 +553,7 @@ impl AppModel {
             },
             Key::Left => self.adjust(-1),
             Key::Right => self.adjust(1),
-            Key::F3 | Key::Console => Vec::new(),
+            Key::F3 | Key::Console | Key::Journal => Vec::new(),
         }
     }
 
@@ -646,6 +675,10 @@ impl AppModel {
         }
         if id.starts_with("console.") {
             return self.console.click(id);
+        }
+        if id == "journal.close" {
+            self.journal_open = false;
+            return Vec::new();
         }
         crate::screens::activate(self, id)
     }

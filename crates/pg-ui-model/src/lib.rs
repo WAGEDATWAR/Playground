@@ -12,6 +12,7 @@
 pub mod app;
 pub mod console;
 pub mod inspector;
+pub mod journal;
 pub mod layout;
 pub mod overlay;
 pub mod palette;

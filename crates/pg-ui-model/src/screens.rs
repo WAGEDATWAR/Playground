@@ -466,6 +466,7 @@ pub(crate) fn hud_parts(m: &AppModel, t: Text) -> HudParts {
                 })
                 .collect(),
         },
+        Widget::button("hud.journal", t("ui.hud.journal", &[])),
         Widget::button("hud.menu", t("ui.hud.menu", &[])),
     ];
     HudParts {
@@ -560,6 +561,10 @@ pub(crate) fn activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
         ("hud", "hud.pause") => vec![AppEffect::SetRunning(!m.hud().running)],
         ("hud", "hud.resume") => vec![AppEffect::SetRunning(true)],
         ("hud", "hud.menu") => m.open_pause(),
+        ("hud", "hud.journal") => {
+            m.toggle_journal();
+            Vec::new()
+        }
         ("hud", "hud.speed") => {
             m.toggle_drawer("hud.speed");
             Vec::new()

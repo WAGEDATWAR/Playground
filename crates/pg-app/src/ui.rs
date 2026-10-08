@@ -495,6 +495,8 @@ pub fn collect_keys(ctx: &egui::Context) -> Vec<Key> {
         take(EKey::F3, Modifiers::NONE, Key::F3, true);
         // The backtick opens the console; while a text field has focus it types a backtick instead.
         take(EKey::Backtick, Modifiers::NONE, Key::Console, false);
+        // J opens the town journal (not while typing in a field).
+        take(EKey::J, Modifiers::NONE, Key::Journal, false);
         take(EKey::ArrowUp, Modifiers::NONE, Key::Up, false);
         take(EKey::ArrowDown, Modifiers::NONE, Key::Down, false);
         take(EKey::ArrowLeft, Modifiers::NONE, Key::Left, false);
