@@ -46,6 +46,14 @@ pub fn registry() -> Vec<DevTool> {
             true,
         ),
         tool(
+            "social",
+            "Social report",
+            "explain",
+            "How a town's social life went over some days: conversations per day and topics, loneliness, moods, relationship labels, strongest and weakest pairs, the friendship graph.",
+            Some("pg residents report"),
+            false,
+        ),
+        tool(
             "dialogue",
             "Conversation lines",
             "explain",

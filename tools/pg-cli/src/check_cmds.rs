@@ -57,6 +57,24 @@ pub fn check_cmd(rest: &[String]) -> Result<ExitCode, String> {
             needs: Some("golden/schema-shape.txt"),
         },
         Check {
+            name: "social report",
+            args: args(&[
+                "residents",
+                "report",
+                "--seed",
+                "check",
+                "--town",
+                "48x36",
+                "--residents",
+                "10",
+                "--days",
+                "3",
+                "--content",
+                "data/base",
+            ]),
+            needs: Some("data/base"),
+        },
+        Check {
             name: "resident inspector (conversations, memories)",
             args: args(&[
                 "residents",

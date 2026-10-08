@@ -20,7 +20,7 @@ The repository is public (D-047), so GitHub Actions minutes are free again. Loca
 
 ## Remaining 1.7 work, in the order we will do it
 
-1. **S-069 social report and S-067 console extras** (easy, small, no state changes): the report is the tuning aid for the next step; the console extras are model and shell only.
+1. ~~**S-069 social report and S-067 console extras**~~ done (D-054) (easy, small, no state changes): the report is the tuning aid for the next step; the console extras are model and shell only.
 2. **Social refinement batch: S-056 personality, S-057 per-turn tone and line bands, S-054 remember-when callbacks** (medium; changes saved state, so one re-pin for all three, tuned with the social report).
 3. **S-058 town journal** (medium; built from the event catalog's severities; observation and possession modes only, D-048).
 4. **S-039 main-menu backdrop** (medium; reuses the renderer and a tiny seeded town; pure polish, so after the screens settle).

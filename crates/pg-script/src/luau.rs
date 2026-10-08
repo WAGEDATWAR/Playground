@@ -953,6 +953,10 @@ impl ScriptVm for LuauVm {
         Ok(())
     }
 
+    fn take_log(&mut self) -> Vec<(LogLevel, String)> {
+        self.take_log_lines()
+    }
+
     fn run_load_phase(&mut self, entry: &str, fuel: Fuel) -> Result<Registrations, VmError> {
         let source = lock(&self.shared)
             .sources

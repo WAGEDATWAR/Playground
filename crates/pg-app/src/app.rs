@@ -60,6 +60,8 @@ pub struct App {
     view: GameView,
     /// The resident last handed to the dialogue service as the one being listened to.
     focus: Option<pg_core::id::EntityId>,
+    /// Text waiting to go on the clipboard.
+    pending_copy: Option<String>,
     tracker: FocusTracker,
     overlay_tracker: FocusTracker,
     styled: bool,
@@ -82,6 +84,7 @@ impl App {
             model,
             view: GameView::default(),
             focus: None,
+            pending_copy: None,
             tracker: FocusTracker::default(),
             overlay_tracker: FocusTracker::default(),
             styled: false,
@@ -95,6 +98,11 @@ impl App {
         while let Some(e) = queue.pop() {
             let was_in_world = self.model.in_world();
             for fx in self.model.update(e) {
+                if let AppEffect::CopyText(text) = &fx {
+                    // The clipboard belongs to the window; the next frame hands it over.
+                    self.pending_copy = Some(text.clone());
+                    continue;
+                }
                 if matches!(fx, AppEffect::LeaveWorld) {
                     self.view.reset();
                 }
@@ -206,6 +214,9 @@ impl App {
             self.model.set_overlay_data(data);
         }
         let ctx = ui.ctx().clone();
+        if let Some(text) = self.pending_copy.take() {
+            ctx.copy_text(text);
+        }
         if !self.styled {
             self.styled = true;
             ctx.all_styles_mut(|s| {

@@ -251,5 +251,11 @@
   "ui.inspect.conversations": "Recent conversations",
   "ui.inspect.none": "Nothing yet",
   "ui.inspect.recorded": "recorded words",
-  "ui.inspect.rebuilt": "standard lines"
+  "ui.inspect.rebuilt": "standard lines",
+  "ui.console.copy": "Copy",
+  "ui.console.save": "Save log",
+  "ui.console.preset_save": "Save filter",
+  "ui.console.preset_clear": "Forget filters",
+  "ui.notice.log_saved": "Console log saved to {path}",
+  "ui.notice.copied": "Copied {count} lines"
 }

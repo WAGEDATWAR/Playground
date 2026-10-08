@@ -263,6 +263,10 @@ pub enum AppEffect {
     CutBundle,
     /// Empties the developer console's log.
     ClearConsole,
+    /// Puts text on the clipboard (handled by the shell).
+    CopyText(String),
+    /// Writes the developer console's visible lines to a log file (redacted); the text is what was shown.
+    SaveConsoleLog(String),
     SetSetting {
         id: String,
         value: SettingValue,
@@ -317,6 +321,8 @@ impl fmt::Debug for AppEffect {
             AppEffect::Rewind { tick } => write!(f, "Rewind({tick})"),
             AppEffect::CutBundle => write!(f, "CutBundle"),
             AppEffect::ClearConsole => write!(f, "ClearConsole"),
+            AppEffect::CopyText(t) => write!(f, "CopyText({} chars)", t.len()),
+            AppEffect::SaveConsoleLog(t) => write!(f, "SaveConsoleLog({} chars)", t.len()),
             AppEffect::SelectProvider(p) => write!(f, "SelectProvider({p})"),
             AppEffect::ClearKey(p) => write!(f, "ClearKey({p})"),
             AppEffect::TestConnection(p) => write!(f, "TestConnection({p})"),

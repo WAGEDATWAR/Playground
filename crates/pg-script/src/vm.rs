@@ -242,6 +242,12 @@ pub trait ScriptVm: Send {
     /// Runs the entry script with registration enabled, then closes the registries and freezes globals.
     fn run_load_phase(&mut self, entry: &str, fuel: Fuel) -> Result<Registrations, VmError>;
 
+    /// Lines the pack logged since the last call to this (what a pack printed while loading, say). The
+    /// default is none, for VMs that cannot log.
+    fn take_log(&mut self) -> Vec<(LogLevel, String)> {
+        Vec::new()
+    }
+
     /// Calls a registered function. `args` is a map with `ctx` (the context data) and optionally `entity`.
     fn call(&mut self, handler: HandlerId, args: &Val, fuel: Fuel) -> Result<CallResult, VmError>;
 

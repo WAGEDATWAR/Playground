@@ -681,6 +681,27 @@ impl AppController {
                 self.console.clear();
                 Vec::new()
             }
+            AppEffect::CopyText(_) => Vec::new(),
+            AppEffect::SaveConsoleLog(text) => {
+                // The text is what the console showed, already redacted on its way in; redact again anyway.
+                let clean = pg_host::redact(&text, &[]);
+                let iso = self.svc.clock.wall_clock_iso();
+                let name = format!("{EXPORT_DIR}console-{}.log", iso.replace([':', '.'], "-"));
+                match self.svc.storage.write_atomic(&name, clean.as_bytes()) {
+                    Ok(()) => {
+                        let path = match &self.svc.data_dir {
+                            Some(d) => d.join(&name).display().to_string(),
+                            None => name,
+                        };
+                        vec![UiEvent::Notice(
+                            self.text("ui.notice.log_saved", &[("path", &path)]),
+                        )]
+                    }
+                    Err(e) => vec![UiEvent::Failed(format!(
+                        "The log could not be written: {e}"
+                    ))],
+                }
+            }
             AppEffect::CutBundle => {
                 self.send(Control::CutBundle);
                 Vec::new()

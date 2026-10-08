@@ -13,10 +13,11 @@ pub fn residents_cmd(args: &[String]) -> Result<ExitCode, String> {
     match args.first().map(String::as_str) {
         Some("generate") => generate(&args[1..]),
         Some("inspect") => inspect(&args[1..]),
+        Some("report") => report(&args[1..]),
         Some(other) => Err(format!(
-            "unknown residents command '{other}' (try generate or inspect)"
+            "unknown residents command '{other}' (try generate, inspect or report)"
         )),
-        None => Err("residents needs a command: generate or inspect".into()),
+        None => Err("residents needs a command: generate, inspect or report".into()),
     }
 }
 
@@ -292,6 +293,202 @@ relationships:"
             l,
             r.last_topic.as_deref().unwrap_or("-"),
             r.forgotten
+        );
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+const REPORT_USAGE: &str = "usage: pg residents report --seed <text> --town WxH [--residents N] [--days N] [--dot FILE] [--content dir]...";
+
+/// `pg residents report`: how a town's social life went (suggestion S-069). Loneliness, moods, how many
+/// conversations a day and on what, how the relationships are labelled, the strongest and weakest pairs, and
+/// the friendship graph (as text, and as Graphviz with `--dot`). A way to see whether tuning did what was meant.
+fn report(args: &[String]) -> Result<ExitCode, String> {
+    use std::collections::BTreeMap;
+    let p = parse(args, &SIM_SPEC)?;
+    if p.one("seed").is_none() {
+        return Err(REPORT_USAGE.into());
+    }
+    let mut setup = demo_from_flags(&p)?;
+    let content = setup
+        .content
+        .clone()
+        .map_or_else(|| load_content(&[DEFAULT_CONTENT_DIR.to_owned()]), Ok)?;
+    setup.content = Some(content.clone());
+    let mut sim = build_demo(&setup)?;
+    let days = match (p.parse::<u64>("days")?, p.parse::<u64>("ticks")?) {
+        (Some(d), _) => d,
+        (None, Some(t)) => t.div_ceil(pg_core::time::TICKS_PER_DAY),
+        (None, None) => 7,
+    };
+    let mut per_day: Vec<u64> = vec![0; days as usize];
+    let mut topics: BTreeMap<String, u64> = BTreeMap::new();
+    let mut tones: BTreeMap<String, u64> = BTreeMap::new();
+    let mut cancelled = 0u64;
+    let mut label_changes = 0u64;
+    for _ in 0..days * pg_core::time::TICKS_PER_DAY {
+        let r = sim.step().map_err(|e| e.to_string())?;
+        for e in &r.events {
+            match e.kind.as_str() {
+                "conversation.closed" => {
+                    let day = (e.tick / pg_core::time::TICKS_PER_DAY) as usize;
+                    if let Some(d) = per_day.get_mut(day) {
+                        *d += 1;
+                    }
+                    for (map, field) in [(&mut topics, "topic"), (&mut tones, "tone")] {
+                        if let Some(v) = e.detail.get(field).and_then(|c| c.as_str()) {
+                            *map.entry(v.to_owned()).or_default() += 1;
+                        }
+                    }
+                }
+                "conversation.cancelled" => cancelled += 1,
+                "relationship.label_changed" => label_changes += 1,
+                _ => {}
+            }
+        }
+    }
+    let world = sim.world();
+    let data = content.game();
+    let text = |key: &str| content.strings().text("en", key, &[]);
+    let name = |id: EntityId| {
+        world
+            .pawns
+            .get(id)
+            .map_or_else(|| id.to_string(), |p| p.name.clone())
+    };
+    println!(
+        "social report: {} resident(s), {days} day(s), seed '{}'
+",
+        world.pawns.len(),
+        setup.seed
+    );
+    println!("conversations per day: {:?}  (total {}, called off {cancelled}, label changes {label_changes})", per_day, per_day.iter().sum::<u64>());
+    let fmt = |m: &BTreeMap<String, u64>| {
+        m.iter()
+            .map(|(k, v)| format!("{k} {v}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    println!(
+        "topics: {}
+tones:  {}
+",
+        fmt(&topics),
+        fmt(&tones)
+    );
+    // Social need, in fifths.
+    let mut lonely = [0u32; 5];
+    let mut moods: BTreeMap<String, u32> = BTreeMap::new();
+    for (_, pw) in world.pawns.iter() {
+        let level = pw.needs.get("social").copied().unwrap_or(0).clamp(0, 999);
+        lonely[(level / 200) as usize] += 1;
+        *moods.entry(pw.mood.clone()).or_default() += 1;
+    }
+    println!("social need now (residents per band, lowest first):");
+    for (i, n) in lonely.iter().enumerate() {
+        println!(
+            "  {:>4}-{:<4} {:<3} {}",
+            i * 200,
+            i * 200 + 199,
+            n,
+            "#".repeat(*n as usize)
+        );
+    }
+    println!(
+        "
+moods: {}",
+        fmt(&moods
+            .iter()
+            .map(|(k, v)| (k.clone(), u64::from(*v)))
+            .collect())
+    );
+    let mut labels: BTreeMap<String, u32> = BTreeMap::new();
+    for r in world.relationships.iter() {
+        *labels.entry(r.label.clone()).or_default() += 1;
+    }
+    let label_name = |id: &str| {
+        data.relationships
+            .as_ref()
+            .and_then(|rp| rp.labels.iter().find(|l| l.id == id))
+            .map_or_else(|| id.to_owned(), |l| text(&l.label_key))
+    };
+    println!(
+        "
+relationships ({}): {}",
+        world.relationships.len(),
+        labels
+            .iter()
+            .map(|(k, v)| format!("{} {v}", label_name(k)))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    let mut pairs: Vec<_> = world.relationships.iter().collect();
+    pairs.sort_by(|a, b| b.affinity.cmp(&a.affinity).then(a.key.cmp(&b.key)));
+    println!(
+        "
+strongest pairs:"
+    );
+    for r in pairs.iter().take(5) {
+        println!(
+            "  {:>5}  {} + {}  ({})",
+            r.affinity,
+            name(r.key.a),
+            name(r.key.b),
+            label_name(&r.label)
+        );
+    }
+    println!("weakest pairs:");
+    for r in pairs.iter().rev().take(5) {
+        println!(
+            "  {:>5}  {} + {}  ({})",
+            r.affinity,
+            name(r.key.a),
+            name(r.key.b),
+            label_name(&r.label)
+        );
+    }
+    // The friendship graph: friends and better.
+    let friend_min = data
+        .relationships
+        .as_ref()
+        .and_then(|rp| rp.labels.iter().find(|l| l.id == "friend"))
+        .map_or(550, |l| l.min);
+    let friends: Vec<_> = world
+        .relationships
+        .iter()
+        .filter(|r| r.affinity >= friend_min)
+        .collect();
+    println!(
+        "
+friendship graph ({} edge(s), affinity {friend_min} and up):",
+        friends.len()
+    );
+    for r in &friends {
+        println!("  {} -- {}  ({})", name(r.key.a), name(r.key.b), r.affinity);
+    }
+    if let Some(path) = p.one("dot") {
+        let mut dot = String::from(
+            "graph town {
+  node [shape=ellipse];
+",
+        );
+        for r in &friends {
+            dot.push_str(&format!(
+                "  \"{}\" -- \"{}\" [label=\"{}\"];
+",
+                name(r.key.a),
+                name(r.key.b),
+                r.affinity
+            ));
+        }
+        dot.push_str(
+            "}
+",
+        );
+        std::fs::write(path, dot).map_err(|e| format!("cannot write {path}: {e}"))?;
+        println!(
+            "
+Graphviz written to {path}"
         );
     }
     Ok(ExitCode::SUCCESS)

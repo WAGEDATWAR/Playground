@@ -24,6 +24,37 @@ pub struct ConsoleModel {
     enabled: [bool; 5],
     entries: VecDeque<Entry>,
     last_seq: u64,
+    /// Remembered filter settings for this session: the type switches and the text.
+    presets: Vec<Preset>,
+}
+
+/// Most presets kept.
+pub const MAX_PRESETS: usize = 5;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Preset {
+    pub enabled: [bool; 5],
+    pub filter: String,
+}
+
+impl Preset {
+    /// A short label: the text filter and the types that are on.
+    pub fn label(&self) -> String {
+        let types: String = Severity::ALL
+            .iter()
+            .zip(self.enabled)
+            .filter(|(_, on)| *on)
+            .filter_map(|(s, _)| s.name().chars().next())
+            .collect();
+        if self.filter.is_empty() {
+            types
+        } else {
+            format!(
+                "{types} \"{}\"",
+                self.filter.chars().take(12).collect::<String>()
+            )
+        }
+    }
 }
 
 impl Default for ConsoleModel {
@@ -34,6 +65,7 @@ impl Default for ConsoleModel {
             enabled: ConsoleModel::default_types(),
             entries: VecDeque::new(),
             last_seq: 0,
+            presets: Vec::new(),
         }
     }
 }
@@ -139,8 +171,51 @@ impl ConsoleModel {
                 self.visible = false;
                 Vec::new()
             }
-            _ => Vec::new(),
+            "console.copy" => vec![AppEffect::CopyText(self.visible_text())],
+            "console.save" => vec![AppEffect::SaveConsoleLog(self.visible_text())],
+            "console.preset.save" => {
+                let p = Preset {
+                    enabled: self.enabled,
+                    filter: self.filter.clone(),
+                };
+                if !self.presets.contains(&p) {
+                    self.presets.push(p);
+                    if self.presets.len() > MAX_PRESETS {
+                        self.presets.remove(0);
+                    }
+                }
+                Vec::new()
+            }
+            "console.preset.clear" => {
+                self.presets.clear();
+                Vec::new()
+            }
+            other => {
+                if let Some(p) = other
+                    .strip_prefix("console.preset.")
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .and_then(|i| self.presets.get(i))
+                {
+                    self.enabled = p.enabled;
+                    self.filter = p.filter.clone();
+                }
+                Vec::new()
+            }
         }
+    }
+
+    /// The lines that pass the filters, as one block of text (what Copy and Save use).
+    pub fn visible_text(&self) -> String {
+        let mut out = String::new();
+        for e in self.lines() {
+            out.push_str(&e.line());
+            out.push('\n');
+        }
+        out
+    }
+
+    pub fn presets(&self) -> &[Preset] {
+        &self.presets
     }
 
     pub fn tree(&self, t: Text) -> Tree {
@@ -167,8 +242,26 @@ impl ConsoleModel {
             ),
             Widget::Row(vec![
                 Widget::button("console.clear", t("ui.console.clear", &[])),
+                Widget::button("console.copy", t("ui.console.copy", &[])),
+                Widget::button("console.save", t("ui.console.save", &[])),
                 Widget::button("console.close", t("ui.console.close", &[])),
             ]),
+            Widget::Row(
+                std::iter::once(Widget::button(
+                    "console.preset.save",
+                    t("ui.console.preset_save", &[]),
+                ))
+                .chain(
+                    self.presets
+                        .iter()
+                        .enumerate()
+                        .map(|(i, p)| Widget::button(&format!("console.preset.{i}"), p.label())),
+                )
+                .chain((!self.presets.is_empty()).then(|| {
+                    Widget::button("console.preset.clear", t("ui.console.preset_clear", &[]))
+                }))
+                .collect(),
+            ),
             Widget::Note(t(
                 "ui.console.count",
                 &[
@@ -286,7 +379,10 @@ mod tests {
                 "console.type.error",
                 "console.type.fatal",
                 "console.clear",
-                "console.close"
+                "console.copy",
+                "console.save",
+                "console.close",
+                "console.preset.save"
             ]
         );
     }
@@ -323,5 +419,56 @@ mod tests {
             c.lines().last().unwrap().text,
             format!("line {}", KEPT + 50)
         );
+    }
+
+    #[test]
+    fn copy_and_save_carry_exactly_the_visible_lines() {
+        let mut c = sample();
+        c.text("console.filter", "failed".into());
+        let want = "[Warn]: task failed: blocked
+[Error]: save failed
+"
+        .to_owned();
+        assert_eq!(c.visible_text(), want);
+        assert_eq!(
+            c.click("console.copy"),
+            vec![AppEffect::CopyText(want.clone())]
+        );
+        assert_eq!(
+            c.click("console.save"),
+            vec![AppEffect::SaveConsoleLog(want)]
+        );
+    }
+
+    #[test]
+    fn filter_presets_are_remembered_applied_deduplicated_bounded_and_survive_a_world_load() {
+        let mut c = sample();
+        c.set_enabled(Severity::Debug, true);
+        c.set_enabled(Severity::Info, false);
+        c.text("console.filter", "save".into());
+        c.click("console.preset.save");
+        c.click("console.preset.save");
+        assert_eq!(c.presets().len(), 1, "the same filter is not saved twice");
+        assert_eq!(c.presets()[0].label(), "DWEF \"save\"");
+        c.reset_filters();
+        assert!(!c.is_enabled(Severity::Debug) && c.filter().is_empty());
+        assert_eq!(c.presets().len(), 1, "presets last the session");
+        c.click("console.preset.0");
+        assert!(c.is_enabled(Severity::Debug) && !c.is_enabled(Severity::Info));
+        assert_eq!(c.filter(), "save");
+        for i in 0..8 {
+            c.text("console.filter", format!("f{i}"));
+            c.click("console.preset.save");
+        }
+        assert_eq!(c.presets().len(), MAX_PRESETS);
+        assert_eq!(c.presets().last().unwrap().filter, "f7");
+        let snap = c.tree(&show).snapshot(None);
+        assert!(
+            snap.contains("<console.preset.4>") && snap.contains("<console.preset.clear>"),
+            "{snap}"
+        );
+        c.click("console.preset.99");
+        c.click("console.preset.clear");
+        assert!(c.presets().is_empty());
     }
 }

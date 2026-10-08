@@ -127,6 +127,9 @@ USAGE:
     pg worldgen preview [--seed S] [--size WxH] [--water PERCENT] [--residents N] [--tone T] [--no-map] [--expect HASH]
                                           Generate a town and draw it: districts, roads, buildings, plazas, homes.
     pg residents generate [--seed S] [--count N] [--content dir]...
+    pg residents report --seed S --town WxH [--residents N] [--days N] [--dot FILE] [--content dir]...
+        How a town's social life went: conversations per day and topics, loneliness, moods, labels, the
+        strongest and weakest pairs and the friendship graph.
     pg residents inspect <pawn> --seed S --town WxH [--residents N] [--days N] [--topic T] [--with PAWN] [--content dir]...
                                           The people a seed produces: households, occupations, starting
                                           relationships and shared memories.

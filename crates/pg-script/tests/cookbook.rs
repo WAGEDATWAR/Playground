@@ -460,3 +460,37 @@ fn what_a_pack_prints_reaches_the_developer_console_at_the_level_it_chose() {
     // The events are declared, so debug builds validated them as they were emitted.
     assert!(catalog.get("script.log").is_some());
 }
+
+#[test]
+fn what_a_pack_prints_while_loading_is_not_lost() {
+    use pg_core::events::EventCatalog;
+    let loud = inline_pack(
+        r#"["data","systems"]"#,
+        r#"
+            pg.log.info("loading now")
+            pg.log.warn("a deprecated option")
+            pg.components.register({ name = "c", applies_to = {"pawn"}, fields = { v = pg.field.int(0, 10, 0) } })
+        "#,
+        "loud",
+    );
+    let c = build_set(vec![base(), loud]);
+    let mut r = town(&c, 1);
+    let mut events = Vec::new();
+    for _ in 0..30 {
+        events.extend(r.sim.step().unwrap().events);
+    }
+    let catalog = EventCatalog::shared();
+    let lines: Vec<(&str, String)> = events
+        .iter()
+        .filter(|e| e.kind == "script.log")
+        .map(|e| {
+            let (sev, text) = catalog.console_line(e);
+            (sev.name(), text)
+        })
+        .collect();
+    assert!(
+        lines.contains(&("Info", "[loud] (while loading) loading now".into())),
+        "{lines:?}"
+    );
+    assert!(lines.contains(&("Warn", "[loud] (while loading) a deprecated option".into())));
+}

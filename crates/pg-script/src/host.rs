@@ -162,6 +162,8 @@ pub struct ScriptHost {
     schemas: ExtSchemas,
     failures: Vec<LoadFailure>,
     failures_reported: bool,
+    /// What packs printed while loading, reported to the console with the first tick.
+    load_log: Vec<(String, crate::vm::LogLevel, String)>,
     pending: Vec<PendingError>,
     /// Packs whose hook failed this tick: not asked again until the maintenance system has recorded it.
     failed_now: Vec<String>,
@@ -256,6 +258,7 @@ impl ScriptHost {
             schemas: ExtSchemas::new(),
             failures: Vec::new(),
             failures_reported: false,
+            load_log: Vec::new(),
             pending: Vec::new(),
             failed_now: Vec::new(),
             limits,
@@ -290,9 +293,11 @@ impl ScriptHost {
             })
             .map_err(|e| e.to_string())?;
         }
-        let reg = vm
-            .run_load_phase(&p.entry, Fuel(self.limits.load_fuel))
-            .map_err(|e| e.to_string())?;
+        let loaded = vm.run_load_phase(&p.entry, Fuel(self.limits.load_fuel));
+        for (level, text) in vm.take_log() {
+            self.load_log.push((p.id.clone(), level, text));
+        }
+        let reg = loaded.map_err(|e| e.to_string())?;
         // Cross-validate before anything is declared, so a bad pack leaves no trace.
         let mut defs = Vec::new();
         for c in &reg.components {
@@ -600,6 +605,25 @@ impl ScriptHost {
     fn maintain(&mut self, ctx: &mut TickCtx<'_>) {
         if !self.failures_reported {
             self.failures_reported = true;
+            for (pack, level, text) in std::mem::take(&mut self.load_log) {
+                ctx.emit(
+                    "script.log",
+                    Canon::map([
+                        ("pack", Canon::str(pack)),
+                        (
+                            "level",
+                            Canon::str(match level {
+                                crate::vm::LogLevel::Info => "info",
+                                crate::vm::LogLevel::Warn => "warn",
+                            }),
+                        ),
+                        (
+                            "text",
+                            Canon::str(cap(&format!("(while loading) {text}"), 400)),
+                        ),
+                    ]),
+                );
+            }
             for f in self.failures.clone() {
                 if !ctx.world.ext.is_quarantined(&f.pack) {
                     self.report_error(ctx, &f.pack, "load", &f.message, true);
