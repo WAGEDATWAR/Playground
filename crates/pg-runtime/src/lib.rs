@@ -6,6 +6,7 @@ pub mod app;
 pub mod console;
 pub mod control;
 pub mod devtools;
+pub mod dialogue;
 pub mod exec;
 pub mod guard;
 pub mod keyframes;

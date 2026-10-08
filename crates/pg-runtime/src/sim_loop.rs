@@ -35,6 +35,8 @@ pub struct LoopServices {
     pub thumbnailer: Option<Thumbnailer>,
     /// Where the simulation's events and the loop's own messages go for the developer console.
     pub console: Option<pg_host::Console>,
+    /// Prepares the lines of conversations someone can hear (milestone 1.5).
+    pub dialogue: Option<crate::dialogue::DialogueHook>,
 }
 
 /// Renders a world to PNG bytes for the Saved Worlds list.
@@ -332,6 +334,9 @@ impl SimLoop {
                     self.day_hash = h.short();
                 }
                 self.to_console(&report.events);
+                if let Some(d) = &self.services.dialogue {
+                    d.after_tick(&report.events, &self.sim, report.tick);
+                }
                 events.extend(report.events);
                 self.log_applied();
                 if self.ring.due(self.sim.world().clock.tick()) {

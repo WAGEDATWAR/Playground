@@ -232,6 +232,14 @@ cargo run --release -p pg-cli -- check --full
 installs a git pre-push hook that runs it for you (`git push --no-verify` skips it knowingly). CI runs the
 same checks, so a pin that passes here passes there.
 
+### Conversation lines (1.5)
+
+```bash
+# What an AI would be sent for the first conversation of a seed, the fallback lines, and whether a reply passes:
+cargo run -q -p pg-cli -- ai dialogue-test --seed demo --reply '["Hello.","Hi there.","Nice day.","Yes."]'
+cargo run -q -p pg-cli -- ai dialogue-test --tone cozy --filter off
+```
+
 ### The 1.4b tools
 
 ```bash

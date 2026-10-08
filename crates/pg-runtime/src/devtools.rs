@@ -46,6 +46,14 @@ pub fn registry() -> Vec<DevTool> {
             true,
         ),
         tool(
+            "dialogue",
+            "Conversation lines",
+            "explain",
+            "What the AI would be sent for a conversation, the fallback lines the game uses, and whether a given reply would be accepted. The AI panel (requests, cooldowns, breaker) comes with the inspector.",
+            Some("pg ai dialogue-test"),
+            false,
+        ),
+        tool(
             "events",
             "Event viewer",
             "explain",

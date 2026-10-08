@@ -264,6 +264,65 @@ impl ContentSet {
                 );
             }
         }
+        // Dialogue lint (S-062): lines fit a bubble, use only placeholders the game fills, and every topic
+        // has lines to say (its own, tone-specific, or a default).
+        if let Some(c) = &game.conversation {
+            for l in &c.lines {
+                for key in &l.keys {
+                    let Some(text) = strings.template(crate::strings::FALLBACK_LOCALE, key) else {
+                        continue;
+                    };
+                    if text.chars().count() > crate::gamedata::MAX_DIALOGUE_CHARS {
+                        report.warn(
+                            "dialogue_too_long",
+                            key.clone(),
+                            format!(
+                                "the line is {} characters; bubbles hold at most {}",
+                                text.chars().count(),
+                                crate::gamedata::MAX_DIALOGUE_CHARS
+                            ),
+                        );
+                    }
+                    for ph in crate::strings::placeholders(&text) {
+                        if !["name", "other"].contains(&ph.as_str()) {
+                            report.warn(
+                                "dialogue_placeholder",
+                                key.clone(),
+                                format!("{{{ph}}} is not filled in dialogue (use {{name}} or {{other}})"),
+                            );
+                        }
+                    }
+                }
+            }
+            for t in &c.topics {
+                if c.line_keys(&t.id, "").is_empty() {
+                    report.warn(
+                        "topic_without_lines",
+                        t.id.clone(),
+                        format!(
+                            "topic '{}' has no lines of its own and there is no default set",
+                            t.id
+                        ),
+                    );
+                }
+            }
+            // A tone is reachable if nothing earlier in priority order always wins.
+            let ordered = c.ordered_tones();
+            if let Some(i) = ordered.iter().position(|t| {
+                t.moods.is_empty() && t.min_affinity <= -1000 && t.max_affinity >= 1000
+            }) {
+                for t in ordered.iter().skip(i + 1) {
+                    report.warn(
+                        "unreachable_tone",
+                        t.id.clone(),
+                        format!(
+                            "tone '{}' can never be chosen: an earlier tone has no conditions",
+                            t.id
+                        ),
+                    );
+                }
+            }
+        }
         if !report.is_ok() {
             return Err(report);
         }

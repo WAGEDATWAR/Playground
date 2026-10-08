@@ -13,12 +13,22 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const SPEC: Spec<'static> = Spec {
-    values: &["dir", "provider", "model", "from-env", "client-id"],
+    values: &[
+        "dir",
+        "provider",
+        "model",
+        "from-env",
+        "client-id",
+        "seed",
+        "reply",
+        "tone",
+        "filter",
+    ],
     switches: &["dry-run", "enable", "disable", "default-model"],
     optional: &[],
 };
 
-const USAGE: &str = "usage: pg ai providers | key set <provider> [--from-env VAR] | key clear <provider> | key status | settings show|set [--provider P] [--model M | --default-model] [--enable | --disable] | login player2 [--client-id ID] | test [--provider P] [--model M] [--dry-run] | selfcheck   (settings flags take --dir <data dir>, default ./pg-data)";
+const USAGE: &str = "usage: pg ai providers | key set <provider> [--from-env VAR] | key clear <provider> | key status | settings show|set [--provider P] [--model M | --default-model] [--enable | --disable] | login player2 [--client-id ID] | test [--provider P] [--model M] [--dry-run] | dialogue-test [--seed S] [--reply TEXT] [--tone cozy|standard|mature] [--filter on|off] | selfcheck   (settings flags take --dir <data dir>, default ./pg-data)";
 
 pub fn ai_cmd(args: &[String]) -> Result<ExitCode, String> {
     match args.split_first() {
@@ -28,6 +38,7 @@ pub fn ai_cmd(args: &[String]) -> Result<ExitCode, String> {
             "settings" => settings(rest),
             "login" => login(rest),
             "test" => test(rest),
+            "dialogue-test" => dialogue_test(rest),
             "selfcheck" => Ok(selfcheck_cmd()),
             other => Err(format!("unknown ai command '{other}'\n{USAGE}")),
         },
@@ -307,4 +318,102 @@ fn selfcheck_cmd() -> ExitCode {
         println!("redaction self-check FAILED");
         ExitCode::FAILURE
     }
+}
+
+/// `pg ai dialogue-test`: finds the first conversation in a generated town and shows what the AI would be
+/// sent, the fallback lines the game would use, and (with `--reply`) whether a given reply would be accepted.
+/// Makes no network request.
+fn dialogue_test(args: &[String]) -> Result<ExitCode, String> {
+    use pg_ai::dialogue::{build_task, parse_lines, ContentRules};
+    use pg_core::commands::Command as WorldCommand;
+    use pg_core::input::SimInput;
+    use pg_core::pipeline::Pipeline;
+    use pg_core::sim::Sim;
+    use pg_core::world::WorldState;
+    let p = parse(args, &SPEC)?;
+    let seed = p.one("seed").unwrap_or("dialogue");
+    let content = crate::shared::load_content(&[crate::shared::DEFAULT_CONTENT_DIR.to_owned()])?;
+    let mut sim =
+        Sim::new(WorldState::new("Dialogue", seed), Pipeline::new()).with_content(content);
+    sim.submit(
+        0,
+        SimInput::Command {
+            actor: None,
+            cmd: WorldCommand::GenerateTown {
+                w: 48,
+                h: 36,
+                water: 15,
+                residents: 12,
+                tone: "standard".into(),
+            },
+        },
+    )
+    .map_err(|e| e.to_string())?;
+    let rules = ContentRules {
+        tone_preset: p.one("tone").unwrap_or("standard").to_owned(),
+        graphic_filter: p.one("filter") != Some("off"),
+    };
+    for _ in 0..30_000 {
+        let report = sim.step().map_err(|e| e.to_string())?;
+        let Some(e) = report
+            .events
+            .iter()
+            .find(|e| e.kind == "conversation.started")
+        else {
+            continue;
+        };
+        let id = |k: &str| {
+            e.detail
+                .get(k)
+                .and_then(|c| c.as_str()?.parse::<pg_core::id::EntityId>().ok())
+        };
+        let (Some(a), Some(b)) = (id("a"), id("b")) else {
+            continue;
+        };
+        let talk = sim
+            .world()
+            .pawns
+            .get(a)
+            .and_then(|p| p.talk.clone())
+            .ok_or("the conversation ended at once")?;
+        let (fallback, req, _) = pg_runtime::dialogue::describe(&sim, a, b, &talk, e.tick, &rules)
+            .ok_or("no conversation data")?;
+        let task = build_task(&req);
+        println!(
+            "{} and {}: {} ({} tone), {} turn(s), tick {}
+",
+            req.first, req.second, req.topic, req.tone, req.turns, e.tick
+        );
+        println!(
+            "--- system (trusted) ---
+{}
+
+--- user (scene data) ---
+{}
+",
+            task.system, task.user
+        );
+        println!("--- fallback lines the game uses ---");
+        for (who, line) in &fallback {
+            let name = if *who == a { &req.first } else { &req.second };
+            println!("  {name}: {line}");
+        }
+        if let Some(reply) = p.one("reply") {
+            println!(
+                "
+--- the reply you gave ---"
+            );
+            match parse_lines(reply, req.turns, &rules) {
+                Ok(lines) => {
+                    println!("accepted:");
+                    for l in lines {
+                        println!("  {l}");
+                    }
+                }
+                Err(r) => println!("REFUSED: {} (the game would use the fallback lines)", r.0),
+            }
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+    Err("nobody talked in two game days with this seed".into())
 }

@@ -16,4 +16,5 @@ pg-ui-model = { path = "../../crates/pg-ui-model" }
 pg-host = { path = "../../crates/pg-host" }
 
 [dev-dependencies]
+serde_json = "1.0.151"
 proptest = "1.11.0"

@@ -94,6 +94,8 @@ pub struct AppController {
     shadow_bad: u64,
     /// The developer console's log (milestone 1.3a): app messages, the simulation's events, pack prints.
     console: pg_host::Console,
+    /// Lines for conversations the focused resident can hear (milestone 1.5).
+    dialogue: crate::dialogue::DialogueHook,
 }
 
 fn slug(name: &str) -> String {
@@ -152,12 +154,25 @@ impl AppController {
         let registry = device_registry();
         let (values, _) = DeviceFile::new(svc.storage.as_ref(), registry.clone()).load();
         let (tx, rx) = channel();
+        let pool = Arc::new(WorkerPool::new(2));
+        let dialogue = crate::dialogue::DialogueHook::new(crate::dialogue::DialogueService::new(
+            Arc::new(AiClient::new(
+                Arc::clone(&svc.net),
+                Arc::clone(&svc.secrets),
+                Arc::clone(&svc.clock),
+                Arc::clone(&svc.log),
+                ClientConfig::default(),
+            )),
+            Arc::clone(&pool),
+            crate::dialogue::DialogueConfig::default(),
+        ));
         let c = AppController {
+            dialogue,
             svc,
             content,
             registry,
             values,
-            pool: Arc::new(WorkerPool::new(2)),
+            pool,
             tx,
             rx,
             world: None,
@@ -524,6 +539,7 @@ impl AppController {
             pool: Arc::clone(&self.pool),
             thumbnailer: Some(Arc::new(thumbnail_png)),
             console: Some(self.console.clone()),
+            dialogue: Some(self.dialogue.clone()),
         };
         self.console.info("app", &format!("world '{name}' opened"));
         let mut cfg = LoopConfig::new(id);
@@ -1011,7 +1027,26 @@ impl AppController {
         out
     }
 
+    /// The resident whose surroundings are being watched or possessed; conversations within hearing range of
+    /// them get lines prepared (and, with AI on, generated). `None` means nobody is listening.
+    pub fn set_dialogue_focus(&mut self, focus: Option<pg_core::id::EntityId>) {
+        if let Ok(mut s) = self.dialogue.service.lock() {
+            s.set_focus(focus);
+        }
+    }
+
+    /// The dialogue service, for the renderer's bubbles and the overlay's AI panel.
+    pub fn dialogue(&self) -> &crate::dialogue::DialogueHook {
+        &self.dialogue
+    }
+
     fn poll_inner(&mut self) -> Vec<UiEvent> {
+        if let Ok(mut s) = self.dialogue.settings.lock() {
+            *s = (
+                self.ai_settings(),
+                self.values.bool("content.graphic_filter").unwrap_or(true),
+            );
+        }
         let mut out = Vec::new();
         while let Ok(ev) = self.rx.try_recv() {
             let signed_in = matches!(ev, UiEvent::LoginFinished(Ok(())));

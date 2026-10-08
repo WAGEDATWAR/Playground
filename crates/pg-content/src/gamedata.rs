@@ -47,6 +47,9 @@ pub const KNOWN_FILES: [&str; 9] = [
 ];
 
 /// Needs and affinity use this scale (Blueprint §8.1).
+/// The longest line a conversation bubble holds (shared with the AI line checks).
+pub const MAX_DIALOGUE_CHARS: usize = 140;
+
 pub const SCALE: i32 = 1000;
 pub const MINUTES_PER_DAY: u32 = 1440;
 

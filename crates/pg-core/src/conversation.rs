@@ -559,9 +559,13 @@ pub fn dialogue(
             Key::Int(i64::try_from(talk.started).unwrap_or(0)),
         ],
     );
+    // Start at a seeded line and walk the set, so no line repeats before the set is used up.
+    let start = rng
+        .range(0, u32::try_from(keys.len()).unwrap_or(1))
+        .unwrap_or(0) as usize;
     (0..talk.turns)
         .filter_map(|i| {
-            let key = rng.pick(i, keys)?.clone();
+            let key = keys.get((start + i as usize) % keys.len().max(1))?.clone();
             let (speaker, listener) = if i % 2 == 0 {
                 (first, second)
             } else {

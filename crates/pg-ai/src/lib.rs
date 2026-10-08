@@ -5,6 +5,7 @@
 
 pub mod breaker;
 pub mod client;
+pub mod dialogue;
 pub mod error;
 pub mod login;
 pub mod provider;

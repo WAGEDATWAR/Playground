@@ -134,6 +134,7 @@ mod tests {
             pool: Arc::new(WorkerPool::new(2)),
             thumbnailer: None,
             console: None,
+            dialogue: None,
         };
         let lp = SimLoop::new(
             SimFactory::dev(None, 2),
