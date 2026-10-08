@@ -195,6 +195,9 @@ pub struct LoadedPack {
     pub strings: BTreeMap<String, crate::strings::Table>,
     /// Script sources by pack path (`scripts/**/*.luau`). Source text only: bytecode is never loaded.
     pub scripts: BTreeMap<String, String>,
+    /// Game data tables (`data/game/*.json`): needs, moods, memory, relationships, occupations, names and
+    /// residents (Stage 1).
+    pub game: crate::gamedata::GameData,
     /// Hex BLAKE3 over every file's path and bytes (see [`hash_files`]).
     pub hash: String,
     pub file_count: usize,
@@ -357,6 +360,17 @@ pub fn load_pack(source: &dyn PackFiles, limits: &Limits) -> Result<LoadedPack, 
         }
     }
 
+    // Game data tables.
+    let mut game_files: BTreeMap<String, pg_canon::Canon> = BTreeMap::new();
+    for (path, bytes) in &files {
+        if path.starts_with(crate::gamedata::GAME_DIR) && path.ends_with(".json") {
+            if let Some(value) = parse_json_file(path, bytes, &mut report) {
+                game_files.insert(path.clone(), value);
+            }
+        }
+    }
+    let game = crate::gamedata::parse_files(&game_files, &mut report);
+
     // Scripts: source text only, UTF-8, and the manifest's entry script must exist.
     let mut scripts = BTreeMap::new();
     for (path, bytes) in &files {
@@ -397,6 +411,7 @@ pub fn load_pack(source: &dyn PackFiles, limits: &Limits) -> Result<LoadedPack, 
         templates,
         strings,
         scripts,
+        game,
         hash: hash_files(&files),
         file_count: files.len(),
         total_bytes: total,

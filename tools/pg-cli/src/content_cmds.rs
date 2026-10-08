@@ -83,11 +83,38 @@ pub fn content_cmd(args: &[String]) -> Result<ExitCode, String> {
         Some("diff") => diff(&args[1..]),
         Some("schema") => crate::pack_cmds::schema_cmd(&args[1..]),
         Some("hash") => hash(&args[1..]),
+        Some("tree") => tree(&args[1..]),
         Some(other) => Err(format!(
-            "unknown content command '{other}' (try lint, list, resolve, components)"
+            "unknown content command '{other}' (try lint, list, tree, resolve, components, diff, schema, hash)"
         )),
         None => Err("content needs a command: lint, list, resolve, components".into()),
     }
+}
+
+/// `pg content tree [--dot] [pack-dir...]` (S-015): which template extends which, with the pack each comes
+/// from; `--dot` prints Graphviz instead. Chains deeper than five templates are flagged.
+fn tree(args: &[String]) -> Result<ExitCode, String> {
+    let dot = args.iter().any(|a| a == "--dot");
+    let dirs: Vec<String> = args.iter().filter(|a| *a != "--dot").cloned().collect();
+    let set = build(&pack_dirs(&dirs))?;
+    let forest = pg_content::tree::forest(&set);
+    if dot {
+        print!("{}", pg_content::tree::render_dot(&forest));
+    } else {
+        print!("{}", pg_content::tree::render_text(&forest));
+        let deepest = forest
+            .iter()
+            .map(pg_content::tree::depth)
+            .max()
+            .unwrap_or(0);
+        println!(
+            "
+{} template(s) in {} tree(s); deepest chain {deepest}",
+            set.len(),
+            forest.len()
+        );
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 /// `pg content hash [pack-dir...]`: each pack's id, version and full content hash (what a replay or save

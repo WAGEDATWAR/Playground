@@ -1,0 +1,15 @@
+{
+  "start_affinity": 0,
+  "daily_cap": 120,
+  "hysteresis": 40,
+  "labels": [
+    { "id": "enemy", "label_key": "relationship.enemy", "min": -1000 },
+    { "id": "disliked", "label_key": "relationship.disliked", "min": -600 },
+    { "id": "wary", "label_key": "relationship.wary", "min": -250 },
+    { "id": "stranger", "label_key": "relationship.stranger", "min": -100 },
+    { "id": "acquaintance", "label_key": "relationship.acquaintance", "min": 100 },
+    { "id": "friendly", "label_key": "relationship.friendly", "min": 300 },
+    { "id": "friend", "label_key": "relationship.friend", "min": 550 },
+    { "id": "close_friend", "label_key": "relationship.close_friend", "min": 800 }
+  ]
+}

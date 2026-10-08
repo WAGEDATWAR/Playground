@@ -62,6 +62,7 @@ pub struct ContentSet {
     resolved: BTreeMap<TemplateId, Arc<ResolvedTemplate>>,
     registry: ComponentRegistry,
     strings: crate::strings::Strings,
+    game: crate::gamedata::GameData,
     warnings: ValidationReport,
 }
 
@@ -246,6 +247,27 @@ impl ContentSet {
             return Err(report);
         }
 
+        // Merge the game data tables in load order, then check the merged whole.
+        let mut game = crate::gamedata::GameData::default();
+        for id in &order {
+            if let Some(p) = by_id.get(id) {
+                game.merge(p.game.clone(), id.as_str(), &mut report);
+            }
+        }
+        game.validate(&mut report);
+        for key in game.string_keys() {
+            if strings.get(crate::strings::FALLBACK_LOCALE, &key).is_none() {
+                report.warn(
+                    "missing_string",
+                    key.clone(),
+                    format!("game data refers to the string '{key}', which no pack defines"),
+                );
+            }
+        }
+        if !report.is_ok() {
+            return Err(report);
+        }
+
         let infos = order
             .iter()
             .filter_map(|id| by_id.get(id))
@@ -262,6 +284,7 @@ impl ContentSet {
             resolved,
             registry,
             strings,
+            game,
             warnings: report,
         })
     }
@@ -295,6 +318,11 @@ impl ContentSet {
     }
 
     /// The merged string tables of every loaded pack.
+    /// The merged game data tables (empty when no pack has any).
+    pub fn game(&self) -> &crate::gamedata::GameData {
+        &self.game
+    }
+
     pub fn strings(&self) -> &crate::strings::Strings {
         &self.strings
     }

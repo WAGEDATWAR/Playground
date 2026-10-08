@@ -1,0 +1,9 @@
+{
+  "persist_threshold": 300,
+  "max_memories": 200,
+  "decay_k": 60,
+  "types": [
+    { "id": "conversation", "severity": 2 },
+    { "id": "shared_event", "severity": 3 }
+  ]
+}

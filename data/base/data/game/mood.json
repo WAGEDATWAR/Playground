@@ -1,0 +1,22 @@
+{
+  "moods": [
+    { "id": "cheerful", "label_key": "mood.cheerful" },
+    { "id": "content", "label_key": "mood.content" },
+    { "id": "neutral", "label_key": "mood.neutral" },
+    { "id": "bored", "label_key": "mood.bored" },
+    { "id": "uneasy", "label_key": "mood.uneasy" },
+    { "id": "sad", "label_key": "mood.sad" },
+    { "id": "upset", "label_key": "mood.upset" },
+    { "id": "lonely", "label_key": "mood.lonely" }
+  ],
+  "rules": [
+    { "id": "lonely_when_social_critical", "priority": 10, "mood": "lonely", "when": [{ "type": "need_critical", "need": "social" }] },
+    { "id": "upset_after_a_bad_memory", "priority": 20, "mood": "upset", "when": [{ "type": "memory", "tone": "negative", "within_hours": 6, "min_importance": 120 }] },
+    { "id": "sad_after_a_low_memory", "priority": 30, "mood": "sad", "when": [{ "type": "memory", "tone": "negative", "within_hours": 6, "min_importance": 50 }] },
+    { "id": "uneasy_when_a_need_is_urgent", "priority": 40, "mood": "uneasy", "when": [{ "type": "any_need_urgent" }] },
+    { "id": "cheerful_after_a_good_memory", "priority": 50, "mood": "cheerful", "when": [{ "type": "memory", "tone": "positive", "within_hours": 6, "min_importance": 80 }] },
+    { "id": "content_when_needs_are_met", "priority": 60, "mood": "content", "when": [{ "type": "all_needs_above", "value": 600 }] },
+    { "id": "bored_when_idle_for_long", "priority": 70, "mood": "bored", "when": [{ "type": "idle_hours", "hours": 3 }] },
+    { "id": "neutral_otherwise", "priority": 1000, "mood": "neutral" }
+  ]
+}

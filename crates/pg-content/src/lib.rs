@@ -8,6 +8,7 @@
 pub mod component;
 pub mod content_set;
 pub mod diff;
+pub mod gamedata;
 pub mod hints;
 pub mod ids;
 pub mod jsonschema;
@@ -19,6 +20,7 @@ pub mod schema;
 pub mod settings;
 pub mod strings;
 pub mod template;
+pub mod tree;
 
 pub use component::{ComponentDef, ComponentRegistry, Origin};
 pub use content_set::{ContentRef, ContentSet, ScriptPack, BASE_PACK};
