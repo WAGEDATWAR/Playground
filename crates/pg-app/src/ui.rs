@@ -6,6 +6,7 @@
 //! key presses into model keys, and the model moves focus, which this module then shows.
 
 use egui::{Align, Color32, Id, Key as EKey, Layout, Modifiers, RichText, Stroke};
+use pg_host::console::Severity;
 use pg_ui_model::layout::{self, DrawerLayout};
 use pg_ui_model::types::{Key, UiEvent};
 use pg_ui_model::widget::{DrawerItem, Tree, Widget};
@@ -402,6 +403,50 @@ fn draw_widget(
             align,
             items,
         } => draw_drawer(ui, id, label, *open, layout, *align, items, focus, d),
+        Widget::Chip {
+            id,
+            label,
+            on,
+            tint,
+        } => {
+            let text = RichText::new(label).size(14.0);
+            // A switch that is off is dimmed as well as unpressed, so its state reads at a glance.
+            let text = match tint {
+                Some(s) => {
+                    let c = severity_colors(*s).0;
+                    text.color(if *on { c } else { c.gamma_multiply(0.4) })
+                }
+                None => text,
+            };
+            let r = ui.add(
+                egui::Button::new(text)
+                    .selected(*on)
+                    .min_size(egui::vec2(0.0, 26.0)),
+            );
+            ring(ui, &r, id, focus);
+            if r.clicked() {
+                d.events.push(UiEvent::Toggle(id.clone(), !*on));
+            }
+            d.rects.insert(id.clone(), r.rect);
+        }
+        Widget::Log { lines } => {
+            egui::ScrollArea::vertical()
+                .id_salt("pg-log")
+                .max_height(280.0)
+                .auto_shrink([false, true])
+                .stick_to_bottom(true)
+                .show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    for (sev, text) in lines {
+                        let (fg, bg) = severity_colors(*sev);
+                        let mut t = RichText::new(text).monospace().size(13.0).color(fg);
+                        if let Some(bg) = bg {
+                            t = t.background_color(bg);
+                        }
+                        ui.add(egui::Label::new(t).wrap());
+                    }
+                });
+        }
         Widget::Row(children) => {
             ui.horizontal_wrapped(|ui| {
                 for c in children {
@@ -421,6 +466,18 @@ fn draw_widget(
     }
 }
 
+/// How a console line of each severity is drawn: text colour and an optional background. Debug is blue, Info
+/// white, Warn yellow, Error red; Fatal is black on red.
+pub fn severity_colors(s: Severity) -> (Color32, Option<Color32>) {
+    match s {
+        Severity::Debug => (Color32::from_rgb(100, 165, 255), None),
+        Severity::Info => (Color32::WHITE, None),
+        Severity::Warn => (Color32::from_rgb(245, 215, 70), None),
+        Severity::Error => (Color32::from_rgb(240, 80, 80), None),
+        Severity::Fatal => (Color32::BLACK, Some(Color32::from_rgb(225, 45, 45))),
+    }
+}
+
 /// Key presses this frame, as model keys. Arrows, Space and Enter are left to a focused text field.
 pub fn collect_keys(ctx: &egui::Context) -> Vec<Key> {
     let typing = ctx.egui_wants_keyboard_input();
@@ -436,6 +493,8 @@ pub fn collect_keys(ctx: &egui::Context) -> Vec<Key> {
         take(EKey::Escape, Modifiers::NONE, Key::Escape, true);
         take(EKey::Enter, Modifiers::NONE, Key::Enter, true);
         take(EKey::F3, Modifiers::NONE, Key::F3, true);
+        // The backtick opens the console; while a text field has focus it types a backtick instead.
+        take(EKey::Backtick, Modifiers::NONE, Key::Console, false);
         take(EKey::ArrowUp, Modifiers::NONE, Key::Up, false);
         take(EKey::ArrowDown, Modifiers::NONE, Key::Down, false);
         take(EKey::ArrowLeft, Modifiers::NONE, Key::Left, false);
@@ -752,6 +811,85 @@ mod tests {
             "{:?}",
             more.events
         );
+    }
+
+    #[test]
+    fn console_lines_are_coloured_by_severity_as_specified() {
+        // Debug blue, Info white, Warn yellow, Error red, Fatal black text on a red background.
+        let (debug, none) = severity_colors(Severity::Debug);
+        assert!(none.is_none() && debug.b() > debug.r() && debug.b() > 200);
+        assert_eq!(severity_colors(Severity::Info), (Color32::WHITE, None));
+        let (warn, none) = severity_colors(Severity::Warn);
+        assert!(none.is_none() && warn.r() > 200 && warn.g() > 180 && warn.b() < 120);
+        let (error, none) = severity_colors(Severity::Error);
+        assert!(none.is_none() && error.r() > 200 && error.g() < 120 && error.b() < 120);
+        let (fatal, background) = severity_colors(Severity::Fatal);
+        assert_eq!(fatal, Color32::BLACK);
+        let bg = background.expect("fatal has a background");
+        assert!(bg.r() > 200 && bg.g() < 90 && bg.b() < 90);
+    }
+
+    #[test]
+    fn a_type_chip_reports_a_toggle_and_a_log_draws_every_line() {
+        let ctx = egui::Context::default();
+        let tree = Tree::new(
+            "console",
+            vec![
+                Widget::Chip {
+                    id: "console.type.warn".into(),
+                    label: "Warn".into(),
+                    on: true,
+                    tint: Some(Severity::Warn),
+                },
+                Widget::Log {
+                    lines: vec![
+                        (Severity::Info, "[Info]: one".into()),
+                        (Severity::Fatal, "[Fatal]: two".into()),
+                    ],
+                },
+            ],
+        );
+        let first = run_frame(&ctx, &tree, raw(vec![]), None);
+        let centre = first.rects["console.type.warn"].center();
+        run_frame(
+            &ctx,
+            &tree,
+            raw(vec![egui::Event::PointerMoved(centre)]),
+            None,
+        );
+        run_frame(&ctx, &tree, raw(vec![click_at(centre, true)]), None);
+        let up = run_frame(&ctx, &tree, raw(vec![click_at(centre, false)]), None);
+        assert_eq!(
+            up.events,
+            vec![UiEvent::Toggle("console.type.warn".into(), false)],
+            "a pressed chip turns off"
+        );
+        // The same widgets under a screen-sized frame tessellate without trouble.
+        let mut out = ctx.run_ui(raw(vec![]), |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
+                draw_tree(ui, &tree, None, &FocusTracker::default(), &mut |_| None);
+            });
+        });
+        out.textures_delta.clear();
+        assert!(!out.shapes.is_empty());
+    }
+
+    #[test]
+    fn the_backtick_is_the_console_key_unless_a_text_field_is_being_typed_in() {
+        let ctx = egui::Context::default();
+        let press = |k: EKey| egui::Event::Key {
+            key: k,
+            physical_key: Some(k),
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers::NONE,
+        };
+        let mut keys = Vec::new();
+        let mut out = ctx.run_ui(raw(vec![press(EKey::Backtick)]), |ui| {
+            keys = collect_keys(ui.ctx());
+        });
+        out.textures_delta.clear();
+        assert_eq!(keys, vec![Key::Console]);
     }
 
     #[test]

@@ -20,6 +20,8 @@ pub enum Key {
     Space,
     /// Toggles the developer overlay.
     F3,
+    /// The backtick key: toggles the developer console.
+    Console,
 }
 
 /// One saved world as the Saved Worlds list shows it (suggestion S-024), built from the manifest alone.
@@ -259,6 +261,8 @@ pub enum AppEffect {
     },
     /// Cuts a bug bundle of the running world (suggestion S-001).
     CutBundle,
+    /// Empties the developer console's log.
+    ClearConsole,
     SetSetting {
         id: String,
         value: SettingValue,
@@ -312,6 +316,7 @@ impl fmt::Debug for AppEffect {
             AppEffect::WindowFocus(g) => write!(f, "WindowFocus({g})"),
             AppEffect::Rewind { tick } => write!(f, "Rewind({tick})"),
             AppEffect::CutBundle => write!(f, "CutBundle"),
+            AppEffect::ClearConsole => write!(f, "ClearConsole"),
             AppEffect::SelectProvider(p) => write!(f, "SelectProvider({p})"),
             AppEffect::ClearKey(p) => write!(f, "ClearKey({p})"),
             AppEffect::TestConnection(p) => write!(f, "TestConnection({p})"),

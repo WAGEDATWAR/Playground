@@ -133,6 +133,7 @@ mod tests {
             log: Arc::new(MemLog::new()),
             pool: Arc::new(WorkerPool::new(2)),
             thumbnailer: None,
+            console: None,
         };
         let lp = SimLoop::new(
             SimFactory::dev(None, 2),

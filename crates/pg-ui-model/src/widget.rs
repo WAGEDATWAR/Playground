@@ -6,6 +6,7 @@
 //! accessibility layer: a button is a button with a name whether it is drawn or not.
 
 use crate::layout::{Align, DrawerLayout};
+use pg_host::console::Severity;
 use std::fmt::Write;
 
 /// A stable identifier such as `menu.continue`. Ids never contain spaces.
@@ -71,6 +72,17 @@ pub enum Widget {
         align: Align,
         items: Vec<DrawerItem>,
     },
+    /// A switch drawn as a button that stays pressed while on; `tint` colours it (the console's types).
+    Chip {
+        id: WidgetId,
+        label: String,
+        on: bool,
+        tint: Option<Severity>,
+    },
+    /// Lines of log text, each at a severity (the shell colours them); scrolls and follows the newest.
+    Log {
+        lines: Vec<(Severity, String)>,
+    },
     /// Widgets laid out side by side.
     Row(Vec<Widget>),
     /// A group with a title; its contents follow vertically.
@@ -112,6 +124,7 @@ impl Widget {
             | Widget::Toggle { id, .. }
             | Widget::Choice { id, .. }
             | Widget::Slider { id, .. }
+            | Widget::Chip { id, .. }
             | Widget::Drawer { id, .. } => Some(id),
             _ => None,
         }
@@ -125,6 +138,7 @@ impl Widget {
             | Widget::Toggle { .. }
             | Widget::Choice { .. }
             | Widget::Slider { .. }
+            | Widget::Chip { .. }
             | Widget::Drawer { .. } => true,
             _ => false,
         }
@@ -292,6 +306,19 @@ fn snapshot_widget(out: &mut String, w: &Widget, depth: usize, focus: Option<&st
         }
         Widget::Thumbnail { name } => {
             let _ = writeln!(out, "{pad}(picture {name})");
+        }
+        Widget::Chip { id, label, on, .. } => {
+            let _ = writeln!(
+                out,
+                "{pad}{}({}) {label} <{id}>",
+                mark(id),
+                if *on { "on" } else { "off" }
+            );
+        }
+        Widget::Log { lines } => {
+            for (_, text) in lines {
+                let _ = writeln!(out, "{pad}{text}");
+            }
         }
         Widget::Drawer {
             id,

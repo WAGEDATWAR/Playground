@@ -201,5 +201,11 @@
   "ui.new.tone.standard": "Standard",
   "ui.new.tone.mature": "Mature",
   "ui.options.group.content": "Content",
-  "settings.content.graphic_filter": "Graphic content filter (less descriptive detail and visual intensity)"
+  "settings.content.graphic_filter": "Graphic content filter (less descriptive detail and visual intensity)",
+  "ui.console.title": "Developer console",
+  "ui.console.filter": "Filter",
+  "ui.console.filter_hint": "Show only lines containing this text",
+  "ui.console.clear": "Clear",
+  "ui.console.close": "Close",
+  "ui.console.count": "{shown} of {total} lines shown"
 }

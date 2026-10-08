@@ -5,7 +5,7 @@ Playground is a deterministic 2D pixel-art town life-simulation, built as a **na
 ## Source of truth
 
 The binding specification is in `docs/reference/`:
-`architecture-blueprint-v3.4.md` (how), `design-document-v3.4.md` (what/why), `roadmap-v4.9.md` (when).
+`architecture-blueprint-v3.5.md` (how), `design-document-v3.4.md` (what/why), `roadmap-v4.9.md` (when).
 Read the relevant Blueprint sections before touching a crate. If code and spec disagree, stop and resolve it (fix code, or record a decision in `docs/DECISIONS.md` and update the spec copy with a version bump).
 
 ## Working files (keep current)

@@ -92,6 +92,8 @@ pub struct AppController {
     shadow_threads: Option<usize>,
     shadow_ok: u64,
     shadow_bad: u64,
+    /// The developer console's log (milestone 1.3a): app messages, the simulation's events, pack prints.
+    console: pg_host::Console,
 }
 
 fn slug(name: &str) -> String {
@@ -143,11 +145,14 @@ fn to_canon(v: &SettingValue) -> Canon {
 }
 
 impl AppController {
-    pub fn new(svc: AppServices, content: Option<Arc<ContentSet>>) -> AppController {
+    pub fn new(mut svc: AppServices, content: Option<Arc<ContentSet>>) -> AppController {
+        let console = pg_host::Console::new();
+        // Everything the app and the simulation loop log also shows in the console.
+        svc.log = Arc::new(pg_host::ConsoleLog::new(svc.log, console.clone()));
         let registry = device_registry();
         let (values, _) = DeviceFile::new(svc.storage.as_ref(), registry.clone()).load();
         let (tx, rx) = channel();
-        AppController {
+        let c = AppController {
             svc,
             content,
             registry,
@@ -166,7 +171,26 @@ impl AppController {
             shadow_threads: None,
             shadow_ok: 0,
             shadow_bad: 0,
-        }
+            console,
+        };
+        c.sync_console();
+        c
+    }
+
+    /// Developer mode decides whether Debug entries are produced at all.
+    fn sync_console(&self) {
+        self.console
+            .set_wants_debug(self.values.bool("dev.enabled").unwrap_or(false));
+    }
+
+    /// The developer console's log.
+    pub fn console(&self) -> &pg_host::Console {
+        &self.console
+    }
+
+    /// Console entries newer than `seq` (the model asks for what it has not seen).
+    pub fn console_since(&self, seq: u64) -> Vec<pg_host::Entry> {
+        self.console.since(seq)
     }
 
     /// Turns shadow determinism verification on for worlds opened from now on (developer option).
@@ -212,6 +236,7 @@ impl AppController {
         let (values, report) =
             DeviceFile::new(self.svc.storage.as_ref(), self.registry.clone()).load();
         self.values = values;
+        self.sync_console();
         let warnings: Vec<String> = report.issues().iter().map(|i| i.message.clone()).collect();
         UiEvent::Booted(Box::new(BootInfo {
             worlds: self.list_worlds(),
@@ -437,6 +462,7 @@ impl AppController {
             }
         }
         let report = sim.step().map_err(|e| e.to_string())?;
+        crate::console::push_events(&self.console, &report.events);
         if let Some(e) = report.events.iter().find(|e| e.kind == "input_rejected") {
             let why = e
                 .detail
@@ -497,7 +523,9 @@ impl AppController {
             log: Arc::clone(&self.svc.log),
             pool: Arc::clone(&self.pool),
             thumbnailer: Some(Arc::new(thumbnail_png)),
+            console: Some(self.console.clone()),
         };
+        self.console.info("app", &format!("world '{name}' opened"));
         let mut cfg = LoopConfig::new(id);
         cfg.app_version = self.svc.app_version.clone();
         cfg.content_refs = refs_of(&self.content);
@@ -548,6 +576,23 @@ impl AppController {
     // ---- effects -------------------------------------------------------------------------------------------
 
     pub fn perform(&mut self, effect: AppEffect) -> Vec<UiEvent> {
+        let out = self.perform_inner(effect);
+        self.log_ui(&out);
+        out
+    }
+
+    /// What the player is told about failures and notices also goes to the console.
+    fn log_ui(&self, events: &[UiEvent]) {
+        for e in events {
+            match e {
+                UiEvent::Failed(m) => self.console.error("app", m),
+                UiEvent::Notice(m) => self.console.info("app", m),
+                _ => {}
+            }
+        }
+    }
+
+    fn perform_inner(&mut self, effect: AppEffect) -> Vec<UiEvent> {
         match effect {
             AppEffect::ListWorlds => vec![UiEvent::WorldsListed(self.list_worlds())],
             AppEffect::CreateWorld {
@@ -610,6 +655,10 @@ impl AppController {
             }
             AppEffect::Rewind { tick } => {
                 self.send(Control::RewindTo(tick));
+                Vec::new()
+            }
+            AppEffect::ClearConsole => {
+                self.console.clear();
                 Vec::new()
             }
             AppEffect::CutBundle => {
@@ -699,6 +748,10 @@ impl AppController {
                 {
                     return vec![UiEvent::Failed(format!("Settings could not be saved: {e}"))];
                 }
+                if id == "dev.enabled" {
+                    self.sync_console();
+                }
+                self.console.info("app", &format!("setting {id} changed"));
                 if id == "time.autosave_minutes" {
                     if let Some(m) = self.values.int(id).and_then(|m| u64::try_from(m).ok()) {
                         self.send(Control::SetAutosaveMinutes(m));
@@ -953,6 +1006,12 @@ impl AppController {
     /// Everything that happened since the last call: background results, the running world's events and,
     /// when it changed, the HUD.
     pub fn poll(&mut self) -> Vec<UiEvent> {
+        let out = self.poll_inner();
+        self.log_ui(&out);
+        out
+    }
+
+    fn poll_inner(&mut self) -> Vec<UiEvent> {
         let mut out = Vec::new();
         while let Ok(ev) = self.rx.try_recv() {
             let signed_in = matches!(ev, UiEvent::LoginFinished(Ok(())));
@@ -969,6 +1028,11 @@ impl AppController {
         for e in loop_events {
             match e {
                 LoopEvent::Saved { autosave, .. } => {
+                    if autosave {
+                        self.console.debug("app", "autosaved");
+                    } else {
+                        self.console.info("app", "saved");
+                    }
                     self.set_status(if autosave {
                         "ui.status.autosaved"
                     } else {

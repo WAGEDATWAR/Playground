@@ -422,3 +422,41 @@ fn safe_mode_keeps_pack_data_as_inert_orphans() {
         "the day that passed while the pack was off was not counted"
     );
 }
+
+#[test]
+fn what_a_pack_prints_reaches_the_developer_console_at_the_level_it_chose() {
+    use pg_core::events::EventCatalog;
+    let talker = inline_pack(
+        r#"["data","systems"]"#,
+        r#"
+            pg.components.register({ name = "c", applies_to = {"pawn"}, fields = { v = pg.field.int(0, 10, 0) } })
+            pg.systems.register({ id = "talk", cadence = "minute", query = { kind = "pawn" }, run = function(ctx, p)
+                pg.log.info("hello from the pack")
+                pg.log.warn("careful now")
+            end })
+        "#,
+        "talker",
+    );
+    let c = build_set(vec![base(), talker]);
+    let mut r = town(&c, 1);
+    let mut events = Vec::new();
+    for _ in 0..60 {
+        events.extend(r.sim.step().unwrap().events);
+    }
+    let catalog = EventCatalog::shared();
+    let lines: Vec<(&str, String)> = events
+        .iter()
+        .filter(|e| e.kind == "script.log")
+        .map(|e| {
+            let (sev, text) = catalog.console_line(e);
+            (sev.name(), text)
+        })
+        .collect();
+    assert!(
+        lines.contains(&("Info", "[talker] hello from the pack".into())),
+        "{lines:?}"
+    );
+    assert!(lines.contains(&("Warn", "[talker] careful now".into())));
+    // The events are declared, so debug builds validated them as they were emitted.
+    assert!(catalog.get("script.log").is_some());
+}

@@ -99,7 +99,7 @@ impl App {
     }
 
     /// Developer aid (`--demo <screen>`): drives the app to a screen so it can be looked at or captured
-    /// without clicking there by hand. Names: new, options, ai, saved, game, drawer, focus, pause, overlay.
+    /// without clicking there by hand. Names: new, options, ai, saved, game, drawer, focus, console, pause, overlay.
     pub fn apply_demo(&mut self, name: &str) {
         let click = |a: &mut App, id: &str| a.dispatch(UiEvent::Click(id.to_owned()));
         let start_world = |a: &mut App| {
@@ -127,6 +127,16 @@ impl App {
                 click(self, "saved.row.demo-town");
             }
             "game" => start_world(self),
+            "console" => {
+                start_world(self);
+                self.dispatch(UiEvent::Key(pg_ui_model::Key::Escape));
+                click(self, "pause.options");
+                self.dispatch(UiEvent::Toggle("setting.dev.enabled".into(), true));
+                self.dispatch(UiEvent::Key(pg_ui_model::Key::Escape));
+                self.dispatch(UiEvent::Key(pg_ui_model::Key::Escape));
+                self.dispatch(UiEvent::Key(pg_ui_model::Key::Console));
+                self.dispatch(UiEvent::Toggle("console.type.debug".into(), true));
+            }
             "drawer" => {
                 start_world(self);
                 click(self, "hud.speed");
@@ -171,6 +181,12 @@ impl App {
         for k in collect_keys(ui.ctx()) {
             self.dispatch(UiEvent::Key(k));
         }
+        if self.model.console().visible() {
+            let fresh = self
+                .controller
+                .console_since(self.model.console().last_seq());
+            self.model.append_console(fresh);
+        }
         if self.model.overlay().visible() {
             let data = self.controller.overlay_data();
             self.model.set_overlay_data(data);
@@ -194,6 +210,7 @@ impl App {
         let tree = self.model.tree(&t);
         let hud = self.model.hud_parts(&t);
         let overlay = self.model.overlay_tree(&t);
+        let console = self.model.console_tree(&t);
         let focus = self.model.focus().map(str::to_owned);
         let screen = self.model.screen().clone();
         let snapshot = self.controller.snapshot();
@@ -286,6 +303,16 @@ impl App {
                         });
                     });
             }
+        }
+        if let Some(c) = console {
+            egui::Window::new("Developer console")
+                .title_bar(false)
+                .anchor(egui::Align2::LEFT_BOTTOM, egui::vec2(8.0, -8.0))
+                .default_width(760.0)
+                .show(&ctx, |ui| {
+                    let drawn = draw_tree(ui, &c, None, &self.overlay_tracker, &mut images);
+                    events.extend(drawn.events);
+                });
         }
         if let Some(o) = overlay {
             egui::Window::new("Developer overlay")

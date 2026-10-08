@@ -40,9 +40,11 @@ pub const SIM_SPEC: Spec<'static> = Spec {
         "propose",
         "day",
         "at",
+        "level",
+        "filter",
     ],
     switches: &["pretty", "needs"],
-    optional: &["events"],
+    optional: &["events", "console"],
 };
 
 /// `<tick>:<number>`.
@@ -363,9 +365,41 @@ pub fn sim_cmd(args: &[String]) -> Result<ExitCode, String> {
             .map_or(String::new(), |n| format!("  path threads {n}")),
     );
     let mut event_count = 0usize;
+    // `--console` prints the run the way the in-game developer console shows it (milestone 1.3a): every
+    // event at its severity as `[Warn]: text`, from `--level` up (default info), only lines containing
+    // `--filter`. `--console debug` or `--level debug` includes the routine detail.
+    let console = if p.has("console") {
+        let level = p.one("level").or_else(|| p.one("console")).map_or(
+            Ok(pg_host::Severity::Info),
+            |l| {
+                pg_host::Severity::from_id(l).ok_or_else(|| {
+                    format!("--level is debug, info, warn, error or fatal, not '{l}'")
+                })
+            },
+        )?;
+        Some((level, p.one("filter").unwrap_or("").to_owned()))
+    } else {
+        None
+    };
+    let catalog = pg_core::events::EventCatalog::shared();
     for _ in 0..total {
         let report = sim.step().map_err(|e| e.to_string())?;
         event_count += report.events.len();
+        if let Some((level, text)) = &console {
+            for e in &report.events {
+                let (sev, line) = catalog.console_line(e);
+                let entry = pg_host::Entry {
+                    seq: 0,
+                    severity: sev,
+                    source: "sim".into(),
+                    tick: Some(e.tick),
+                    text: line,
+                };
+                if sev >= *level && pg_host::console::matches_filter(&entry, text) {
+                    println!("@{:>7} {}", e.tick, entry.line());
+                }
+            }
+        }
         for e in report
             .events
             .iter()

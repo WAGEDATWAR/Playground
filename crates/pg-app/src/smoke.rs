@@ -136,6 +136,13 @@ pub fn run(content: Arc<ContentSet>) -> Result<(), String> {
     )?;
     h.run_for(&mut app, 150);
     app.dispatch(UiEvent::Key(Key::F3));
+    app.dispatch(UiEvent::Key(Key::Console));
+    h.run_for(&mut app, 100);
+    expect(
+        app.model.console().visible() && !app.model.console().lines().is_empty(),
+        "the backtick opens the developer console and it has lines",
+    )?;
+    app.dispatch(UiEvent::Key(Key::Console));
     app.dispatch(UiEvent::Key(Key::Escape));
     h.frame(&mut app);
     expect(

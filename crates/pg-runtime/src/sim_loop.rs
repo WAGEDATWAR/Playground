@@ -33,6 +33,8 @@ pub struct LoopServices {
     pub pool: Arc<WorkerPool>,
     /// Makes the small picture saved with each generation (suggestion S-024); `None` saves without one.
     pub thumbnailer: Option<Thumbnailer>,
+    /// Where the simulation's events and the loop's own messages go for the developer console.
+    pub console: Option<pg_host::Console>,
 }
 
 /// Renders a world to PNG bytes for the Saved Worlds list.
@@ -303,6 +305,13 @@ impl SimLoop {
 
     // ---- ticking -------------------------------------------------------------------------------------
 
+    /// Sends this tick's events to the developer console at their catalog severities.
+    fn to_console(&self, events: &[pg_core::pipeline::Event]) {
+        if let Some(console) = &self.services.console {
+            crate::console::push_events(console, events);
+        }
+    }
+
     fn log_applied(&mut self) {
         let applied = self.sim.applied_inputs();
         self.log
@@ -322,6 +331,7 @@ impl SimLoop {
                 if let Some(h) = report.day_hash {
                     self.day_hash = h.short();
                 }
+                self.to_console(&report.events);
                 events.extend(report.events);
                 self.log_applied();
                 if self.ring.due(self.sim.world().clock.tick()) {
@@ -477,6 +487,12 @@ impl SimLoop {
 
     fn crash(&mut self, p: PanicReport, out: &mut Vec<LoopEvent>) {
         self.note(Level::Error, &format!("a tick panicked: {}", p.message));
+        if let Some(c) = &self.services.console {
+            c.fatal(
+                "sim",
+                &format!("the world was frozen: a tick panicked: {}", p.message),
+            );
+        }
         let tick = self.sim.world().clock.tick();
         let recent: Vec<String> = self
             .publisher

@@ -3,6 +3,7 @@
 //! Milestone 0.4 adds only the threaded path-batch executor; the rest of the runtime arrives in 0.8.
 
 pub mod app;
+pub mod console;
 pub mod control;
 pub mod devtools;
 pub mod exec;

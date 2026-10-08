@@ -34,6 +34,7 @@ fn rig_with(factory: SimFactory, mut cfg: LoopConfig) -> Rig {
         log: log.clone(),
         pool: Arc::new(WorkerPool::new(2)),
         thumbnailer: None,
+        console: None,
     };
     Rig {
         lp: SimLoop::new(factory, world(), services, cfg),

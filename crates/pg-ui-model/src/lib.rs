@@ -10,6 +10,7 @@
 //! headless.
 
 pub mod app;
+pub mod console;
 pub mod layout;
 pub mod overlay;
 pub mod palette;

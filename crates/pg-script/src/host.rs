@@ -504,6 +504,7 @@ impl ScriptHost {
             .collect();
         let mut buffered: Vec<(EntityId, Vec<ScriptCommand>)> = Vec::new();
         let mut errors: Vec<String> = Vec::new();
+        let mut printed: Vec<(crate::vm::LogLevel, String)> = Vec::new();
         let per_call = self.limits.fuel_per_call;
         let per_tick = self.limits.fuel_per_tick;
         let Some(pack) = self.packs.get_mut(pack_index) else {
@@ -523,6 +524,7 @@ impl ScriptHost {
                         m.record_call(&pack_id, &point, r.fuel);
                     }
                     self.tick_fuel += r.fuel;
+                    printed.extend(r.log);
                     buffered.push((*entity, r.commands));
                 }
                 Err(e) => {
@@ -530,6 +532,23 @@ impl ScriptHost {
                     errors.push(format!("{entity}: {e}"));
                 }
             }
+        }
+        // What the pack printed with pg.log reaches the developer console as `script.log` events.
+        for (level, text) in printed {
+            ctx.emit(
+                "script.log",
+                Canon::map([
+                    ("pack", Canon::str(pack_id.clone())),
+                    (
+                        "level",
+                        Canon::str(match level {
+                            crate::vm::LogLevel::Info => "info",
+                            crate::vm::LogLevel::Warn => "warn",
+                        }),
+                    ),
+                    ("text", Canon::str(cap(&text, 400))),
+                ]),
+            );
         }
         // Apply every successful call's commands in entity order, through the core's validation.
         for (entity, commands) in buffered {

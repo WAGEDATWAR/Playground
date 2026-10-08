@@ -6,6 +6,7 @@
 //! effects. No screen is a dead end: each has a way back (Escape or a button), keyboard focus always lands on
 //! something that does something, and a failed effect shows a notice instead of changing screens.
 
+use crate::console::ConsoleModel;
 use crate::overlay::{Overlay, OverlayData};
 use crate::types::*;
 use crate::widget::{Tree, Widget};
@@ -122,6 +123,7 @@ pub struct AppModel {
     /// The drawer whose panel is open, if any (at most one).
     open_drawer: Option<String>,
     overlay: Overlay,
+    console: ConsoleModel,
 }
 
 impl Default for AppModel {
@@ -149,6 +151,7 @@ impl AppModel {
             paused_by_menu: false,
             open_drawer: None,
             overlay: Overlay::default(),
+            console: ConsoleModel::default(),
         }
     }
 
@@ -170,6 +173,20 @@ impl AppModel {
 
     pub fn worlds(&self) -> &[WorldEntry] {
         &self.worlds
+    }
+
+    pub fn console(&self) -> &ConsoleModel {
+        &self.console
+    }
+
+    /// New console entries from the app (the shell asks for those after [`ConsoleModel::last_seq`]).
+    pub fn append_console(&mut self, entries: Vec<pg_host::console::Entry>) {
+        self.console.append(entries);
+    }
+
+    /// The console's window while it is open (developer mode only).
+    pub fn console_tree(&self, t: Text) -> Option<Tree> {
+        self.console.visible().then(|| self.console.tree(t))
     }
 
     pub fn overlay(&self) -> &Overlay {
@@ -317,6 +334,9 @@ impl AppModel {
         if !self.dev_mode() && self.overlay.visible() {
             self.overlay.toggle();
         }
+        if !self.dev_mode() {
+            self.console.hide();
+        }
         self.fix_focus();
         effects
     }
@@ -386,6 +406,8 @@ impl AppModel {
                     ..HudInfo::default()
                 };
                 self.in_world = true;
+                // Every world starts with the console's filters at their defaults (Debug off).
+                self.console.reset_filters();
                 self.reset_to(Screen::InGame);
                 Vec::new()
             }
@@ -469,6 +491,16 @@ impl AppModel {
             }
             return Vec::new();
         }
+        if k == Key::Console {
+            if self.dev_mode() {
+                self.console.toggle();
+            }
+            return Vec::new();
+        }
+        if k == Key::Escape && self.console.visible() {
+            self.console.hide();
+            return Vec::new();
+        }
         if let Some(fx) = self.drawer_key(k) {
             return fx;
         }
@@ -492,7 +524,7 @@ impl AppModel {
             },
             Key::Left => self.adjust(-1),
             Key::Right => self.adjust(1),
-            Key::F3 => Vec::new(),
+            Key::F3 | Key::Console => Vec::new(),
         }
     }
 
@@ -612,6 +644,9 @@ impl AppModel {
         if id.starts_with("overlay.") {
             return self.overlay.click(id);
         }
+        if id.starts_with("console.") {
+            return self.console.click(id);
+        }
         crate::screens::activate(self, id)
     }
 
@@ -620,10 +655,18 @@ impl AppModel {
             self.overlay.text(id, s);
             return Vec::new();
         }
+        if id.starts_with("console.") {
+            self.console.text(id, s);
+            return Vec::new();
+        }
         crate::screens::text(self, id, s)
     }
 
     fn toggle(&mut self, id: &str, v: bool) -> Vec<AppEffect> {
+        if id.starts_with("console.") {
+            self.console.toggle_type(id, v);
+            return Vec::new();
+        }
         crate::screens::toggle(self, id, v)
     }
 

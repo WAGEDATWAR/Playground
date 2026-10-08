@@ -3,9 +3,11 @@
 //! `Storage` arrived in 0.6; `SecretStore`, `Net`, `Clock`, `Dialogs`, `Audio` and the redaction utility in 0.7. Every trait has an in-memory
 //! double so persistence, the AI client and the simulation run headless in tests and in the CLI.
 
+pub mod console;
 pub mod redact;
 pub mod services;
 
+pub use console::{Console, ConsoleLog, Entry, Severity};
 pub use redact::{redact, redact_plain, Secret, REDACTED};
 pub use services::{
     https_host, iso_utc, AllowListNet, Audio, Bus, CancelToken, Clock, Dialogs, FixedClock,

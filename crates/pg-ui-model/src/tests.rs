@@ -1068,3 +1068,123 @@ fn developer_mode_gates_the_overlay_and_turning_it_off_closes_it() {
     );
     assert!(s.contains("setting.time.pause_on_focus_loss"), "{s}");
 }
+
+// ---- the developer console (milestone 1.3a) -------------------------------------------------------------
+
+use pg_host::console::{Entry, Severity};
+
+fn log_entry(seq: u64, severity: Severity, text: &str) -> Entry {
+    Entry {
+        seq,
+        severity,
+        source: "test".into(),
+        tick: None,
+        text: text.into(),
+    }
+}
+
+fn console_snap(m: &AppModel) -> String {
+    m.console_tree(&show)
+        .map(|t| t.snapshot(None))
+        .unwrap_or_default()
+}
+
+#[test]
+fn the_backtick_opens_and_closes_the_console_only_in_developer_mode_and_escape_closes_it() {
+    let mut m = in_world();
+    assert!(press(&mut m, Key::Console).is_empty());
+    assert!(!m.console().visible(), "developer mode is off");
+    dev_mode(&mut m, true);
+    press(&mut m, Key::Console);
+    assert!(m.console().visible() && m.console_tree(&show).is_some());
+    press(&mut m, Key::Console);
+    assert!(!m.console().visible());
+    // Escape closes it first, without opening the pause menu.
+    press(&mut m, Key::Console);
+    press(&mut m, Key::Escape);
+    assert!(!m.console().visible() && matches!(m.screen(), Screen::InGame));
+    // Turning developer mode off while it is open closes it.
+    press(&mut m, Key::Console);
+    assert!(m.console().visible());
+    click(&mut m, "hud.menu");
+    click(&mut m, "pause.options");
+    m.update(UiEvent::Toggle("setting.dev.enabled".into(), false));
+    assert!(!m.console().visible());
+}
+
+#[test]
+fn the_console_works_on_every_screen_including_the_main_menu() {
+    let mut m = boot(Vec::new(), None);
+    // Developer mode from Options on the main menu.
+    click(&mut m, "main.options");
+    m.update(UiEvent::Toggle("setting.dev.enabled".into(), true));
+    press(&mut m, Key::Escape);
+    assert!(matches!(m.screen(), Screen::MainMenu));
+    press(&mut m, Key::Console);
+    assert!(m.console().visible());
+    // Its widgets are clickable by id and do not disturb the screen under it.
+    m.append_console(vec![log_entry(1, Severity::Error, "boot problem")]);
+    assert!(console_snap(&m).contains("[Error]: boot problem"));
+    assert!(matches!(m.screen(), Screen::MainMenu));
+}
+
+#[test]
+fn the_filter_box_the_type_buttons_and_clear_work_through_events_and_a_new_world_resets_them() {
+    let mut m = in_world();
+    dev_mode(&mut m, true);
+    press(&mut m, Key::Console);
+    m.append_console(vec![
+        log_entry(1, Severity::Debug, "noise"),
+        log_entry(2, Severity::Info, "world opened"),
+        log_entry(3, Severity::Warn, "task failed"),
+        log_entry(4, Severity::Error, "save failed"),
+    ]);
+    let snap = console_snap(&m);
+    assert!(snap.contains("(off) Debug <console.type.debug>"), "{snap}");
+    assert!(snap.contains("(on) Info <console.type.info>"), "{snap}");
+    assert!(
+        !snap.contains("noise") && snap.contains("[Info]: world opened"),
+        "{snap}"
+    );
+    // Turn Debug on, Warn off.
+    m.update(UiEvent::Toggle("console.type.debug".into(), true));
+    m.update(UiEvent::Toggle("console.type.warn".into(), false));
+    let snap = console_snap(&m);
+    assert!(
+        snap.contains("[Debug]: noise") && !snap.contains("task failed"),
+        "{snap}"
+    );
+    // The text box keeps only lines that contain the text.
+    m.update(UiEvent::Text("console.filter".into(), "FAILED".into()));
+    let snap = console_snap(&m);
+    assert!(
+        snap.contains("[Error]: save failed") && !snap.contains("world opened"),
+        "{snap}"
+    );
+    // Clear asks the app to clear its buffer.
+    assert_eq!(
+        click(&mut m, "console.clear"),
+        vec![AppEffect::ClearConsole]
+    );
+    assert!(!console_snap(&m).contains("save failed"));
+    // A world being opened puts the filters back: Debug off, every other type on, no text.
+    m.update(UiEvent::WorldOpened {
+        name: "Again".into(),
+    });
+    assert!(!m.console().is_enabled(Severity::Debug));
+    assert!(m.console().is_enabled(Severity::Warn) && m.console().filter().is_empty());
+    // Typing into the console never moves screen focus or triggers screen widgets.
+    assert!(m
+        .update(UiEvent::Text("console.filter".into(), "x".into()))
+        .is_empty());
+}
+
+#[test]
+fn the_console_is_not_part_of_the_keyboard_focus_order_of_the_screen() {
+    let mut m = in_world();
+    dev_mode(&mut m, true);
+    let before = m.tree(&show).focus_order().len();
+    press(&mut m, Key::Console);
+    m.append_console(vec![log_entry(1, Severity::Info, "x")]);
+    assert_eq!(m.tree(&show).focus_order().len(), before);
+}

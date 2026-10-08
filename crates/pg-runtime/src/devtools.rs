@@ -38,6 +38,14 @@ const fn tool(
 pub fn registry() -> Vec<DevTool> {
     vec![
         tool(
+            "console",
+            "Developer console",
+            "explain",
+            "Every message the game, the simulation and script packs print, at a severity (Debug, Info, Warn, Error, Fatal), with a text filter and a switch per type. Backtick opens it in developer mode.",
+            Some("pg sim --console"),
+            true,
+        ),
+        tool(
             "events",
             "Event viewer",
             "explain",

@@ -6,9 +6,11 @@
 //! forgotten field fails a test immediately), `pg events list` prints the catalog, and the overlay's event
 //! viewer reads the same declarations. Packs add events as `<pack>.<kind>` through [`EventCatalog::register`].
 
+use crate::canon::Canon;
 use crate::pipeline::Event;
 use pg_content::schema::{Field, FieldSchema, ParamSchema};
 use pg_content::ValidationReport;
+use pg_host::console::Severity;
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
@@ -51,7 +53,50 @@ pub struct EventDef {
     /// Shown in the event viewer unless the player filters it out (noisy kinds default to hidden).
     pub default_visible: bool,
     pub summary: String,
+    /// How the developer console shows it (milestone 1.3a). Routine detail is Debug; what a developer should
+    /// notice is Info, Warn or Error. Every built-in kind is listed in [`SEVERITIES`].
+    pub severity: Severity,
 }
+
+/// The console severity of every built-in event kind. A new kind must be listed here (a test fails until it
+/// is), so nothing the simulation reports is missing from the console or shown at an unconsidered level.
+pub const SEVERITIES: &[(&str, Severity)] = &[
+    ("input_rejected", Severity::Warn),
+    ("script.error", Severity::Error),
+    ("script.quarantined", Severity::Error),
+    ("script.log", Severity::Info),
+    ("setting_changed", Severity::Info),
+    ("dev.nudged", Severity::Debug),
+    ("dev.day_started", Severity::Debug),
+    ("map.created", Severity::Info),
+    ("town.generated", Severity::Info),
+    ("pawn.spawned", Severity::Debug),
+    ("object.spawned", Severity::Debug),
+    ("object.contained", Severity::Debug),
+    ("world_edited", Severity::Info),
+    ("move.requested", Severity::Debug),
+    ("move.arrived", Severity::Debug),
+    ("move.failed", Severity::Warn),
+    ("move.sidestep", Severity::Debug),
+    ("schedule.planned", Severity::Debug),
+    ("schedule.replanned", Severity::Debug),
+    ("need.urgent", Severity::Info),
+    ("need.critical", Severity::Warn),
+    ("pawn.collapsed", Severity::Warn),
+    ("pawn.recovered", Severity::Info),
+    ("mood.changed", Severity::Debug),
+    ("task.started", Severity::Debug),
+    ("task.done", Severity::Debug),
+    ("task.failed", Severity::Warn),
+    ("commitment.proposed", Severity::Debug),
+    ("commitment.accepted", Severity::Debug),
+    ("commitment.declined", Severity::Info),
+    ("commitment.expired", Severity::Info),
+    ("commitment.active", Severity::Debug),
+    ("commitment.completed", Severity::Info),
+    ("commitment.failed", Severity::Warn),
+    ("commitment.cancelled", Severity::Info),
+];
 
 #[derive(Clone, Debug, Default)]
 pub struct EventCatalog {
@@ -104,6 +149,10 @@ impl EventCatalog {
                         fields: schema(fields),
                         default_visible: visible,
                         summary: summary.to_owned(),
+                        severity: SEVERITIES
+                            .iter()
+                            .find(|(k, _)| *k == kind)
+                            .map_or(Severity::Debug, |(_, s)| *s),
                     },
                 );
             };
@@ -132,6 +181,13 @@ impl EventCatalog {
             true,
             "A pack was switched off for the session after repeated script errors.",
             &[("pack", text(64)), ("reason", text(200))],
+        );
+        add(
+            "script.log",
+            Pack,
+            true,
+            "A script pack printed a line with pg.log.info or pg.log.warn.",
+            &[("pack", text(64)), ("level", text(8)), ("text", text(400))],
         );
         add(
             "setting_changed",
@@ -417,9 +473,64 @@ impl EventCatalog {
                 fields,
                 default_visible,
                 summary: summary.to_owned(),
+                severity: Severity::Info,
             },
         );
         Ok(())
+    }
+
+    /// What the developer console shows for an event: its severity and one line of text, `kind key=value ...`
+    /// with the fields in name order. A `script.log` line shows the pack's own text at the level it chose;
+    /// an unknown kind shows as Warn so it is noticed rather than lost.
+    pub fn console_line(&self, e: &Event) -> (Severity, String) {
+        let Some(def) = self.get(&e.kind) else {
+            // Packs declare their own events; the engine's are all in the catalog (and checked in debug builds).
+            return (
+                Severity::Info,
+                format!("{} {}", e.kind, e.detail.to_canonical_string()),
+            );
+        };
+        let text = |k: &str| e.detail.get(k).and_then(Canon::as_str).map(str::to_owned);
+        if e.kind == "script.log" {
+            let sev = if text("level").as_deref() == Some("warn") {
+                Severity::Warn
+            } else {
+                Severity::Info
+            };
+            return (
+                sev,
+                format!(
+                    "[{}] {}",
+                    text("pack").unwrap_or_default(),
+                    text("text").unwrap_or_default()
+                ),
+            );
+        }
+        let mut line = e.kind.clone();
+        let explain = text("explain");
+        if let Canon::Map(m) = &e.detail {
+            for (k, v) in m {
+                // An explanation replaces the machine-readable reason it comes with.
+                if explain.is_some() && (k == "explain" || k == "reason") {
+                    continue;
+                }
+                let shown = match v {
+                    Canon::Str(s) => s.clone(),
+                    other => other.to_canonical_string(),
+                };
+                line.push_str(&format!(" {k}={shown}"));
+            }
+        }
+        if let Some(why) = explain {
+            line.push_str(&format!(": {why}"));
+        }
+        (def.severity, line)
+    }
+
+    /// The console severity of `kind` without formatting anything; kinds this catalog does not know (a
+    /// pack's) are Info.
+    pub fn severity_of(&self, kind: &str) -> Severity {
+        self.get(kind).map_or(Severity::Info, |d| d.severity)
     }
 
     pub fn get(&self, kind: &str) -> Option<&EventDef> {

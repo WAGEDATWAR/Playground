@@ -771,3 +771,81 @@ fn the_new_world_controls_shape_the_generated_town() {
     let picture = listed.and_then(|name| d.ctl.thumbnail_image(&name));
     assert!(picture.is_some_and(|(w, h, _)| w > 0 && h > 0));
 }
+
+#[test]
+fn the_console_collects_what_the_app_and_the_simulation_report_at_their_severities() {
+    use pg_host::Severity;
+    let m = Machine::new();
+    let c = content(&[]);
+    let mut d = m.launch(&c);
+    // Without developer mode nobody is looking, so routine (Debug) detail is not even produced.
+    d.click("main.new");
+    d.click("new.create");
+    d.settle(|d| d.model.hud().pawns == 14);
+    d.click("hud.speed.27x");
+    d.settle(|d| d.model.hud().running);
+    d.play(&m, 3);
+    let quiet = d.ctl.console_since(0);
+    assert!(
+        quiet
+            .iter()
+            .any(|e| e.severity == Severity::Info && e.text.contains("opened")),
+        "{quiet:?}"
+    );
+    assert!(
+        quiet.iter().any(|e| e.line().contains("town.generated")),
+        "the simulation's own events arrive"
+    );
+    assert!(
+        quiet.iter().all(|e| e.severity != Severity::Debug),
+        "no developer, no debug lines"
+    );
+    // Developer mode turns Debug production on; routine events then appear with their prefix.
+    d.dev_mode();
+    d.play(&m, 3);
+    let loud = d.ctl.console_since(0);
+    assert!(
+        loud.iter()
+            .any(|e| e.severity == Severity::Debug && e.line().starts_with("[Debug]: ")),
+        "{:?}",
+        loud.iter().rev().take(5).collect::<Vec<_>>()
+    );
+    // A failure shown to the player is also an Error in the console, with the same words.
+    d.send(UiEvent::Key(Key::Escape));
+    d.click("pause.menu");
+    let before = d.ctl.console().since(0).len();
+    d.ctl.perform(AppEffect::LoadWorld("no-such-world".into()));
+    let fresh = d.ctl.console().since(0);
+    assert!(fresh.len() > before);
+    let err = fresh.last().unwrap();
+    assert_eq!(err.severity, Severity::Error);
+    assert!(err.text.contains("could not be opened"), "{}", err.text);
+    // Settings changes are Info; saving is Info; Clear empties the buffer.
+    assert!(fresh
+        .iter()
+        .any(|e| e.text.contains("setting dev.enabled changed")));
+    d.ctl.perform(AppEffect::ClearConsole);
+    assert!(d.ctl.console().is_empty());
+}
+
+#[test]
+fn the_console_never_holds_a_pasted_key() {
+    let m = Machine::new();
+    let c = content(&[]);
+    let mut d = m.launch(&c);
+    d.click("main.options");
+    d.click("options.ai");
+    d.send(UiEvent::Choose("ai.provider".into(), "openai".into()));
+    d.type_into("ai.key", SENTINEL_KEY);
+    d.click("ai.save_key");
+    d.click("ai.test");
+    let all: String = d
+        .ctl
+        .console()
+        .since(0)
+        .iter()
+        .map(|e| e.line())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(!all.contains(SENTINEL_KEY), "{all}");
+}

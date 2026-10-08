@@ -196,7 +196,7 @@ uses another one. Exports are written to `exports/` there and imports are read f
 
 **Keys:** Tab / Shift+Tab and Up / Down move focus, Left / Right change choices and sliders, Enter or Space
 press, Escape goes back (in the world it opens the pause menu), Space pauses and resumes, F3 shows the
-developer overlay (only after turning on Options, Developer mode). In the world: the controls are in the
+developer overlay and the backtick key the developer console (both only after turning on Options, Developer mode; the console has a text filter and a button per type, Debug off by default). In the world: the controls are in the
 bottom-right corner (the speed button opens a drawer); saving is in the pause menu (Escape). Drag to pan the map,
 mouse wheel to zoom.
 
@@ -257,3 +257,14 @@ cargo run -p pg-app -- --demo game
 The size of buildings, the street spacing and the share of each building role are data in
 `data/base/data/game/worldgen.json`. `pg check` includes a pinned starting hash for one seed so the generator is
 proved identical on all three systems.
+
+## The developer console
+
+```bash
+# The console's lines for a headless run: every event at its severity, from a level up, optionally filtered.
+cargo run -q -p pg-cli -- sim --seed demo --town 48x36 --residents 10 --days 2 --content data/base --console warn
+cargo run -q -p pg-cli -- sim --seed demo --town 48x36 --residents 10 --days 1 --content data/base --console debug --filter mood
+
+# The window itself, open on a running town.
+cargo run -p pg-app -- --demo console
+```

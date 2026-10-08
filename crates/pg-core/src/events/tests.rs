@@ -259,3 +259,123 @@ fn every_event_a_rich_run_emits_is_declared_and_valid() {
         "the run was rich enough to matter: {kinds:?}"
     );
 }
+
+// ---- the developer console (milestone 1.3a) -------------------------------------------------------------
+
+use pg_host::console::Severity;
+
+#[test]
+fn every_builtin_event_kind_has_a_listed_console_severity_and_nothing_extra_is_listed() {
+    let c = EventCatalog::builtin();
+    let listed: std::collections::BTreeSet<&str> = SEVERITIES.iter().map(|(k, _)| *k).collect();
+    let declared: std::collections::BTreeSet<&str> = c.iter().map(|d| d.kind.as_str()).collect();
+    assert_eq!(
+        declared.difference(&listed).collect::<Vec<_>>(),
+        Vec::<&&str>::new(),
+        "an event kind has no console severity: add it to SEVERITIES"
+    );
+    assert_eq!(
+        listed.difference(&declared).collect::<Vec<_>>(),
+        Vec::<&&str>::new(),
+        "SEVERITIES lists a kind the catalog does not declare"
+    );
+    assert_eq!(SEVERITIES.len(), listed.len(), "no kind is listed twice");
+    for d in c.iter() {
+        assert_eq!(
+            SEVERITIES
+                .iter()
+                .find(|(k, _)| *k == d.kind)
+                .map(|(_, s)| *s),
+            Some(d.severity)
+        );
+    }
+}
+
+#[test]
+fn what_a_developer_should_notice_is_not_buried_at_debug() {
+    let c = EventCatalog::builtin();
+    for kind in [
+        "input_rejected",
+        "move.failed",
+        "task.failed",
+        "need.critical",
+        "pawn.collapsed",
+        "commitment.failed",
+    ] {
+        assert_eq!(c.severity_of(kind), Severity::Warn, "{kind}");
+    }
+    for kind in ["script.error", "script.quarantined"] {
+        assert_eq!(c.severity_of(kind), Severity::Error, "{kind}");
+    }
+    for kind in [
+        "task.started",
+        "move.arrived",
+        "schedule.planned",
+        "mood.changed",
+    ] {
+        assert_eq!(c.severity_of(kind), Severity::Debug, "{kind}");
+    }
+    assert_eq!(c.severity_of("town.generated"), Severity::Info);
+    assert_eq!(
+        c.severity_of("somepack.thing"),
+        Severity::Info,
+        "a pack's own kinds"
+    );
+}
+
+#[test]
+fn console_lines_read_as_kind_and_fields_with_the_explanation_in_place_of_the_reason() {
+    let c = EventCatalog::builtin();
+    let (sev, line) = c.console_line(&ev(
+        "task.failed",
+        Canon::map([
+            ("pawn", pawn(3)),
+            ("reservation", Canon::Int(7)),
+            ("reason", Canon::map([("code", Canon::str("path_blocked"))])),
+            (
+                "explain",
+                Canon::str("The route stayed blocked by other pawns."),
+            ),
+        ]),
+    ));
+    assert_eq!(sev, Severity::Warn);
+    assert_eq!(
+        line,
+        "task.failed pawn=pawn_3 reservation=7: The route stayed blocked by other pawns."
+    );
+    let (sev, line) = c.console_line(&ev(
+        "need.urgent",
+        Canon::map([
+            ("pawn", pawn(1)),
+            ("need", Canon::str("hunger")),
+            ("value", Canon::Int(290)),
+        ]),
+    ));
+    assert_eq!(
+        (sev, line.as_str()),
+        (
+            Severity::Info,
+            "need.urgent need=hunger pawn=pawn_1 value=290"
+        )
+    );
+    // A script pack's own line shows at the level it chose, under its name.
+    let log = |level: &str| {
+        ev(
+            "script.log",
+            Canon::map([
+                ("pack", Canon::str("caffeine")),
+                ("level", Canon::str(level)),
+                ("text", Canon::str("hello")),
+            ]),
+        )
+    };
+    assert_eq!(
+        c.console_line(&log("info")),
+        (Severity::Info, "[caffeine] hello".into())
+    );
+    assert_eq!(c.console_line(&log("warn")).0, Severity::Warn);
+    // An event this catalog does not know (a pack's) is shown, not lost.
+    let (sev, line) = c.console_line(&ev("mypack.party", Canon::map([("n", Canon::Int(3))])));
+    assert_eq!(sev, Severity::Info);
+    assert!(line.starts_with("mypack.party "), "{line}");
+}
