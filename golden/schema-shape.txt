@@ -62,6 +62,11 @@ world.pawns.*.memories[].participants[]: text
 world.pawns.*.memories[].retention: int
 world.pawns.*.memories[].severity: int
 world.pawns.*.memories[].summary_key: text
+world.pawns.*.memories[].talk: map|null
+world.pawns.*.memories[].talk.lines: list
+world.pawns.*.memories[].talk.started: int
+world.pawns.*.memories[].talk.tone: text
+world.pawns.*.memories[].talk.turns: int
 world.pawns.*.memories[].tick: int
 world.pawns.*.memories[].topic: null|text
 world.pawns.*.memories[].type: text
@@ -143,6 +148,7 @@ world.pawns.*.schedule.slots: int
 world.pawns.*.talk: map|null
 world.pawns.*.talk.ends: int
 world.pawns.*.talk.leader: bool
+world.pawns.*.talk.lines: list
 world.pawns.*.talk.partner: text
 world.pawns.*.talk.started: int
 world.pawns.*.talk.tone: text

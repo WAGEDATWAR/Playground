@@ -334,6 +334,7 @@ fn fallback_dialogue_is_seeded_complete_and_alternates() {
         ends: 160,
         turns,
         leader: true,
+        lines: Vec::new(),
     };
     let lines = dialogue(params, seed, a, &talk("food", "friendly", 4));
     assert_eq!(lines.len(), 4);
@@ -353,4 +354,201 @@ fn fallback_dialogue_is_seeded_complete_and_alternates() {
         .all(|l| l.key.starts_with("dialogue.hostile.")));
     let odd = dialogue(params, seed, a, &talk("nothing", "friendly", 2));
     assert!(odd.iter().all(|l| l.key.starts_with("dialogue.generic.")));
+}
+
+fn record(sim: &mut Sim, a: EntityId, b: EntityId, started: u64, lines: &[&str]) {
+    sim.submit_now(SimInput::Command {
+        actor: None,
+        cmd: Command::RecordDialogue {
+            a,
+            b,
+            started,
+            lines: lines.iter().map(|s| (*s).to_owned()).collect(),
+        },
+    })
+    .unwrap();
+}
+
+/// Steps until some pair is mid-conversation; returns (a, b, the talk as it began).
+fn until_mid_talk(sim: &mut Sim) -> (EntityId, EntityId, Talk) {
+    for _ in 0..30_000 {
+        sim.step().unwrap();
+        let found = sim
+            .world()
+            .pawns
+            .iter()
+            .find(|(_, p)| p.talk.as_ref().is_some_and(|t| t.leader))
+            .map(|(id, p)| (id, p.talk.clone().unwrap()));
+        if let Some((a, t)) = found {
+            return (a, t.partner, t);
+        }
+    }
+    panic!("nobody talked");
+}
+
+fn rejected_reason(sim: &mut Sim) -> Option<String> {
+    let r = sim.step().unwrap();
+    r.events
+        .iter()
+        .find(|e| e.kind == "input_rejected")
+        .and_then(|e| {
+            e.detail
+                .get("reason")
+                .and_then(Canon::as_str)
+                .map(str::to_owned)
+        })
+}
+
+#[test]
+fn lines_recorded_during_a_talk_end_up_in_both_memories_and_are_recalled() {
+    let mut sim = town("history-live");
+    let (a, b, talk) = until_mid_talk(&mut sim);
+    let said: Vec<String> = (0..talk.turns).map(|i| format!("Said {i}.")).collect();
+    let refs: Vec<&str> = said.iter().map(String::as_str).collect();
+    record(&mut sim, a, b, talk.started, &refs);
+    let events = run_collect(&mut sim, 1, &["dialogue.recorded"]);
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        sim.world()
+            .pawns
+            .get(a)
+            .unwrap()
+            .talk
+            .as_ref()
+            .unwrap()
+            .lines,
+        said
+    );
+    assert_eq!(
+        sim.world()
+            .pawns
+            .get(b)
+            .unwrap()
+            .talk
+            .as_ref()
+            .unwrap()
+            .lines,
+        said
+    );
+    // After the talk closes, both remember it with the words.
+    run_collect(&mut sim, 200, &[]);
+    let d = data();
+    let params = d.conversation.as_ref().unwrap();
+    for (owner, other) in [(a, b), (b, a)] {
+        let p = sim.world().pawns.get(owner).unwrap();
+        let m = p
+            .memories
+            .iter()
+            .find(|m| {
+                m.talk.as_ref().is_some_and(|t| t.started == talk.started)
+                    && m.participants.contains(&other)
+            })
+            .expect("the conversation was remembered");
+        assert_eq!(m.talk.as_ref().unwrap().lines, said);
+        let recalled = recall(sim.world(), params, owner, m).unwrap();
+        assert_eq!(recalled.len(), said.len());
+        assert_eq!(recalled[0].speaker, a.min(b), "the lower id speaks first");
+        assert_eq!(recalled[0].said, Spoken::Written("Said 0.".into()));
+    }
+}
+
+#[test]
+fn lines_recorded_afterwards_are_attached_and_without_them_the_fallback_is_rebuilt() {
+    let mut sim = town("history-late");
+    let (a, b, talk) = until_mid_talk(&mut sim);
+    run_collect(&mut sim, 200, &[]);
+    let d = data();
+    let params = d.conversation.as_ref().unwrap();
+    let memory_of = |sim: &Sim, owner: EntityId, other: EntityId| {
+        sim.world()
+            .pawns
+            .get(owner)
+            .unwrap()
+            .memories
+            .iter()
+            .find(|m| {
+                m.talk.as_ref().is_some_and(|t| t.started == talk.started)
+                    && m.participants.contains(&other)
+            })
+            .cloned()
+            .unwrap()
+    };
+    // No words recorded: the fallback lines come back from the data, exactly as they would have been shown.
+    let before = recall(sim.world(), params, a, &memory_of(&sim, a, b)).unwrap();
+    let shown = dialogue(params, sim.world().seed(), a, &talk);
+    assert_eq!(
+        before.iter().map(|r| r.said.clone()).collect::<Vec<_>>(),
+        shown
+            .iter()
+            .map(|l| Spoken::Key(l.key.clone()))
+            .collect::<Vec<_>>()
+    );
+    let said: Vec<String> = (0..talk.turns).map(|i| format!("Later {i}.")).collect();
+    let refs: Vec<&str> = said.iter().map(String::as_str).collect();
+    record(&mut sim, a, b, talk.started, &refs);
+    let ev = run_collect(&mut sim, 1, &["dialogue.recorded"]);
+    assert_eq!(ev.len(), 1);
+    assert_eq!(
+        ev[0].1.get("when").and_then(Canon::as_str),
+        Some("afterwards")
+    );
+    let after = recall(sim.world(), params, b, &memory_of(&sim, b, a)).unwrap();
+    assert_eq!(after[1].said, Spoken::Written("Later 1.".into()));
+}
+
+#[test]
+fn bad_recordings_are_refused_and_change_nothing() {
+    let mut sim = town("history-bad");
+    let (a, b, talk) = until_mid_talk(&mut sim);
+    let before = sim.world().state_hash();
+    record(&mut sim, a, b, talk.started, &["only one"; 1]);
+    if talk.turns != 1 {
+        assert_eq!(
+            rejected_reason(&mut sim).as_deref(),
+            Some("the number of lines must equal the number of turns")
+        );
+    }
+    let long = "x".repeat(300);
+    let many: Vec<&str> = (0..talk.turns).map(|_| long.as_str()).collect();
+    record(&mut sim, a, b, talk.started, &many);
+    assert!(rejected_reason(&mut sim).unwrap().contains("140"));
+    record(&mut sim, a, b, talk.started + 7, &["x"]);
+    assert!(rejected_reason(&mut sim)
+        .unwrap()
+        .contains("no such conversation"));
+    record(&mut sim, a, b, talk.started, &[]);
+    assert!(rejected_reason(&mut sim).unwrap().contains("1 to 8"));
+    // Nothing was recorded (the talk may have moved on a tick or two but holds no lines).
+    assert!(sim
+        .world()
+        .pawns
+        .get(a)
+        .unwrap()
+        .talk
+        .as_ref()
+        .is_none_or(|t| t.lines.is_empty()));
+    let _ = before;
+}
+
+#[test]
+fn a_recording_is_part_of_the_logged_history_and_replays_the_same() {
+    let run = || {
+        let mut sim = town("history-replay");
+        let (a, b, talk) = until_mid_talk(&mut sim);
+        let said: Vec<String> = (0..talk.turns).map(|i| format!("Said {i}.")).collect();
+        let refs: Vec<&str> = said.iter().map(String::as_str).collect();
+        record(&mut sim, a, b, talk.started, &refs);
+        sim.run_ticks(3_000).unwrap();
+        sim
+    };
+    let (x, y) = (run(), run());
+    assert_eq!(x.world().state_hash(), y.world().state_hash());
+    // The command survives its canonical form (the replay log's).
+    let cmd = Command::RecordDialogue {
+        a: EntityId::new(Kind::Pawn, 1),
+        b: EntityId::new(Kind::Pawn, 2),
+        started: 90,
+        lines: vec!["Hi.".into(), "Hello.".into()],
+    };
+    assert_eq!(Command::from_canon(&cmd.to_canon()).unwrap(), cmd);
 }

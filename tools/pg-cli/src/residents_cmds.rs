@@ -208,6 +208,46 @@ memories ({}), newest first:",
             summary(m)
         );
     }
+    // The last few conversations, as remembered: recorded words, or the fallback lines rebuilt from the data.
+    if let Some(params) = data.conversation.as_ref() {
+        println!(
+            "
+recent conversations, as remembered:"
+        );
+        let given = |who: EntityId| {
+            name(who)
+                .split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_owned()
+        };
+        for m in newest.iter().filter(|m| m.talk.is_some()).take(3) {
+            let Some(lines) = pg_core::conversation::recall(world, params, id, m) else {
+                continue;
+            };
+            let kept = m.talk.as_ref().is_some_and(|t| !t.lines.is_empty());
+            println!(
+                "  {} ({}){}",
+                summary(m),
+                m.talk.as_ref().map_or("", |t| t.tone.as_str()),
+                if kept {
+                    "  [recorded words]"
+                } else {
+                    "  [fallback lines]"
+                }
+            );
+            for l in lines {
+                let said = match &l.said {
+                    pg_core::conversation::Spoken::Written(t) => t.clone(),
+                    pg_core::conversation::Spoken::Key(k) => text(
+                        k,
+                        &[("name", &given(l.speaker)), ("other", &given(l.listener))],
+                    ),
+                };
+                println!("      {}: {said}", name(l.speaker));
+            }
+        }
+    }
     let with = p
         .one("with")
         .map(|w| {

@@ -99,7 +99,7 @@ fn reply(lines: &[&str]) -> String {
 fn wait(service: &mut DialogueService, now: u64) -> Vec<String> {
     let mut notes = Vec::new();
     for _ in 0..400 {
-        notes.extend(service.poll(now));
+        notes.extend(service.poll(now).notes);
         if service.in_flight() == 0 {
             return notes;
         }
@@ -288,18 +288,37 @@ fn cooldowns_and_the_in_flight_cap_hold_requests_back() {
     assert_eq!(busy.net.inner().request_count(), 0);
 }
 
+/// The world with recorded lines taken out, so runs can be compared on everything but the words.
+fn without_words(sim: &Sim) -> pg_core::hash::StateHash {
+    let mut w = sim.world().clone();
+    let ids: Vec<EntityId> = w.pawns.iter().map(|(id, _)| id).collect();
+    for id in ids {
+        if let Some(p) = w.pawns.get_mut(id) {
+            if let Some(t) = p.talk.as_mut() {
+                t.lines.clear();
+            }
+            for m in &mut p.memories {
+                if let Some(t) = m.talk.as_mut() {
+                    t.lines.clear();
+                }
+            }
+        }
+    }
+    w.state_hash()
+}
+
 #[test]
-fn outcomes_are_identical_with_ai_on_off_or_failing() {
+fn outcomes_are_identical_with_ai_on_off_or_failing_and_only_the_words_differ() {
     let run = |mode: &str| {
         let enabled = mode != "off";
-        let mut r = rig(DialogueConfig::default(), enabled);
+        let r = rig(DialogueConfig::default(), enabled);
+        let net = r.net.clone();
         if mode == "failing" {
             for _ in 0..40 {
-                r.net.inner().push(Err(NetError::Offline));
+                net.inner().push(Err(NetError::Offline));
             }
         } else if mode == "good" {
-            r.net.inner().set_handler(Box::new(|req| {
-                let _ = req;
+            net.inner().set_handler(Box::new(|_| {
                 Ok(pg_host::HttpResponse {
                     status: 200,
                     headers: Vec::new(),
@@ -309,19 +328,49 @@ fn outcomes_are_identical_with_ai_on_off_or_failing() {
                 })
             }));
         }
-        let mut sim = town("same-outcomes");
-        r.service
+        let hook = DialogueHook::new(r.service);
+        *hook.settings.lock().unwrap() = (r.settings.clone(), true);
+        hook.service
+            .lock()
+            .unwrap()
             .set_focus(Some(EntityId::new(pg_core::id::Kind::Pawn, 1)));
+        let mut sim = town("same-outcomes");
         for _ in 0..28_800 {
             let report = sim.step().unwrap();
-            r.service
-                .observe(&report.events, &sim, &r.settings, &r.rules);
-            r.service.poll(report.tick);
+            hook.after_tick(&report.events, &mut sim, report.tick);
+            // Let a request finish within its conversation, as it would at normal speed.
+            while mode == "good" && hook.service.lock().unwrap().in_flight() > 0 {
+                std::thread::sleep(Duration::from_millis(1));
+                hook.after_tick(&[], &mut sim, report.tick);
+            }
         }
-        (sim.world().state_hash(), r.service.stats().heard)
+        let heard = hook.service.lock().unwrap().stats().heard;
+        let written = sim
+            .world()
+            .pawns
+            .iter()
+            .flat_map(|(_, p)| p.memories.iter())
+            .filter(|m| m.talk.as_ref().is_some_and(|t| !t.lines.is_empty()))
+            .count();
+        (
+            without_words(&sim),
+            sim.world().state_hash(),
+            heard,
+            written,
+        )
     };
-    let (off, heard) = run("off");
-    assert_eq!(run("good").0, off);
-    assert_eq!(run("failing").0, off);
+    let (off, off_full, heard, written_off) = run("off");
+    let (good, good_full, _, written_good) = run("good");
+    let (failing, failing_full, _, written_failing) = run("failing");
+    assert_eq!(good, off, "the words are the only difference");
+    assert_eq!(failing, off);
+    assert_eq!(failing_full, off_full, "a failing provider records nothing");
     assert!(heard > 0, "the focused resident overheard something");
+    assert_eq!((written_off, written_failing), (0, 0));
+    if written_good > 0 {
+        assert_ne!(
+            good_full, off_full,
+            "recorded lines are part of the history"
+        );
+    }
 }

@@ -62,6 +62,7 @@ pub struct Shown {
 #[derive(Clone, Debug)]
 struct Stored {
     first: EntityId,
+    second: EntityId,
     started: u64,
     turn_ticks: u64,
     turns: usize,
@@ -190,6 +191,7 @@ impl DialogueService {
             };
             self.stored.push_back(Stored {
                 first: a,
+                second: b,
                 started: talk.started,
                 turn_ticks,
                 turns: talk.turns as usize,
@@ -236,8 +238,10 @@ impl DialogueService {
     }
 
     /// Collects finished requests. `now` is the current tick, used to see which turns are already over.
-    pub fn poll(&mut self, now: u64) -> Vec<String> {
+    /// Lines that were used come back as recordings for the history (see [`Recording`]).
+    pub fn poll(&mut self, now: u64) -> Polled {
         let mut notes = Vec::new();
+        let mut record = Vec::new();
         let mut still = Vec::new();
         for (key, job, turns) in std::mem::take(&mut self.pending) {
             match job.try_join() {
@@ -264,12 +268,20 @@ impl DialogueService {
                     } else {
                         s.ai = Some((lines, spoken));
                         self.stats.used += 1;
+                        if let Some(shown) = lines_of(s) {
+                            record.push(Recording {
+                                a: s.first,
+                                b: s.second,
+                                started: s.started,
+                                lines: shown.into_iter().map(|l| l.text).collect(),
+                            });
+                        }
                     }
                 }
             }
         }
         self.pending = still;
-        notes
+        Polled { notes, record }
     }
 
     /// The lines of a stored conversation as they should be shown at `now`: each turn from the AI if its
@@ -279,6 +291,32 @@ impl DialogueService {
             .stored
             .iter()
             .find(|s| s.first == first && s.started == started)?;
+        lines_of(s)
+    }
+
+    pub fn in_flight(&self) -> usize {
+        self.pending.len()
+    }
+}
+
+/// Lines to record for the history: what was shown, turn by turn.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Recording {
+    pub a: EntityId,
+    pub b: EntityId,
+    pub started: u64,
+    pub lines: Vec<String>,
+}
+
+/// What a poll found.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Polled {
+    pub notes: Vec<String>,
+    pub record: Vec<Recording>,
+}
+
+fn lines_of(s: &Stored) -> Option<Vec<Shown>> {
+    {
         Some(
             (0..s.turns)
                 .filter_map(|i| {
@@ -302,10 +340,6 @@ impl DialogueService {
                 })
                 .collect(),
         )
-    }
-
-    pub fn in_flight(&self) -> usize {
-        self.pending.len()
     }
 }
 
@@ -424,8 +458,9 @@ impl DialogueHook {
         }
     }
 
-    /// Called by the loop after each tick.
-    pub fn after_tick(&self, events: &[Event], sim: &Sim, tick: u64) {
+    /// Called by the loop after each tick. Lines that were used are submitted as `RecordDialogue` inputs, so
+    /// they become part of the logged, replayable history.
+    pub fn after_tick(&self, events: &[Event], sim: &mut Sim, tick: u64) {
         let (settings, graphic_filter) = self
             .settings
             .lock()
@@ -435,9 +470,22 @@ impl DialogueHook {
             tone_preset: sim.world().settings.tone.name().to_owned(),
             graphic_filter,
         };
-        let mut svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
-        svc.observe(events, sim, &settings, &rules);
-        svc.poll(tick);
+        let polled = {
+            let mut svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
+            svc.observe(events, sim, &settings, &rules);
+            svc.poll(tick)
+        };
+        for r in polled.record {
+            let _ = sim.submit_now(pg_core::input::SimInput::Command {
+                actor: None,
+                cmd: pg_core::commands::Command::RecordDialogue {
+                    a: r.a,
+                    b: r.b,
+                    started: r.started,
+                    lines: r.lines,
+                },
+            });
+        }
     }
 }
 

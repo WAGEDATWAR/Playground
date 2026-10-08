@@ -47,6 +47,52 @@ pub struct Talk {
     pub ends: u64,
     pub turns: u32,
     pub leader: bool,
+    /// What was actually said, once known (set by a recorded dialogue; empty until then).
+    pub lines: Vec<String>,
+}
+
+/// What a conversation memory remembers about the talk itself, so it can be recalled later: when it
+/// began, how it went, and, when lines were generated for it, the lines themselves. Without `lines`,
+/// the fallback lines are rebuilt from the data (they are a pure function of the talk).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TalkRecord {
+    pub started: u64,
+    pub tone: String,
+    pub turns: u32,
+    /// The lines as spoken, first speaker (the lower id) first; empty when only the fallback was used.
+    pub lines: Vec<String>,
+}
+
+impl ToCanon for TalkRecord {
+    fn to_canon(&self) -> Canon {
+        Canon::map([
+            ("started", self.started.to_canon()),
+            ("tone", Canon::str(self.tone.clone())),
+            ("turns", self.turns.to_canon()),
+            (
+                "lines",
+                Canon::List(self.lines.iter().map(|l| Canon::str(l.clone())).collect()),
+            ),
+        ])
+    }
+}
+
+impl TalkRecord {
+    pub fn from_reader(r: Reader<'_>) -> Result<TalkRecord, ReadError> {
+        r.only(&["started", "tone", "turns", "lines"])?;
+        Ok(TalkRecord {
+            started: r.child("started")?.reader().u64()?,
+            tone: r.child("tone")?.reader().str()?.to_owned(),
+            turns: r.child("turns")?.reader().u32()?,
+            lines: r
+                .child("lines")?
+                .reader()
+                .list()?
+                .iter()
+                .map(|c| Ok(c.reader().str()?.to_owned()))
+                .collect::<Result<Vec<_>, ReadError>>()?,
+        })
+    }
 }
 
 impl ToCanon for Talk {
@@ -59,6 +105,10 @@ impl ToCanon for Talk {
             ("ends", self.ends.to_canon()),
             ("turns", self.turns.to_canon()),
             ("leader", Canon::Bool(self.leader)),
+            (
+                "lines",
+                Canon::List(self.lines.iter().map(|l| Canon::str(l.clone())).collect()),
+            ),
         ])
     }
 }
@@ -66,7 +116,7 @@ impl ToCanon for Talk {
 impl Talk {
     pub fn from_reader(r: Reader<'_>) -> Result<Talk, ReadError> {
         r.only(&[
-            "partner", "topic", "tone", "started", "ends", "turns", "leader",
+            "partner", "topic", "tone", "started", "ends", "turns", "leader", "lines",
         ])?;
         Ok(Talk {
             partner: r.child("partner")?.reader().parse()?,
@@ -76,6 +126,13 @@ impl Talk {
             ends: r.child("ends")?.reader().u64()?,
             turns: r.child("turns")?.reader().u32()?,
             leader: r.child("leader")?.reader().bool()?,
+            lines: r
+                .child("lines")?
+                .reader()
+                .list()?
+                .iter()
+                .map(|c| Ok(c.reader().str()?.to_owned()))
+                .collect::<Result<Vec<_>, ReadError>>()?,
         })
     }
 }
@@ -110,6 +167,8 @@ pub struct Memory {
     pub topic: Option<String>,
     /// String-table key of the one-line summary the inspector shows (with `{other}` filled in).
     pub summary_key: Option<String>,
+    /// For a conversation: the talk itself, so it can be recalled (lines included when they were generated).
+    pub talk: Option<TalkRecord>,
 }
 
 impl Memory {
@@ -139,6 +198,7 @@ impl Memory {
             retention: 1000,
             topic: None,
             summary_key: None,
+            talk: None,
         }
     }
 
@@ -169,6 +229,10 @@ impl ToCanon for Memory {
             ("retention", self.retention.to_canon()),
             ("topic", opt(&self.topic)),
             ("summary_key", opt(&self.summary_key)),
+            (
+                "talk",
+                self.talk.as_ref().map_or(Canon::Null, ToCanon::to_canon),
+            ),
         ])
     }
 }
@@ -187,6 +251,7 @@ impl Memory {
             "retention",
             "topic",
             "summary_key",
+            "talk",
         ])?;
         let text = |key: &str| -> Result<Option<String>, ReadError> {
             match r.maybe(key)? {
@@ -216,6 +281,10 @@ impl Memory {
             retention: r.child("retention")?.reader().i32()?,
             topic: text("topic")?,
             summary_key: text("summary_key")?,
+            talk: match r.maybe("talk")? {
+                Some(c) => Some(TalkRecord::from_reader(c.reader())?),
+                None => None,
+            },
         })
     }
 }
@@ -754,6 +823,7 @@ mod tests {
             ends: 160,
             turns: 3,
             leader: true,
+            lines: vec!["Hi.".into()],
         };
         let text = t.to_canon().to_canonical_string();
         let back = Talk::from_reader(Reader::new(&json::parse(&text).unwrap(), "t")).unwrap();

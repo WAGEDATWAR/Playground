@@ -20,7 +20,7 @@ use crate::memory;
 use crate::pawn::{Pawn, Step};
 use crate::pipeline::{Pipeline, System, SystemSlot, TickCtx};
 use crate::rng::{Key, Rng, Stream};
-use crate::social::{Memory, PairKey, Relationship, Talk};
+use crate::social::{Memory, PairKey, Relationship, Talk, TalkRecord};
 use crate::time::TICKS_PER_GAME_MINUTE;
 use crate::world::WorldState;
 use pg_content::gamedata::{ConversationParams, GameData, ToneDef, TopicDef};
@@ -293,7 +293,7 @@ fn close(
     }
     if let Some(mp) = memory_params {
         for (owner, other) in [(a, b), (b, a)] {
-            record_memory(ctx, owner, other, topic, result.applied, mp);
+            record_memory(ctx, owner, other, topic, result.applied, mp, talk);
         }
     }
 }
@@ -305,6 +305,7 @@ fn record_memory(
     topic: &TopicDef,
     impact: i32,
     mp: &pg_content::gamedata::MemoryParams,
+    talk: &Talk,
 ) {
     let Ok(id) = ctx.world.id_counters.allocate(Kind::Memory) else {
         return;
@@ -320,6 +321,12 @@ fn record_memory(
     );
     m.topic = Some(topic.id.clone());
     m.summary_key = Some(pg_content::gamedata::memory_summary_key(&topic.id));
+    m.talk = Some(TalkRecord {
+        started: talk.started,
+        tone: talk.tone.clone(),
+        turns: talk.turns,
+        lines: talk.lines.clone(),
+    });
     if let (Some(point), Some(host)) = (
         crate::hooks::memory_importance(),
         ctx.services.hooks.as_mut(),
@@ -468,6 +475,7 @@ fn start_new(ctx: &mut TickCtx<'_>, params: &ConversationParams, start_affinity:
             ends,
             turns,
             leader,
+            lines: Vec::new(),
         };
         let (topic_id, tone_id) = (topic.id.clone(), tone.id.clone());
         if let Some(p) = ctx.world.pawns.get_mut(*a_id) {
@@ -528,6 +536,167 @@ pub fn install(pipeline: &mut Pipeline, data: Arc<GameData>) {
         Box::new(ConversationSystem::new(Arc::clone(&data))),
     );
     pipeline.set_builtin(SystemSlot::Memory, Box::new(MemorySystem::new(data)));
+}
+
+/// The most lines a conversation can carry (a turn is one line).
+pub const MAX_RECORDED_LINES: usize = 8;
+
+/// Why recorded lines are refused (shown in `input_rejected`).
+fn refuse_lines(lines: &[String], turns: Option<u32>) -> Option<&'static str> {
+    if lines.is_empty() || lines.len() > MAX_RECORDED_LINES {
+        return Some("a conversation has 1 to 8 lines");
+    }
+    if turns.is_some_and(|t| t as usize != lines.len()) {
+        return Some("the number of lines must equal the number of turns");
+    }
+    if lines.iter().any(|l| {
+        l.trim().is_empty()
+            || l.chars().count() > pg_content::gamedata::MAX_DIALOGUE_CHARS
+            || l.chars().any(char::is_control)
+    }) {
+        return Some("lines must be 1 to 140 characters with no control characters");
+    }
+    None
+}
+
+fn same_talk(m: &Memory, other: EntityId, started: u64) -> bool {
+    m.participants.contains(&other) && m.talk.as_ref().is_some_and(|t| t.started == started)
+}
+
+/// Records what was said in a conversation (the `RecordDialogue` command). While the talk is under way the
+/// lines wait on the two pawns' talks; once it has closed they go into both pawns' memories of it. Either
+/// way they are state, entered as a logged input, so a replay reproduces them. Returns when they were
+/// recorded, or why they were refused.
+pub fn record_dialogue(
+    world: &mut WorldState,
+    a: EntityId,
+    b: EntityId,
+    started: u64,
+    lines: &[String],
+) -> Result<&'static str, &'static str> {
+    let live_turns = world
+        .pawns
+        .get(a)
+        .and_then(|p| p.talk.as_ref())
+        .filter(|t| t.partner == b && t.started == started)
+        .map(|t| t.turns);
+    if let Some(turns) = live_turns {
+        if let Some(why) = refuse_lines(lines, Some(turns)) {
+            return Err(why);
+        }
+        for (who, other) in [(a, b), (b, a)] {
+            if let Some(t) = world
+                .pawns
+                .get_mut(who)
+                .and_then(|p| p.talk.as_mut())
+                .filter(|t| t.partner == other && t.started == started)
+            {
+                t.lines = lines.to_vec();
+            }
+        }
+        return Ok("while it was happening");
+    }
+    // Afterwards: the memory each of them kept.
+    let mut found = false;
+    for (who, other) in [(a, b), (b, a)] {
+        let turns = world.pawns.get(who).and_then(|p| {
+            p.memories
+                .iter()
+                .find(|m| same_talk(m, other, started))
+                .and_then(|m| m.talk.as_ref().map(|t| t.turns))
+        });
+        if let Some(turns) = turns {
+            if let Some(why) = refuse_lines(lines, Some(turns)) {
+                return Err(why);
+            }
+            found = true;
+        }
+    }
+    if !found {
+        return Err("no such conversation is remembered");
+    }
+    for (who, other) in [(a, b), (b, a)] {
+        if let Some(t) = world.pawns.get_mut(who).and_then(|p| {
+            p.memories
+                .iter_mut()
+                .find(|m| same_talk(m, other, started))
+                .and_then(|m| m.talk.as_mut())
+        }) {
+            t.lines = lines.to_vec();
+        }
+    }
+    Ok("afterwards")
+}
+
+/// What was said, as remembered.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Spoken {
+    /// Text that was generated or recorded.
+    Written(String),
+    /// A fallback line: a string-table key with `{name}` and `{other}` to fill in.
+    Key(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Recalled {
+    pub speaker: EntityId,
+    pub listener: EntityId,
+    pub said: Spoken,
+}
+
+/// Recalls the conversation a memory is about: the recorded lines if there are any, otherwise the fallback
+/// lines rebuilt from the data. `owner` is the pawn who holds the memory. `None` for a memory that is not
+/// of a conversation.
+pub fn recall(
+    world: &WorldState,
+    params: &ConversationParams,
+    owner: EntityId,
+    memory: &Memory,
+) -> Option<Vec<Recalled>> {
+    let record = memory.talk.as_ref()?;
+    let other = *memory.participants.first()?;
+    let (first, second) = (owner.min(other), owner.max(other));
+    if !record.lines.is_empty() {
+        return Some(
+            record
+                .lines
+                .iter()
+                .enumerate()
+                .map(|(i, l)| {
+                    let (speaker, listener) = if i % 2 == 0 {
+                        (first, second)
+                    } else {
+                        (second, first)
+                    };
+                    Recalled {
+                        speaker,
+                        listener,
+                        said: Spoken::Written(l.clone()),
+                    }
+                })
+                .collect(),
+        );
+    }
+    let talk = Talk {
+        partner: second,
+        topic: memory.topic.clone()?,
+        tone: record.tone.clone(),
+        started: record.started,
+        ends: record.started,
+        turns: record.turns,
+        leader: true,
+        lines: Vec::new(),
+    };
+    Some(
+        dialogue(params, world.seed(), first, &talk)
+            .into_iter()
+            .map(|l| Recalled {
+                speaker: l.speaker,
+                listener: l.listener,
+                said: Spoken::Key(l.key),
+            })
+            .collect(),
+    )
 }
 
 /// One line of fallback dialogue: who says it and the string-table key (with `{name}` the speaker and

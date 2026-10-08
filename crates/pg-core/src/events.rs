@@ -91,6 +91,7 @@ pub const SEVERITIES: &[(&str, Severity)] = &[
     ("conversation.started", Severity::Debug),
     ("conversation.closed", Severity::Info),
     ("conversation.cancelled", Severity::Debug),
+    ("dialogue.recorded", Severity::Debug),
     ("memory.created", Severity::Debug),
     ("memory.expired", Severity::Debug),
     ("relationship.label_changed", Severity::Info),
@@ -409,6 +410,18 @@ impl EventCatalog {
             false,
             "A conversation was called off because the two moved apart or one could not carry on.",
             &[("a", id("pawn")), ("b", id("pawn")), ("topic", text(48))],
+        );
+        add(
+            "dialogue.recorded",
+            Social,
+            false,
+            "The lines a conversation had were recorded into its history.",
+            &[
+                ("a", id("pawn")),
+                ("b", id("pawn")),
+                ("started", int()),
+                ("when", text(32)),
+            ],
         );
         add(
             "memory.created",

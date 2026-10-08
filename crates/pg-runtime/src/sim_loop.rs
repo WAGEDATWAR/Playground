@@ -335,7 +335,7 @@ impl SimLoop {
                 }
                 self.to_console(&report.events);
                 if let Some(d) = &self.services.dialogue {
-                    d.after_tick(&report.events, &self.sim, report.tick);
+                    d.after_tick(&report.events, &mut self.sim, report.tick);
                 }
                 events.extend(report.events);
                 self.log_applied();

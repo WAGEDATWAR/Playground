@@ -32,6 +32,15 @@ pub enum Command {
         /// `cozy`, `standard` or `mature`.
         tone: String,
     },
+    /// Records the lines a conversation actually had (generated text, composed with the fallback for turns
+    /// already spoken). Presentation entering as a logged input so it is part of the replayable history
+    /// (milestone 1.6; Blueprint section 9.4). `a` is the lower id of the pair.
+    RecordDialogue {
+        a: EntityId,
+        b: EntityId,
+        started: u64,
+        lines: Vec<String>,
+    },
     /// **Dev:** adds `amount` to the dev probe value.
     DevNudge { amount: i32 },
     /// **Dev:** creates an overworld map of `w`×`h` tiles. `style` 0 is open grass; 1 is a generated town
@@ -127,6 +136,21 @@ impl ToCanon for Command {
                 ("residents", residents.to_canon()),
                 ("tone", tone.to_canon()),
             ]),
+            Command::RecordDialogue {
+                a,
+                b,
+                started,
+                lines,
+            } => Canon::map([
+                ("type", Canon::str("record_dialogue")),
+                ("a", a.to_canon()),
+                ("b", b.to_canon()),
+                ("started", started.to_canon()),
+                (
+                    "lines",
+                    Canon::List(lines.iter().map(|l| Canon::str(l.clone())).collect()),
+                ),
+            ]),
             Command::DevNudge { amount } => Canon::map([
                 ("type", Canon::str("dev_nudge")),
                 ("amount", amount.to_canon()),
@@ -209,6 +233,26 @@ impl Command {
                 water: u32_of(c, "water")?,
                 residents: u32_of(c, "residents")?,
                 tone: text_of(c, "tone")?,
+            }),
+            "record_dialogue" => Ok(Command::RecordDialogue {
+                a: id_of(c, "a")?,
+                b: id_of(c, "b")?,
+                started: c
+                    .field("started")?
+                    .as_i64()
+                    .and_then(|v| u64::try_from(v).ok())
+                    .ok_or_else(|| CanonError::new("started must be a non-negative integer"))?,
+                lines: match c.field("lines")? {
+                    Canon::List(l) => l
+                        .iter()
+                        .map(|x| {
+                            x.as_str()
+                                .map(str::to_owned)
+                                .ok_or_else(|| CanonError::new("a line must be text"))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                    _ => return Err(CanonError::new("lines must be a list")),
+                },
             }),
             "dev_nudge" => Ok(Command::DevNudge {
                 amount: int_of(c, "amount")?,
@@ -339,6 +383,24 @@ pub(crate) fn apply(
                 Err(e) => events.push(rejected(tick, "generate_town", &e.to_string())),
             }
         }
+        Command::RecordDialogue {
+            a,
+            b,
+            started,
+            lines,
+        } => match crate::conversation::record_dialogue(world, *a, *b, *started, lines) {
+            Ok(when) => events.push(event(
+                tick,
+                "dialogue.recorded",
+                Canon::map([
+                    ("a", a.to_canon()),
+                    ("b", b.to_canon()),
+                    ("started", started.to_canon()),
+                    ("when", Canon::str(when)),
+                ]),
+            )),
+            Err(why) => events.push(rejected(tick, "record_dialogue", why)),
+        },
         Command::DevNudge { amount } => {
             world.probe.value = world.probe.value.saturating_add(i64::from(*amount));
             events.push(event(

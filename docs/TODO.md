@@ -22,7 +22,7 @@ The repository is public (D-047), so GitHub Actions minutes are free again. Loca
 
 1. ~~Owner repository settings~~ done 2026-10-08: branch ruleset on `main` (no deletion, no force push, admin bypass), private vulnerability reporting, secret scanning. Optional: require status checks once S-050 makes CI cheap and stable. Still to confirm: the copyright line in `LICENSE` (currently "WAGEDATWAR and the Playground contributors").
 2. ~~1.4b Process and safety net~~ done (D-049): `pg pins`, `pg schema`, `pg milestone`, `pg bench`, cheaper CI, property tests, plateau soak.
-3. ~~1.5 AI lines~~ done (D-050); S-054 and S-057 moved to 1.6/1.7. **Next:** 1.6 native renderer (checkpoint for you): S-069 social report first; the renderer must call `set_dialogue_focus` and draw bubbles from `DialogueService::lines`.
+3. ~~1.5 AI lines~~ done (D-050); S-054 and S-057 moved to 1.6/1.7. **Done early in 1.6 (D-051):** generated lines are recorded into the history and recalled from the memories. **Next:** 1.6 native renderer (checkpoint for you): S-069 social report first; the renderer must call `set_dialogue_focus` and draw bubbles from `DialogueService::lines`.
 4. 1.6 Native renderer (checkpoint): S-069 social report first; render benchmark targets.
 5. 1.7 (S-056, S-058 observation and possession modes only, S-067), 1.8 (S-061, bench suite coverage, S-064), 1.9 gate (S-070 digest golden in `pg check --full`).
 6. Later: S-055 (Stage 2), S-053 (Stage 3), S-060 only when easy.
