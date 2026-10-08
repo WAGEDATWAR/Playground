@@ -1,8 +1,22 @@
 name: CI
 
+# Cost control (S-050). A push to a branch runs the fast Linux job only; the three-operating-system matrix and
+# the 30-day soak run nightly, on pull requests, on milestone tags (m*), and on demand ("Run workflow").
 on:
   push:
+    branches: ["**"]
+    tags: ["m*"]
+    paths-ignore: ["**/*.md", "docs/**", "LICENSE"]
   pull_request:
+    paths-ignore: ["**/*.md", "docs/**", "LICENSE"]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the run still going for the older one.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -16,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        os: ${{ fromJSON(github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') && '["ubuntu-latest"]' || '["windows-latest","ubuntu-latest","macos-latest"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -75,6 +89,8 @@ jobs:
 
   soak:
     name: 30-day soak (${{ matrix.os }})
+    # Slow: nightly, on milestone tags and on demand only.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

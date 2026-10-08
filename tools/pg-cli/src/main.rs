@@ -13,15 +13,19 @@ use std::process::ExitCode;
 
 mod ai_cmds;
 mod args;
+mod bench_cmds;
 mod check_cmds;
 mod content_cmds;
 mod events_cmds;
 mod map_cmds;
+mod milestone_cmds;
 mod pack_cmds;
 mod persist_cmds;
+mod pins_cmds;
 mod residents_cmds;
 mod runtime_cmds;
 mod sched_cmds;
+mod schema_cmds;
 mod settings_cmds;
 mod shared;
 mod sim_cmds;
@@ -130,6 +134,18 @@ USAGE:
     pg content resolve <id> [pack-dir...] Show a template's inheritance chain, which template sets each
                                           component, and the fully resolved result.
     pg content components                 List the registered components and their parameter schemas.
+    pg bench --list | --all | --targets a,b [--runs N] [--out DIR] [--baseline FILE.json]
+        Time the named targets (tick loop, towns, world generation, paths, replay) and write a report file
+        (JSON and Markdown) under bench/reports/. Run in release mode.
+    pg milestone [--skip-tests] [--tag NAME]
+        The whole milestone checklist: format, dependency rule, clippy, tests, check --full, app smoke test;
+        prints a status report and optionally tags the commit. Commits and pushes nothing.
+    pg schema check|update|show
+        The shape of a saved world (every field path and the kinds seen there) against golden/schema-shape.txt;
+        fails when a save changes without a schema bump or migration.
+    pg pins list|check|update [--full] [--only TEXT]
+        Every pinned hash (golden replay, pack goldens, scenario hashes, town starting hash, fixtures):
+        list them, compare them all, or re-record them all and show where the golden replay changed.
     pg id <text>              Parse an id such as pawn_1a and show its parts.
     pg id <kind> <counter>    Format an id from a kind and a decimal counter.
     pg version
@@ -161,6 +177,10 @@ fn main() -> ExitCode {
         Some("tools") => Ok(runtime_cmds::tools_cmd()),
         Some("settings") => settings_cmds::settings_cmd(&args[1..]),
         Some("check") => check_cmds::check_cmd(&args[1..]),
+        Some("bench") => bench_cmds::bench_cmd(&args[1..]),
+        Some("milestone") => milestone_cmds::milestone_cmd(&args[1..]),
+        Some("schema") => schema_cmds::schema_cmd(&args[1..]),
+        Some("pins") => pins_cmds::pins_cmd(&args[1..]),
         Some("bugbundle") => persist_cmds::bugbundle_cmd(&args[1..]),
         Some("scenario") => persist_cmds::scenario_cmd(&args[1..]),
         Some("actions") => Ok(sched_cmds::actions_cmd()),

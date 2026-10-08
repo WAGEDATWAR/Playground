@@ -52,6 +52,11 @@ pub fn check_cmd(rest: &[String]) -> Result<ExitCode, String> {
             needs: Some("data/base"),
         },
         Check {
+            name: "saved world shape (schema fingerprint)",
+            args: args(&["schema", "check"]),
+            needs: Some("golden/schema-shape.txt"),
+        },
+        Check {
             name: "resident inspector (conversations, memories)",
             args: args(&[
                 "residents",
@@ -83,9 +88,9 @@ pub fn check_cmd(rest: &[String]) -> Result<ExitCode, String> {
                 "14",
                 "--no-map",
                 "--expect",
-                "a50c78cd",
+                &crate::pins_cmds::town_pin(),
             ]),
-            needs: Some("data/base"),
+            needs: Some("golden/town-start.txt"),
         },
         Check {
             name: "developer console output",

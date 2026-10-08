@@ -759,4 +759,37 @@ mod tests {
         let back = Talk::from_reader(Reader::new(&json::parse(&text).unwrap(), "t")).unwrap();
         assert_eq!(back, t);
     }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(200))]
+
+        /// Whatever the conversations ask, affinity stays in range, the day's net change stays within the
+        /// cap, applied changes add up, and the label always agrees with the affinity within the margin.
+        #[test]
+        fn relationship_rules_hold_for_any_sequence_of_conversations(
+            steps in proptest::collection::vec((-400i32..400, 0u64..3), 1..120)
+        ) {
+            let p = rel_params();
+            let mut r = rel(1, 2, 0);
+            r.label = "stranger".into();
+            let mut day = 0u64;
+            let mut total = 0i32;
+            for (i, (delta, advance)) in steps.into_iter().enumerate() {
+                day += advance;
+                let before = r.affinity;
+                let res = r.apply_delta(&p, delta, day, i as u64);
+                total += res.applied;
+                proptest::prop_assert_eq!(r.affinity - before, res.applied);
+                proptest::prop_assert!((-1000..=1000).contains(&r.affinity));
+                proptest::prop_assert!(r.day_change.abs() <= p.daily_cap);
+                // The label's range, widened by the margin, contains the affinity.
+                let idx = p.labels.iter().position(|l| l.id == r.label).unwrap();
+                let low = p.labels[idx].min - p.hysteresis;
+                let high = p.labels.get(idx + 1).map_or(i32::MAX, |n| n.min + p.hysteresis);
+                proptest::prop_assert!(r.affinity >= low && r.affinity < high || idx == 0 && r.affinity < high,
+                    "affinity {} label {} range {low}..{high}", r.affinity, r.label);
+            }
+            proptest::prop_assert_eq!(r.affinity, total);
+        }
+    }
 }

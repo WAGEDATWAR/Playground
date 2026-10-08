@@ -232,6 +232,20 @@ cargo run --release -p pg-cli -- check --full
 installs a git pre-push hook that runs it for you (`git push --no-verify` skips it knowingly). CI runs the
 same checks, so a pin that passes here passes there.
 
+### The 1.4b tools
+
+```bash
+cargo run --release -p pg-cli -- pins check --full     # every pinned hash, listed with expected and found values
+cargo run --release -p pg-cli -- pins update --full    # re-record them all, show where the golden replay changed, verify
+cargo run -p pg-cli -- schema check                    # the shape of a saved world against golden/schema-shape.txt
+cargo run --release -p pg-cli -- bench --all           # time every target, write bench/reports/<date>-<commit>.json and .md
+cargo run --release -p pg-cli -- bench --targets paths,crowd --baseline bench/reports/<older>.json
+cargo run --release -p pg-cli -- milestone [--tag m1.5]   # format, deps, clippy, tests, check --full, smoke; then a status report
+```
+
+`pins update` leaves the changes in the working tree for you to review with `git diff` before committing.
+`schema check` fails when a save changes without a schema bump or migration; while schema 4 is unshipped, `pg schema update` and `pg pins update` accept the change.
+
 The gate report with every clause, its evidence and its command is `docs/gates/stage-0.md`.
 
 ## Needs, mood and residents (Stage 1)

@@ -22,7 +22,8 @@
       "op": "soak",
       "days": 30,
       "shadow_threads": 3,
-      "max_growth_permille": 3000
+      "max_growth_permille": 3000,
+      "plateau_permille": 300
     },
     {
       "op": "expect",

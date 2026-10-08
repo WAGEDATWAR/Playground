@@ -183,3 +183,35 @@ fn relevant_memories_are_ranked_with_reasons_and_ties_are_stable() {
         again.iter().map(|r| r.memory.id).collect::<Vec<_>>()
     );
 }
+
+proptest::proptest! {
+    #![proptest_config(proptest::prelude::ProptestConfig::with_cases(100))]
+
+    /// Ordinary memories never exceed the bound, persistent ones are never lost, retention only falls.
+    #[test]
+    fn memory_rules_hold_for_any_sequence_of_events_and_days(
+        ops in proptest::collection::vec((1u8..=5, -120i32..120, 0u8..4), 1..150)
+    ) {
+        let (mut w, ids) = world(2);
+        let p = params(8);
+        let mut persistent: Vec<EntityId> = Vec::new();
+        for (i, (severity, impact, kind)) in ops.into_iter().enumerate() {
+            if kind == 0 {
+                age_memories(&mut w, ids[0], &p);
+            } else {
+                let m = mem(&mut w, severity, impact, 10 + i as u64, ids[1]);
+                if is_persistent(&m, &p) {
+                    persistent.push(m.id);
+                }
+                remember(&mut w, ids[0], m, &p);
+            }
+            let kept = &w.pawns.get(ids[0]).unwrap().memories;
+            let ordinary = kept.iter().filter(|m| !is_persistent(m, &p)).count();
+            proptest::prop_assert!(ordinary <= 8, "{ordinary} ordinary memories");
+            for id in &persistent {
+                proptest::prop_assert!(kept.iter().any(|m| m.id == *id), "{id} was lost");
+            }
+            proptest::prop_assert!(kept.iter().all(|m| m.retention > 0 && m.retention <= 1000));
+        }
+    }
+}

@@ -129,6 +129,9 @@ pub enum Step {
         days: u64,
         shadow_threads: Option<usize>,
         max_growth_permille: u64,
+        /// With 20 or more days: the average state size of the last ten days may be at most this many per
+        /// mille above the ten days before (a steady state, rather than a fixed ratio, S-052).
+        plateau_permille: Option<u64>,
     },
 }
 
@@ -283,7 +286,13 @@ fn parse_step(r: Reader<'_>) -> Result<Step, ReadError> {
             })
         }
         "soak" => {
-            r.only(&["op", "days", "shadow_threads", "max_growth_permille"])?;
+            r.only(&[
+                "op",
+                "days",
+                "shadow_threads",
+                "max_growth_permille",
+                "plateau_permille",
+            ])?;
             Ok(Step::Soak {
                 days: r.child("days")?.reader().u64()?,
                 shadow_threads: match r.maybe("shadow_threads")? {
@@ -293,6 +302,10 @@ fn parse_step(r: Reader<'_>) -> Result<Step, ReadError> {
                 max_growth_permille: match r.maybe("max_growth_permille")? {
                     Some(g) => g.reader().u64()?,
                     None => 1500,
+                },
+                plateau_permille: match r.maybe("plateau_permille")? {
+                    Some(g) => Some(g.reader().u64()?),
+                    None => None,
                 },
             })
         }
@@ -485,7 +498,13 @@ impl Runner<'_> {
                 days,
                 shadow_threads,
                 max_growth_permille,
-            } => self.soak(*days, *shadow_threads, *max_growth_permille),
+                plateau_permille,
+            } => self.soak(
+                *days,
+                *shadow_threads,
+                *max_growth_permille,
+                *plateau_permille,
+            ),
             Step::Expect(e) => {
                 let w = self.sim.world();
                 let mut problems = Vec::new();
@@ -560,6 +579,7 @@ impl Runner<'_> {
         days: u64,
         shadow_threads: Option<usize>,
         max_growth_permille: u64,
+        plateau_permille: Option<u64>,
     ) -> Result<String, String> {
         let pawns = self.sim.world().pawns.len();
         let inputs_before = self.sim.applied_inputs().len();
@@ -596,6 +616,18 @@ impl Runner<'_> {
                 ));
             }
             notes.push(format!("state {base} -> {worst} bytes"));
+        }
+        if let (Some(limit), true) = (plateau_permille, sizes.len() >= 20) {
+            let mean = |part: &[u64]| part.iter().sum::<u64>() / (part.len() as u64).max(1);
+            let n = sizes.len();
+            let last = mean(sizes.get(n - 10..).unwrap_or(&[]));
+            let before = mean(sizes.get(n - 20..n - 10).unwrap_or(&[])).max(1);
+            if last * 1000 > before * (1000 + limit) {
+                return Err(format!(
+                    "the world state is still growing: the last ten days average {last} bytes against {before} for the ten before (more than {limit} per mille above)"
+                ));
+            }
+            notes.push(format!("last ten days {last} bytes vs {before} before"));
         }
         if fuel.len() > 5 {
             let base = fuel.get(4).copied().unwrap_or(1).max(1);
