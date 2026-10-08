@@ -20,7 +20,7 @@ use crate::id::EntityId;
 use crate::map::Tile;
 use crate::pawn::{Intent, Replan, Step};
 use crate::pipeline::{Pipeline, System, SystemSlot, TickCtx};
-use crate::schedule::{PlanInputs, UrgentNeed};
+use crate::schedule::{DutyTemplate, LeisureOption, PlanInputs, UrgentNeed};
 use crate::time::TICKS_PER_GAME_MINUTE;
 use crate::world::WorldState;
 use pg_content::gamedata::{GameData, MoodCond, PlaceKind, Tone};
@@ -379,6 +379,82 @@ pub fn plaza(world: &WorldState, map: EntityId) -> Option<Tile> {
     nearest_passable
 }
 
+/// The day an occupation template asks for (milestone 1.3): its duties at the pawn's workplace, shifted by
+/// the pawn's own habit, and its leisure options at places that resolve for this pawn.
+///
+/// Each duty's start is moved by a **habit** drawn once from the pawn's occupation `variation` (an early
+/// bird starts at the early end of the template's allowed shift, a late riser at the other end), and the
+/// planner adds its usual small seeded variation per day on top, so two baristas keep different routines
+/// that still drift a little from day to day.
+pub fn occupation_inputs(
+    world: &WorldState,
+    pawn: EntityId,
+    day: u64,
+    variation: i32,
+    def: &pg_content::gamedata::OccupationDef,
+) -> PlanInputs {
+    let slot_minutes = world.settings.slot_minutes.get().max(1);
+    let slots = world.settings.slot_minutes.slots_per_day();
+    let to_slots = |minutes: u32| minutes.div_ceil(slot_minutes).max(1);
+    let mut inputs = PlanInputs {
+        open_weight: def.open_weight,
+        ..PlanInputs::default()
+    };
+    let tile_params = |at: Tile| Canon::map([("at", at.to_canon())]);
+    for duty in &def.duties {
+        let (Ok(action), Some(at)) = (
+            ActionId::new(&duty.activity),
+            resolve_place(world, pawn, duty.place, day),
+        ) else {
+            continue;
+        };
+        let (earlier, later) = (
+            duty.shift_earlier / slot_minutes,
+            duty.shift_later / slot_minutes,
+        );
+        // The habit: somewhere in -earlier..=later, the same every day.
+        let span = earlier + later + 1;
+        let habit = i64::from(u32::try_from(variation.clamp(0, 999)).unwrap_or(0) * span / 1000)
+            - i64::from(earlier);
+        let start = i64::from(duty.start / slot_minutes) + habit;
+        let len = to_slots(duty.minutes);
+        inputs.duties.push(DutyTemplate {
+            action,
+            params: tile_params(at),
+            start: u32::try_from(start.clamp(0, i64::from(slots.saturating_sub(len)))).unwrap_or(0),
+            len,
+            min_len: to_slots(duty.min_minutes).min(len),
+            shift_earlier: earlier,
+            shift_later: later,
+        });
+    }
+    for (i, l) in def.leisure.iter().enumerate() {
+        let salt = i64::try_from(i).unwrap_or(0) + 11;
+        let at = match l.place {
+            PlaceKind::Anywhere => {
+                DevPlanSource::tile(world, pawn, i64::try_from(day).unwrap_or(i64::MAX), salt)
+            }
+            other => resolve_place(world, pawn, other, day),
+        };
+        let (Ok(action), Some(at)) = (ActionId::new(&l.activity), at) else {
+            continue;
+        };
+        // `move_to` takes a destination named `to`; the others stay where they are named `at`.
+        let params = if l.activity == "move_to" {
+            Canon::map([("to", at.to_canon())])
+        } else {
+            tile_params(at)
+        };
+        inputs.leisure.push(LeisureOption {
+            action,
+            params,
+            len: to_slots(l.minutes),
+            weight: l.weight,
+        });
+    }
+    inputs
+}
+
 /// The scaffolding plan (duties and leisure) plus a restoring activity for each need that is running low.
 pub struct LifePlanSource {
     data: Arc<GameData>,
@@ -400,9 +476,18 @@ impl PlanSource for LifePlanSource {
     }
 
     fn inputs(&self, world: &WorldState, pawn: EntityId, day: u64) -> PlanInputs {
-        let mut inputs = self.inner.inputs(world, pawn, day);
         let Some(p) = world.pawns.get(pawn) else {
-            return inputs;
+            return PlanInputs::default();
+        };
+        // A resident with an occupation follows its template; a pawn without one (the developer tools'
+        // anonymous pawns) keeps the scaffolding plan.
+        let mut inputs = match p
+            .occupation
+            .as_ref()
+            .and_then(|o| self.data.occupations.get(&o.template).map(|def| (o, def)))
+        {
+            Some((occ, def)) => occupation_inputs(world, pawn, day, occ.variation, def),
+            None => self.inner.inputs(world, pawn, day),
         };
         let slot_minutes = world.settings.slot_minutes.get();
         let slots = world.settings.slot_minutes.slots_per_day();
@@ -428,6 +513,7 @@ impl PlanSource for LifePlanSource {
                 need: need.clone(),
                 predicted_slot: last_start,
                 earliest,
+                rank: def.priority,
                 action: action.clone(),
                 params: params.clone(),
                 len: minutes.div_ceil(slot_minutes).max(1),

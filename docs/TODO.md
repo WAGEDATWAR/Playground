@@ -17,7 +17,7 @@ Updated every time work starts, stops or changes direction. Newest status at the
 ## Next up
 
 1. Your checkpoint review of 1.2; fold in anything you want changed.
-2. 1.3 Occupation schedules (replace the scaffolding plan source; retire `DevWander`).
+2. ~~1.3 Occupation schedules~~ done (D-045). Next: 1.4 memory, relationships, rule-based conversations.
 3. 1.4 Memory, relationships and rule-based conversations.
 
 ## Shell note

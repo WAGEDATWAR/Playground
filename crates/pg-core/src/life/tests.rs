@@ -546,3 +546,111 @@ fn the_places_resolve_sensibly_and_the_plaza_is_near_the_middle() {
     }
     assert!(resolve_place(w, EntityId::new(Kind::Pawn, 99), PlaceKind::Home, 0).is_none());
 }
+
+fn generated(seed: &str) -> Sim {
+    let mut sim = Sim::with_dev_systems(WorldState::new("Gen", seed)).with_content(content());
+    sim.submit(
+        0,
+        input(Command::GenerateTown {
+            w: 48,
+            h: 36,
+            water: 15,
+            residents: 8,
+            tone: "standard".into(),
+        }),
+    )
+    .unwrap();
+    sim.run_ticks(2).unwrap();
+    sim
+}
+
+#[test]
+fn occupations_drive_the_days_duties_and_leisure_and_the_habit_stays_in_range() {
+    let sim = generated("occupations");
+    let w = sim.world();
+    let plans = LifePlanSource::new(data());
+    let mut worked = 0;
+    for (id, p) in w.pawns.iter() {
+        let Some(occ) = p.occupation.as_ref() else {
+            continue;
+        };
+        let def = data().occupations.get(&occ.template).cloned().unwrap();
+        let a = plans.inputs(w, id, 0);
+        assert_eq!(a.duties.len(), def.duties.len(), "{}", occ.template);
+        assert!(a.duties.iter().all(|d| d.len >= 1 && d.min_len <= d.len));
+        assert_eq!(a.open_weight, def.open_weight);
+        let slot = w.settings.slot_minutes.get();
+        for (d, t) in a.duties.iter().zip(&def.duties) {
+            let (lo, hi) = (
+                i64::from((t.start - t.shift_earlier.min(t.start)) / slot),
+                i64::from((t.start + t.shift_later) / slot),
+            );
+            let got = i64::from(d.start);
+            assert!(
+                (lo..=hi).contains(&got),
+                "duty start {got} outside {lo}..={hi}"
+            );
+        }
+        // The habit is the same every day and for every call.
+        let b = plans.inputs(w, id, 5);
+        let starts = |i: &PlanInputs| i.duties.iter().map(|d| d.start).collect::<Vec<_>>();
+        assert_eq!(starts(&a), starts(&b));
+        assert_eq!(a, plans.inputs(w, id, 0));
+        worked += 1;
+    }
+    assert!(worked >= 4, "a generated town has working residents");
+}
+
+#[test]
+fn different_variations_spread_duty_starts_across_the_allowed_shift() {
+    let sim = generated("habits");
+    let w = sim.world();
+    let d = data();
+    let (id, def) = w
+        .pawns
+        .iter()
+        .find_map(|(id, p)| {
+            let o = p.occupation.as_ref()?;
+            let def = d.occupations.get(&o.template)?;
+            def.duties
+                .iter()
+                .any(|t| t.shift_earlier + t.shift_later >= 60)
+                .then_some((id, def.clone()))
+        })
+        .expect("some occupation can shift by an hour");
+    let early = occupation_inputs(w, id, 0, 0, &def);
+    let late = occupation_inputs(w, id, 0, 999, &def);
+    assert!(
+        early
+            .duties
+            .iter()
+            .zip(&late.duties)
+            .any(|(a, b)| a.start < b.start),
+        "an early bird starts before a late riser"
+    );
+    assert!(early
+        .duties
+        .iter()
+        .zip(&late.duties)
+        .all(|(a, b)| a.start <= b.start));
+}
+
+#[test]
+fn a_pawn_without_an_occupation_falls_back_and_an_unknown_pawn_gets_nothing() {
+    let mut sim = generated("fallback");
+    let id = sim.world().pawns.iter().next().unwrap().0;
+    set_world(&mut sim, |w| {
+        if let Some(p) = w.pawns.get_mut(id) {
+            p.occupation = None;
+        }
+    });
+    let plans = LifePlanSource::new(data());
+    let w = sim.world();
+    let inputs = plans.inputs(w, id, 0);
+    assert!(
+        inputs.urgent.iter().any(|u| u.need == "hunger"),
+        "the routine of meals still applies"
+    );
+    let none = plans.inputs(w, EntityId::new(Kind::Pawn, 9999), 0);
+    assert!(none.duties.is_empty() && none.urgent.is_empty());
+}

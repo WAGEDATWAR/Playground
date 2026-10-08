@@ -99,6 +99,9 @@ pub struct NeedDef {
     pub active_permille: u32,
     pub urgent_below: i32,
     pub critical_below: i32,
+    /// When two needs want the same time of day, the lower number is placed first (meals and sleep before
+    /// company).
+    pub priority: u32,
     pub penalties: Vec<Penalty>,
     /// Points per hour the need recovers while the pawn cannot act at all (collapsed from exhaustion).
     pub rest_restore_per_hour: u32,
@@ -740,6 +743,7 @@ pub fn parse_needs(value: &Canon, report: &mut ValidationReport) -> BTreeMap<Str
                 "urgent_below",
                 "critical_below",
                 "penalties",
+                "priority",
                 "rest_restore_per_hour",
                 "restore",
             ],
@@ -851,6 +855,7 @@ pub fn parse_needs(value: &Canon, report: &mut ValidationReport) -> BTreeMap<Str
             active_permille: u32_of(o.int("active_permille", 0, 5000, Some(1000), r))?,
             urgent_below: i32_of(o.int("urgent_below", 1, 999, None, r))?,
             critical_below: i32_of(o.int("critical_below", 0, 998, None, r))?,
+            priority: u32_of(o.int("priority", 0, 1000, Some(100), r))?,
             penalties,
             rest_restore_per_hour: u32_of(o.int("rest_restore_per_hour", 0, 1000, Some(0), r))?,
             restore,

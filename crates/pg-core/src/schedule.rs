@@ -331,6 +331,8 @@ pub struct UrgentNeed {
     pub predicted_slot: u32,
     /// The first slot the activity may start in (0 for no limit).
     pub earliest: u32,
+    /// When two needs want the same time, the lower rank is placed first.
+    pub rank: u32,
     pub action: ActionId,
     pub params: Canon,
     pub len: u32,
@@ -538,7 +540,9 @@ fn place_duties(s: &mut DaySchedule, seed: Seed, pawn: EntityId, from: u32, inpu
 /// Step 2: urgent needs, earliest free run before the predicted slot.
 fn place_urgent(s: &mut DaySchedule, from: u32, inputs: &PlanInputs) {
     let mut order: Vec<&UrgentNeed> = inputs.urgent.iter().collect();
-    order.sort_by(|a, b| (a.predicted_slot, &a.need).cmp(&(b.predicted_slot, &b.need)));
+    order.sort_by(|a, b| {
+        (a.rank, a.predicted_slot, &a.need).cmp(&(b.rank, b.predicted_slot, &b.need))
+    });
     for u in order {
         let _ = place_one_urgent(s, from, u);
     }

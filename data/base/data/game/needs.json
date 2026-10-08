@@ -1,7 +1,7 @@
 [
   {
     "id": "hunger", "label_key": "need.hunger", "start": 800, "decay_per_hour": 55, "active_permille": 1200,
-    "urgent_below": 300, "critical_below": 100,
+    "urgent_below": 300, "critical_below": 100, "priority": 10,
     "penalties": [
       { "capacity": "manipulation", "urgent": 900, "critical": 600 },
       { "capacity": "moving", "urgent": 950, "critical": 750 }
@@ -17,7 +17,7 @@
   },
   {
     "id": "energy", "label_key": "need.energy", "start": 900, "decay_per_hour": 50, "active_permille": 1300,
-    "urgent_below": 250, "critical_below": 80,
+    "urgent_below": 250, "critical_below": 80, "priority": 10,
     "penalties": [
       { "capacity": "moving", "urgent": 850, "critical": 500 },
       { "capacity": "consciousness", "urgent": 1000, "critical": 300 }
@@ -33,7 +33,7 @@
   },
   {
     "id": "social", "label_key": "need.social", "start": 700, "decay_per_hour": 35, "active_permille": 1000,
-    "urgent_below": 350, "critical_below": 150,
+    "urgent_below": 350, "critical_below": 150, "priority": 50,
     "restore": {
       "action": "socialise", "place": "gathering", "minutes": 60,
       "routine": [
