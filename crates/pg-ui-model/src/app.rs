@@ -127,6 +127,8 @@ pub struct AppModel {
     overlay: Overlay,
     console: ConsoleModel,
     mods: crate::types::ModsView,
+    /// Mod tiles that are unrolled on the Mods screen (by pack id, or folder for an invalid one).
+    mods_open: std::collections::BTreeSet<String>,
     /// The town journal window is open.
     journal_open: bool,
     /// How the world is being played; the journal is for observation and possession modes only.
@@ -160,6 +162,7 @@ impl AppModel {
             overlay: Overlay::default(),
             console: ConsoleModel::default(),
             mods: crate::types::ModsView::default(),
+            mods_open: std::collections::BTreeSet::new(),
             journal_open: false,
             mode: crate::journal::Mode::Observation,
         }
@@ -187,6 +190,16 @@ impl AppModel {
 
     pub fn mods(&self) -> &crate::types::ModsView {
         &self.mods
+    }
+
+    pub fn mod_tile_open(&self, key: &str) -> bool {
+        self.mods_open.contains(key)
+    }
+
+    pub(crate) fn toggle_mod_tile(&mut self, key: &str) {
+        if !self.mods_open.remove(key) {
+            self.mods_open.insert(key.to_owned());
+        }
     }
 
     /// Whether the journal window should be drawn.

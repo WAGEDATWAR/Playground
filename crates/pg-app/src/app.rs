@@ -172,6 +172,11 @@ impl App {
                 self.dispatch(UiEvent::Toggle("console.type.debug".into(), true));
             }
             "mods" => click(self, "main.mods"),
+            "mods-open" => {
+                click(self, "main.mods");
+                click(self, "mods.tile.caffeine");
+                click(self, "mods.tile.birthdays");
+            }
             "journal" => {
                 start_world(self);
                 click(self, "hud.speed.27x");

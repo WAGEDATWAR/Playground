@@ -965,7 +965,8 @@ fn the_mods_screen_installs_enables_approves_and_removes_a_pack() {
         .iter()
         .any(|c| c.name == "systems" && c.needs_approval && !c.approved));
     // Enabled but not approved: it will not load, and the screen says why only after approval changes.
-    d.send(Ev::Toggle("mods.enable.caffeine".into(), true));
+    d.click("mods.tile.caffeine");
+    d.click("mods.enable.caffeine");
     assert!(
         !d.model.mods().restart_needed,
         "an unapproved pack will not load, so nothing changes"

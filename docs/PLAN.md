@@ -2,7 +2,7 @@
 
 Working plan for building Playground in Rust. The three documents in `docs/reference/` are the **binding specification**:
 
-- `architecture-blueprint-v3.13.md` — how (crates, determinism, scripting, persistence)
+- `architecture-blueprint-v3.14.md` — how (crates, determinism, scripting, persistence)
 - `design-document-v3.4.md` — what and why (pillars, scope, modding boundaries)
 - `roadmap-v4.9.md` — when (stages, gates, decisions to confirm)
 
@@ -89,6 +89,7 @@ Decisions D-047 and D-048. Play modes: *observation mode* (includes possession) 
 | **1.7 (step 4b)** | Journal persistence: the town journal stored in the world state (schema 4), so it survives saving and loading and is part of replays and hashes |
 | **1.8** (profile pass) | S-061 conversation scale check, `pg bench` grows to cover every system, S-064 save size watch in the gate report |
 | **1.9** (Stage 1 gate) | S-070 story digests, with the digest golden part of `pg check --full` and `pg pins` |
+| **Before AccessKit (decided D-061)** | A UI layout pass over every screen, then S-038 AccessKit with the 1.9 gate work |
 | **Stage 2** | S-055 friends seek each other out |
 | **Stage 3** | S-053 gossip and second-hand memories |
 | **Opportunistic** | S-060 local Linux check (very low priority; only when easy) |

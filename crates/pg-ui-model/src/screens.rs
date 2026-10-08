@@ -47,7 +47,7 @@ pub(crate) fn build(m: &AppModel, t: Text) -> Tree {
         Screen::SavedWorlds(f) => saved_worlds(st.worlds, f, t),
         Screen::Options => options(st.settings, t),
         Screen::AiOptions(f) => ai_options(st.ai, f, t),
-        Screen::Mods => mods(m.mods(), t),
+        Screen::Mods => mods(m, t),
         Screen::InGame => in_game(m, t),
         Screen::Pause => pause(t),
     }
@@ -762,12 +762,6 @@ pub(crate) fn toggle(m: &mut AppModel, id: &str, v: bool) -> Vec<AppEffect> {
             if id == "mods.safe" {
                 return vec![AppEffect::SetSafeMode(v)];
             }
-            if let Some(pack) = id.strip_prefix("mods.enable.") {
-                return vec![AppEffect::SetPackEnabled {
-                    id: pack.to_owned(),
-                    on: v,
-                }];
-            }
             // `mods.cap.<pack>.<capability>`: pack ids never contain a dot, capability names do not either.
             if let Some((pack, cap)) = id.strip_prefix("mods.cap.").and_then(|r| r.split_once('.'))
             {
@@ -791,51 +785,132 @@ fn mods_activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
         }
         "mods.install" => vec![AppEffect::InstallPack],
         "mods.reveal" => vec![AppEffect::RevealPacks],
-        other => match other.strip_prefix("mods.remove.") {
-            Some(folder) => vec![AppEffect::RemovePack(folder.to_owned())],
-            None => Vec::new(),
-        },
+        other => {
+            if let Some(key) = other.strip_prefix("mods.tile.") {
+                m.toggle_mod_tile(key);
+                return Vec::new();
+            }
+            if let Some(pack) = other.strip_prefix("mods.enable.") {
+                let now = m
+                    .mods()
+                    .packs
+                    .iter()
+                    .find(|p| p.id == pack)
+                    .map(|p| p.enabled);
+                return match now {
+                    Some(on) if !m.mods().packs.iter().any(|p| p.id == pack && p.base) => {
+                        vec![AppEffect::SetPackEnabled {
+                            id: pack.to_owned(),
+                            on: !on,
+                        }]
+                    }
+                    _ => Vec::new(),
+                };
+            }
+            if let Some(key) = other.strip_prefix("mods.open.") {
+                return match m
+                    .mods()
+                    .packs
+                    .iter()
+                    .find(|p| p.id == key || p.folder == key)
+                {
+                    Some(p) if !p.path.is_empty() => vec![AppEffect::RevealPath(p.path.clone())],
+                    _ => Vec::new(),
+                };
+            }
+            match other.strip_prefix("mods.remove.") {
+                Some(folder) => vec![AppEffect::RemovePack(folder.to_owned())],
+                None => Vec::new(),
+            }
+        }
     }
 }
 
-/// The Mods screen: installed packs, what each asks for, what the player has allowed, and what applies when.
-fn mods(v: &crate::types::ModsView, t: Text) -> Tree {
-    let mut w = vec![Widget::Heading(t("ui.mods.title", &[]))];
-    w.push(Widget::Note(t("ui.mods.intro", &[])));
-    if v.restart_needed {
-        w.push(Widget::Label(t("ui.mods.restart", &[])));
+/// "3.4 KB", "812 B".
+fn size_text(bytes: u64) -> String {
+    if bytes >= 1_000_000 {
+        format!("{}.{} MB", bytes / 1_000_000, bytes % 1_000_000 / 100_000)
+    } else if bytes >= 1_000 {
+        format!("{}.{} KB", bytes / 1_000, bytes % 1_000 / 100)
+    } else {
+        format!("{bytes} B")
     }
-    for n in &v.notes {
-        w.push(Widget::Note(n.clone()));
+}
+
+/// One pack as a tile: rolled up it shows the name, a problem mark, what the pack affects and an On/Off
+/// button; unrolled it adds the pack's details, its capability approvals and its own buttons.
+fn mod_tile(m: &AppModel, p: &crate::types::PackRow, t: Text) -> Widget {
+    let key = if p.id.is_empty() { &p.folder } else { &p.id };
+    let open = m.mod_tile_open(key);
+    let needs_approval = p.enabled
+        && p.capabilities
+            .iter()
+            .any(|c| c.needs_approval && !c.approved);
+    let mut header = vec![Widget::button(
+        &format!("mods.tile.{key}"),
+        format!("{} {}", if open { "-" } else { "+" }, p.name),
+    )];
+    if p.error.is_some() {
+        header.push(Widget::Label(t("ui.mods.error_mark", &[])));
+    } else if needs_approval {
+        header.push(Widget::Label(t("ui.mods.approval_mark", &[])));
     }
-    for p in &v.packs {
-        let title = if p.id.is_empty() {
-            t("ui.mods.invalid_title", &[("folder", &p.folder)])
-        } else {
+    if p.base {
+        header.push(Widget::Note(t("ui.mods.base_short", &[])));
+    } else if p.error.is_none() {
+        let affects = p
+            .capabilities
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        header.push(Widget::Note(t("ui.mods.affects", &[("what", &affects)])));
+        header.push(Widget::button(
+            &format!("mods.enable.{}", p.id),
             t(
-                "ui.mods.pack_title",
-                &[("name", &p.name), ("version", &p.version), ("id", &p.id)],
-            )
-        };
-        let mut kids = Vec::new();
+                if p.enabled {
+                    "ui.mods.on"
+                } else {
+                    "ui.mods.off"
+                },
+                &[],
+            ),
+        ));
+    }
+    let mut kids = vec![Widget::Row(header)];
+    if open {
         if let Some(e) = &p.error {
             kids.push(Widget::Label(t("ui.mods.invalid", &[])));
             kids.push(Widget::Note(e.chars().take(300).collect()));
-        } else if p.base {
-            kids.push(Widget::Note(t("ui.mods.base", &[])));
         } else {
-            let state = match (p.loaded, p.enabled) {
-                (true, true) => "ui.mods.state.loaded",
-                (true, false) => "ui.mods.state.unload",
-                (false, true) => "ui.mods.state.pending",
-                (false, false) => "ui.mods.state.off",
+            let hash: String = p.hash.chars().take(12).collect();
+            let details = if p.files > 0 {
+                t(
+                    "ui.mods.details",
+                    &[
+                        ("version", &p.version),
+                        ("id", &p.id),
+                        ("files", &p.files.to_string()),
+                        ("size", &size_text(p.size_bytes)),
+                        ("hash", &hash),
+                    ],
+                )
+            } else {
+                t(
+                    "ui.mods.details_short",
+                    &[("version", &p.version), ("id", &p.id), ("hash", &hash)],
+                )
             };
-            kids.push(Widget::Label(t(state, &[])));
-            kids.push(Widget::Toggle {
-                id: format!("mods.enable.{}", p.id),
-                label: t("ui.mods.enable", &[]),
-                value: p.enabled,
-            });
+            kids.push(Widget::Note(details));
+            if !p.base {
+                let state = match (p.loaded, p.enabled) {
+                    (true, true) => "ui.mods.state.loaded",
+                    (true, false) => "ui.mods.state.unload",
+                    (false, true) => "ui.mods.state.pending",
+                    (false, false) => "ui.mods.state.off",
+                };
+                kids.push(Widget::Label(t(state, &[])));
+            }
             if !p.depends.is_empty() {
                 kids.push(Widget::Note(t(
                     "ui.mods.depends",
@@ -856,16 +931,52 @@ fn mods(v: &crate::types::ModsView, t: Text) -> Tree {
             }
         }
         if !p.base {
-            kids.push(Widget::button(
+            let mut buttons = vec![Widget::button(
                 &format!("mods.remove.{}", p.folder),
                 t("ui.mods.remove", &[]),
+            )];
+            if p.error.is_none() {
+                buttons.push(Widget::button(
+                    &format!("mods.enable.{}", p.id),
+                    t(
+                        if p.enabled {
+                            "ui.mods.disable"
+                        } else {
+                            "ui.mods.enable"
+                        },
+                        &[],
+                    ),
+                ));
+            }
+            buttons.push(Widget::button(
+                &format!("mods.open.{key}"),
+                t("ui.mods.open", &[]),
             ));
+            kids.push(Widget::Row(buttons));
         }
-        w.push(Widget::Group {
-            title,
-            children: kids,
-        });
     }
+    Widget::Group {
+        title: String::new(),
+        children: kids,
+    }
+}
+
+/// The Mods screen: a bounded, scrolling list of every pack as an unrollable tile, then the switches and
+/// buttons that belong to the whole screen. A first-stage layout; the tiles have room for more later.
+fn mods(m: &AppModel, t: Text) -> Tree {
+    let v = m.mods();
+    let mut w = vec![Widget::Heading(t("ui.mods.title", &[]))];
+    w.push(Widget::Note(t("ui.mods.intro", &[])));
+    if v.restart_needed {
+        w.push(Widget::Label(t("ui.mods.restart", &[])));
+    }
+    for n in &v.notes {
+        w.push(Widget::Note(n.clone()));
+    }
+    w.push(Widget::Scroll {
+        max_height: 420,
+        children: v.packs.iter().map(|p| mod_tile(m, p, t)).collect(),
+    });
     w.push(Widget::Toggle {
         id: "mods.safe".into(),
         label: t("ui.mods.safe", &[]),

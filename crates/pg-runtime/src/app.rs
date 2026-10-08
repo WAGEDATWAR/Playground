@@ -1042,6 +1042,14 @@ impl AppController {
                         m.version.major, m.version.minor, m.version.patch
                     ),
                     depends: Vec::new(),
+                    hash: refs_of(&self.content)
+                        .into_iter()
+                        .find(|r| r.pack_id == crate::mods::BASE)
+                        .map(|r| r.hash)
+                        .unwrap_or_default(),
+                    size_bytes: 0,
+                    files: 0,
+                    path: String::new(),
                     enabled: true,
                     loaded: true,
                     base: true,
@@ -1058,6 +1066,10 @@ impl AppController {
                     name: i.folder.clone(),
                     version: String::new(),
                     depends: Vec::new(),
+                    hash: String::new(),
+                    size_bytes: 0,
+                    files: 0,
+                    path: i.path.display().to_string(),
                     enabled: false,
                     loaded: false,
                     base: false,
@@ -1070,6 +1082,10 @@ impl AppController {
                     folder: i.folder.clone(),
                     name: s.name.clone(),
                     version: s.version.clone(),
+                    hash: s.hash.clone(),
+                    size_bytes: s.size_bytes,
+                    files: s.files,
+                    path: i.path.display().to_string(),
                     depends: s
                         .depends
                         .iter()

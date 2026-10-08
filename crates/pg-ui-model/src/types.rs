@@ -36,6 +36,12 @@ pub struct PackRow {
     pub name: String,
     pub version: String,
     pub depends: Vec<String>,
+    /// Content hash (hex), size of the pack's files and their number; empty or 0 when unknown.
+    pub hash: String,
+    pub size_bytes: u64,
+    pub files: usize,
+    /// Where the pack's folder is, for Open Package (empty for the base game).
+    pub path: String,
     pub enabled: bool,
     /// Whether the pack is part of the running game now.
     pub loaded: bool,

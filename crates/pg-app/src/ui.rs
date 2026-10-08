@@ -433,7 +433,7 @@ fn draw_widget(
             egui::ScrollArea::vertical()
                 .id_salt("pg-log")
                 .max_height(280.0)
-                .auto_shrink([false, true])
+                .auto_shrink([false, false])
                 .stick_to_bottom(true)
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
@@ -454,10 +454,33 @@ fn draw_widget(
                 }
             });
         }
+        Widget::Scroll {
+            max_height,
+            children,
+        } => {
+            // A bounded region: as tall as asked (or as tall as the room allows, never under a few rows).
+            let h = (*max_height as f32)
+                .min(ui.ctx().content_rect().height() * 0.6)
+                .max(120.0);
+            egui::ScrollArea::vertical()
+                .min_scrolled_height(h)
+                .max_height(h)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    for c in children {
+                        draw_widget(ui, c, focus, focus_moved, compact, images, d);
+                    }
+                });
+        }
         Widget::Group { title, children } => {
             ui.add_space(6.0);
             ui.group(|ui| {
-                ui.label(RichText::new(title).size(18.0).strong());
+                if title.is_empty() {
+                    // A tile: as wide as the room it is in.
+                    ui.set_min_width(ui.available_width());
+                } else {
+                    ui.label(RichText::new(title).size(18.0).strong());
+                }
                 for c in children {
                     draw_widget(ui, c, focus, focus_moved, compact, images, d);
                 }

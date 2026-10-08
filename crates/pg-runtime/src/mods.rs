@@ -146,6 +146,10 @@ pub struct Summary {
     /// Capability names, in name order.
     pub capabilities: Vec<String>,
     pub depends: Vec<String>,
+    /// The content hash, the size of the pack's files in bytes and how many files it has.
+    pub hash: String,
+    pub size_bytes: u64,
+    pub files: usize,
 }
 
 /// Looks at every folder in `<data_dir>/packs`. A folder that is not a valid pack comes back with the
@@ -182,6 +186,9 @@ pub fn discover(data_dir: &Path) -> Vec<Installed> {
                     .iter()
                     .map(|d| d.id.to_string())
                     .collect(),
+                hash: p.hash.clone(),
+                size_bytes: p.total_bytes,
+                files: p.file_count,
             }),
             Err(report) => Err(report.to_string()),
         };

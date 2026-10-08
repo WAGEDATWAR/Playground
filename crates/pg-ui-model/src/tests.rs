@@ -1235,6 +1235,10 @@ fn pack_row(
         name: format!("Pack {id}"),
         version: "0.1.0".into(),
         depends: Vec::new(),
+        hash: String::new(),
+        size_bytes: 0,
+        files: 0,
+        path: String::new(),
         enabled,
         loaded,
         base: false,
@@ -1251,7 +1255,7 @@ fn pack_row(
 }
 
 #[test]
-fn the_mods_screen_lists_packs_and_turns_its_controls_into_effects() {
+fn the_mods_screen_lists_packs_as_tiles_that_unroll_and_turns_its_controls_into_effects() {
     let mut m = boot(Vec::new(), None);
     assert_eq!(click(&mut m, "main.mods"), vec![AppEffect::ListMods]);
     assert!(matches!(m.screen(), Screen::Mods));
@@ -1260,6 +1264,7 @@ fn the_mods_screen_lists_packs_and_turns_its_controls_into_effects() {
         enabled: true,
         loaded: true,
         folder: String::new(),
+        hash: "abcdef0123456789".into(),
         ..pack_row("base", true, true, &[])
     };
     let broken = crate::types::PackRow {
@@ -1267,54 +1272,102 @@ fn the_mods_screen_lists_packs_and_turns_its_controls_into_effects() {
         error: Some("bad json".into()),
         ..pack_row("broken", false, false, &[])
     };
+    let caffeine = crate::types::PackRow {
+        hash: "0123456789abcdef0123".into(),
+        size_bytes: 3_456,
+        files: 12,
+        path: "C:/data/packs/caffeine".into(),
+        ..pack_row(
+            "caffeine",
+            true,
+            false,
+            &[("data", false, false), ("systems", true, false)],
+        )
+    };
     m.update(UiEvent::ModsLoaded(crate::types::ModsView {
-        packs: vec![
-            base,
-            pack_row(
-                "caffeine",
-                true,
-                false,
-                &[("data", false, false), ("systems", true, false)],
-            ),
-            broken,
-        ],
+        packs: vec![base, caffeine, broken],
         safe_mode: false,
         notes: vec!["'x' was left out: it needs your approval.".into()],
         restart_needed: true,
         folder: "C:/data/packs".into(),
     }));
-    let snap = m.tree(&show).snapshot(m.focus());
+    // Rolled up: a bounded scrolling list; each tile shows its name, what it affects and an On/Off button.
+    let rolled = m.tree(&show).snapshot(m.focus());
     for want in [
-        "ui.mods.base",
-        "ui.mods.state.pending",
+        "scroll (up to 420)",
+        "<mods.tile.caffeine>",
+        "<mods.tile.base>",
+        "<mods.tile.broken>",
+        "ui.mods.affects{what=data, systems}",
         "<mods.enable.caffeine>",
-        "<mods.cap.caffeine.systems>",
-        "ui.mods.asks{what=ui.mods.cap.data}",
-        "ui.mods.invalid",
-        "bad json",
-        "<mods.remove.caffeine>",
+        "ui.mods.on",
+        "ui.mods.error_mark",
+        "ui.mods.approval_mark",
+        "ui.mods.base_short",
         "<mods.safe>",
         "<mods.install>",
         "ui.mods.restart",
         "needs your approval",
     ] {
-        assert!(snap.contains(want), "missing {want:?} in\n{snap}");
+        assert!(
+            rolled.contains(want),
+            "missing {want:?} in
+{rolled}"
+        );
+    }
+    for hidden in [
+        "<mods.cap.caffeine.systems>",
+        "<mods.remove.caffeine>",
+        "<mods.open.caffeine>",
+        "hash 012345678",
+    ] {
+        assert!(
+            !rolled.contains(hidden),
+            "{hidden:?} should be inside the unrolled tile:
+{rolled}"
+        );
     }
     assert!(
-        !snap.contains("<mods.enable.base>"),
+        !rolled.contains("<mods.enable.base>"),
         "the base game cannot be switched off"
     );
+    // Unrolled: details, approvals as checkboxes, and the pack's own buttons at the bottom.
+    assert!(click(&mut m, "mods.tile.caffeine").is_empty());
+    assert!(m.mod_tile_open("caffeine"));
+    let open = m.tree(&show).snapshot(m.focus());
+    for want in [
+        "ui.mods.details{version=0.1.0,id=caffeine,files=12,size=3.4 KB,hash=0123456789ab}",
+        "ui.mods.state.pending",
+        "<mods.cap.caffeine.systems>",
+        "ui.mods.asks{what=ui.mods.cap.data}",
+        "<mods.remove.caffeine>",
+        "ui.mods.disable",
+        "<mods.open.caffeine>",
+    ] {
+        assert!(
+            open.contains(want),
+            "missing {want:?} in
+{open}"
+        );
+    }
     assert!(
-        !snap.contains("<mods.cap.caffeine.data>"),
+        !open.contains("<mods.cap.caffeine.data>"),
         "plain data needs no approval"
     );
+    // The same tile again rolls it up; an invalid pack's tile shows why it failed.
+    click(&mut m, "mods.tile.caffeine");
+    assert!(!m.mod_tile_open("caffeine"));
+    click(&mut m, "mods.tile.broken");
+    assert!(m.tree(&show).snapshot(None).contains("bad json"));
+    // Controls become effects. The On/Off button flips the pack's state.
     assert_eq!(
-        m.update(UiEvent::Toggle("mods.enable.caffeine".into(), false)),
+        click(&mut m, "mods.enable.caffeine"),
         vec![AppEffect::SetPackEnabled {
             id: "caffeine".into(),
             on: false
         }]
     );
+    assert!(click(&mut m, "mods.enable.base").is_empty());
     assert_eq!(
         m.update(UiEvent::Toggle("mods.cap.caffeine.systems".into(), true)),
         vec![AppEffect::ApproveCapability {
@@ -1332,6 +1385,10 @@ fn the_mods_screen_lists_packs_and_turns_its_controls_into_effects() {
     assert_eq!(
         click(&mut m, "mods.remove.caffeine"),
         vec![AppEffect::RemovePack("caffeine".into())]
+    );
+    assert_eq!(
+        click(&mut m, "mods.open.caffeine"),
+        vec![AppEffect::RevealPath("C:/data/packs/caffeine".into())]
     );
     // Escape and Back return to the main menu.
     press(&mut m, Key::Escape);

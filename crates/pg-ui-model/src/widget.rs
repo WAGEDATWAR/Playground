@@ -85,7 +85,12 @@ pub enum Widget {
     },
     /// Widgets laid out side by side.
     Row(Vec<Widget>),
-    /// A group with a title; its contents follow vertically.
+    /// A section that scrolls inside a bounded height (points); its contents follow vertically.
+    Scroll {
+        max_height: u32,
+        children: Vec<Widget>,
+    },
+    /// A group with a title (an empty title draws no heading); its contents follow vertically.
     Group {
         title: String,
         children: Vec<Widget>,
@@ -147,7 +152,9 @@ impl Widget {
     fn visit<'a>(&'a self, f: &mut impl FnMut(&'a Widget)) {
         f(self);
         match self {
-            Widget::Row(c) | Widget::Group { children: c, .. } => {
+            Widget::Row(c)
+            | Widget::Group { children: c, .. }
+            | Widget::Scroll { children: c, .. } => {
                 for w in c {
                     w.visit(f);
                 }
@@ -349,6 +356,15 @@ fn snapshot_widget(out: &mut String, w: &Widget, depth: usize, focus: Option<&st
         Widget::Row(c) => {
             let _ = writeln!(out, "{pad}row:");
             for x in c {
+                snapshot_widget(out, x, depth + 1, focus);
+            }
+        }
+        Widget::Scroll {
+            max_height,
+            children,
+        } => {
+            let _ = writeln!(out, "{pad}scroll (up to {max_height}):");
+            for x in children {
                 snapshot_widget(out, x, depth + 1, focus);
             }
         }

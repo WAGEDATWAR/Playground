@@ -20,6 +20,8 @@ The repository is public (D-047), so GitHub Actions minutes are free again. Loca
 
 ## Remaining 1.7 work, in the order we will do it
 
+(Steps 1 to 6 are done. A UI layout pass over every screen is wanted before AccessKit: Options, Saved worlds, New world, AI options, inspector, journal, console, pause and HUD, in the style of the new Mods tiles. Direction from you needed per screen.)
+
 1. ~~**S-069 social report and S-067 console extras**~~ done (D-054) (easy, small, no state changes): the report is the tuning aid for the next step; the console extras are model and shell only.
 2. ~~**Social refinement batch: S-056 personality, S-057 per-turn tone and line bands, S-054 remember-when callbacks**~~ done (D-055) (medium; changes saved state, so one re-pin for all three, tuned with the social report).
 3. ~~**S-058 town journal**~~ done (D-056) (medium; built from the event catalog's severities; observation and possession modes only, D-048).
@@ -27,7 +29,7 @@ The repository is public (D-047), so GitHub Actions minutes are free again. Loca
 4b. ~~**Journal persistence**~~ done (D-058) (important to you; schema 4 is unshipped, so now is the cheap moment): the journal becomes part of the saved world (a bounded table of entries in the world state, written as a logged consequence of events so replays reproduce it), loads with the world, is hashed, and is covered by the fixtures, the shape file and the pins; the runtime stops keeping its own copy. Next after the backdrop.
 5. ~~**S-037 native dialogs with `rfd`**~~ done (D-059; please click Export and Import once on your machine) (medium; new dependency and licence check, per-OS behaviour; import, export and pack installation).
 6. ~~**Mods screen**~~ done (D-060; please try Install a pack... once with the real folder dialog) (largest; list, enable and disable, capability approval, errors, safe-mode launch; needs the enabled set saved and the loader to honour it).
-7. **S-038 AccessKit** (small to enable, long to verify: last, once every screen's widget tree is final, then checked on the three systems).
+7. **S-038 AccessKit** (DEFERRED, D-061: after a UI layout pass over every screen; with the 1.9 gate work at the earliest) (small to enable, long to verify: last, once every screen's widget tree is final, then checked on the three systems).
 Refinement noted: S-072 smooth zoom and pan (later pass).
 
 ## Next up

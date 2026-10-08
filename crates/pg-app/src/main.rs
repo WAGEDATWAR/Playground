@@ -8,7 +8,7 @@
 //!          --safe-mode        load only the base game this time
 //!          --no-vsync         do not wait for the display
 //!          --shadow <n>       re-run every keyframe span on n threads and compare (developer)
-//!          --demo <screen>    open straight on a screen (new, options, ai, saved, game, inspector, journal, mods, pause, overlay)
+//!          --demo <screen>    open straight on a screen (new, options, ai, saved, game, inspector, journal, mods, mods-open, pause, overlay)
 //! ```
 
 mod app;
