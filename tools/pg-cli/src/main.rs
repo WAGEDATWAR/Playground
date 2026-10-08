@@ -19,6 +19,7 @@ mod events_cmds;
 mod map_cmds;
 mod pack_cmds;
 mod persist_cmds;
+mod residents_cmds;
 mod runtime_cmds;
 mod sched_cmds;
 mod settings_cmds;
@@ -117,6 +118,10 @@ USAGE:
     pg time <tick> [--slot-minutes <m>]    Show day / clock time / slot / boundary flags for a tick.
     pg pipeline               Show the tick pipeline: systems in execution order and their cadence.
     pg content lint [pack-dir...]         Load and validate packs (default: data/base). Exit 1 on errors.
+    pg content tree [--dot] [pack-dir...] Which template extends which, with each pack (or Graphviz).
+    pg residents generate [--seed S] [--count N] [--content dir]...
+                                          The people a seed produces: households, occupations, starting
+                                          relationships and shared memories.
     pg content list [pack-dir...]         List every resolved template: pack, chain depth, tags, components.
     pg content resolve <id> [pack-dir...] Show a template's inheritance chain, which template sets each
                                           component, and the fully resolved result.
@@ -134,6 +139,7 @@ fn main() -> ExitCode {
         Some("hash") => hash_cmd(&args[1..]),
         Some("id") => id_cmd(&args[1..]),
         Some("content") => content_cmds::content_cmd(&args[1..]),
+        Some("residents") => residents_cmds::residents_cmd(&args[1..]),
         Some("map") => map_cmds::map_cmd(&args[1..]),
         Some("sim") => sim_cmds::sim_cmd(&args[1..]),
         Some("replay") => sim_cmds::replay_cmd(&args[1..]),

@@ -4,9 +4,11 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Stage 1 in progress.** Plan: `docs/PLAN.md` Phase 1 (1.0 to 1.9), accepted with your answers (D-038). Organism system settled (D-040), scheduled as Stage 2B; S-040 to S-047 accepted. Spec versions: Blueprint v3.3, Roadmap v4.9, Design Document v3.4.
+**Stage 1 in progress.** Plan: `docs/PLAN.md` Phase 1 (1.0 to 1.9), accepted (D-038). **1.0 is implemented** (D-041): game data tables in packs, world schema 4 with the 3-to-4 migration, households, relationships and memories as state, seeded population generation, `pg content tree` (S-015), `pg residents generate`, `pg replay --rerecord`. Next is 1.1 (needs, mood and the capacities interface). Organism system settled (D-040), scheduled as Stage 2B.
 
 **Parked (come back later):** weather, seasons and fire (S-048, Roadmap section 12 item 8); animals and non-human humanoids (the physiology profile leaves room); anatomy extensions after Stage 2B's base (eyes and ears, neck, spine segments); customisable map sizes (Stage 3 generator controls); real art assets to replace procedural sprites.
+
+**Documentation owed:** Blueprint v3.4 (schema 4, game data tables, population, the new tools) is written at the 1.2 checkpoint together with the generator, so the "as built" text changes once.
 
 ## Blocked / waiting on user
 
@@ -14,8 +16,8 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Next up
 
-1. Stage 1 milestone 1.0: content and state for residents (schema 4, resident and occupation data, `pg content tree`).
-2. Then 1.1 to 1.9 in the order of the plan, stopping at the marked checkpoints (after 1.2, 1.6, 1.8 and the gate).
+1. 1.1 Needs, mood and capacities (replaces the dev probe system; mood rule table; the capacities interface, S-040).
+2. 1.2 Town generator v1, then the first checkpoint for you.
 3. Prune dev scaffolding as real systems land (D-009).
 
 ## Shell note

@@ -14,13 +14,14 @@ use crate::occupancy::{Occupancy, OccupancyError};
 use crate::pawn::{Pawn, Position};
 use crate::read::{ReadError, Reader};
 use crate::rng::Seed;
+use crate::social::{Household, Relationship, Relationships};
 use crate::table::Table;
 use crate::time::{Clock, SlotMinutes};
 use std::collections::BTreeMap;
 use std::fmt;
 
 /// Bumped whenever the saved shape of `WorldState` changes (migrations hang off this, §13.5).
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorldMeta {
@@ -162,6 +163,8 @@ pub struct WorldState {
     pub maps: Table<MapData>,
     pub objects: Table<ObjectInstance>,
     pub pawns: Table<Pawn>,
+    pub households: Table<Household>,
+    pub relationships: Relationships,
     pub commitments: Table<Commitment>,
     pub probe: Probe,
     /// Pack-defined component values and pack health (empty without packs, and then not hashed).
@@ -186,6 +189,8 @@ impl WorldState {
             maps: Table::new(),
             objects: Table::new(),
             pawns: Table::new(),
+            households: Table::new(),
+            relationships: Relationships::new(),
             commitments: Table::new(),
             probe: Probe::default(),
             ext: crate::ext::ExtStore::new(),
@@ -277,6 +282,13 @@ impl WorldState {
             "maps" => Some(rows(&self.maps)),
             "objects" => Some(rows(&self.objects)),
             "pawns" => Some(rows(&self.pawns)),
+            "households" => Some(rows(&self.households)),
+            "relationships" => Some(
+                self.relationships
+                    .iter()
+                    .map(|r| (r.key.text(), hash_value(r)))
+                    .collect(),
+            ),
             "commitments" => Some(rows(&self.commitments)),
             "ext" if !self.ext.is_empty() => Some(self.ext.row_hashes()),
             _ => None,
@@ -289,18 +301,20 @@ impl WorldState {
         let mut tables = vec![
             ("clock", hash_value(&self.clock)),
             ("commitments", table("commitments")),
+            ("households", table("households")),
             ("id_counters", hash_value(&self.id_counters)),
             ("maps", table("maps")),
             ("meta", hash_value(&self.meta)),
             ("objects", table("objects")),
             ("pawns", table("pawns")),
             ("probe", hash_value(&self.probe)),
+            ("relationships", table("relationships")),
             ("rng_counters", hash_value(&self.rng_counters)),
             ("settings", hash_value(&self.settings)),
         ];
         // Extension data joins the hash only when there is some, so worlds without packs keep their hashes.
         if !self.ext.is_empty() {
-            tables.insert(2, ("ext", table("ext")));
+            tables.insert(3, ("ext", table("ext")));
         }
         tables
     }
@@ -363,6 +377,8 @@ impl ToCanon for WorldState {
             ("maps", self.maps.to_canon()),
             ("objects", self.objects.to_canon()),
             ("pawns", self.pawns.to_canon()),
+            ("households", self.households.to_canon()),
+            ("relationships", self.relationships.to_canon()),
             ("commitments", self.commitments.to_canon()),
             ("probe", self.probe.to_canon()),
         ]);
@@ -446,6 +462,8 @@ impl WorldState {
             "maps",
             "objects",
             "pawns",
+            "households",
+            "relationships",
             "commitments",
             "probe",
             "ext",
@@ -511,6 +529,21 @@ impl WorldState {
             maps: read_table(&r, "maps", MapData::from_reader, |m| m.id)?,
             objects: read_table(&r, "objects", ObjectInstance::from_reader, |o| o.id)?,
             pawns: read_table(&r, "pawns", Pawn::from_reader, |p| p.id)?,
+            households: read_table(&r, "households", Household::from_reader, |h| h.id)?,
+            relationships: {
+                let mut rels = Relationships::new();
+                for (key, child) in r.child("relationships")?.reader().entries()? {
+                    let rel = Relationship::from_reader(child.reader())?;
+                    if rel.key.text() != key {
+                        return Err(RestoreError::KeyMismatch {
+                            table: "relationships",
+                            key,
+                        });
+                    }
+                    rels.set(rel);
+                }
+                rels
+            },
             commitments: read_table(&r, "commitments", Commitment::from_reader, |c| c.id)?,
             probe,
             ext: match r.maybe("ext")? {
@@ -576,7 +609,7 @@ mod tests {
         let w = WorldState::new("Town", "seed");
         assert_eq!(
             w.to_canon().to_canonical_string(),
-            r#"{"clock":{"tick":0},"commitments":{},"id_counters":{},"maps":{},"meta":{"name":"Town","seed_text":"seed"},"objects":{},"pawns":{},"probe":{"days":0,"minutes":0,"value":0},"rng_counters":{},"schema":3,"settings":{"movement":{"max_repaths":3,"max_wait_ticks":20,"move_ticks_per_tile":2,"path_expansion_cap":20000},"slot_minutes":30}}"#
+            r#"{"clock":{"tick":0},"commitments":{},"households":{},"id_counters":{},"maps":{},"meta":{"name":"Town","seed_text":"seed"},"objects":{},"pawns":{},"probe":{"days":0,"minutes":0,"value":0},"relationships":{},"rng_counters":{},"schema":4,"settings":{"movement":{"max_repaths":3,"max_wait_ticks":20,"move_ticks_per_tile":2,"path_expansion_cap":20000},"slot_minutes":30}}"#
         );
     }
 
@@ -679,6 +712,96 @@ mod tests {
         // Tables without rows have no row hashes.
         assert!(a.row_hashes("clock").is_none() && differing_rows(&a, &b, "clock").is_empty());
         assert_eq!(a.row_hashes("pawns").unwrap().len(), 3);
+    }
+
+    #[test]
+    fn households_relationships_and_resident_fields_are_hashed_and_localised() {
+        use crate::social::{Household, PairKey, Relationship};
+        let a = world_with_pawns();
+        let mut b = a.clone();
+        let (p1, p2) = (EntityId::new(Kind::Pawn, 1), EntityId::new(Kind::Pawn, 2));
+        let hh = b.id_counters.allocate(Kind::Household).unwrap();
+        b.households
+            .insert(
+                hh,
+                Household {
+                    id: hh,
+                    name: "Lee".into(),
+                    members: vec![p1, p2],
+                    home: None,
+                },
+            )
+            .unwrap();
+        let changed = |x: &WorldState, y: &WorldState| -> Vec<&'static str> {
+            x.table_hashes()
+                .into_iter()
+                .zip(y.table_hashes())
+                .filter(|(m, n)| m.1 != n.1)
+                .map(|(m, _)| m.0)
+                .collect()
+        };
+        assert_eq!(changed(&a, &b), ["households", "id_counters"]);
+        assert_eq!(differing_rows(&a, &b, "households"), ["hh_1"]);
+        let mut c = b.clone();
+        c.relationships.set(Relationship {
+            key: PairKey::new(p1, p2).unwrap(),
+            affinity: 300,
+            label: "friendly".into(),
+            last_interaction_tick: 0,
+            day: 0,
+            day_change: 0,
+        });
+        assert_eq!(changed(&b, &c), ["relationships"]);
+        assert_eq!(differing_rows(&b, &c, "relationships"), ["pawn_1+pawn_2"]);
+        // Fields on a pawn change that pawn's row and nothing else.
+        let mut d = c.clone();
+        d.pawns.get_mut(p1).unwrap().mood = "cheerful".into();
+        d.pawns
+            .get_mut(p1)
+            .unwrap()
+            .needs
+            .insert("hunger".into(), 640);
+        assert_eq!(changed(&c, &d), ["pawns"]);
+        assert_eq!(differing_rows(&c, &d, "pawns"), ["pawn_1"]);
+        // And all of it survives a save and load.
+        let back = WorldState::from_canon(
+            &crate::canon::json::parse(&d.to_canon().to_canonical_string()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(back.state_hash(), d.state_hash());
+        assert_eq!(back.households.len(), 1);
+    }
+
+    #[test]
+    fn a_relationship_row_under_the_wrong_key_is_refused_on_load() {
+        let mut w = world_with_pawns();
+        w.relationships.set(crate::social::Relationship {
+            key: crate::social::PairKey::new(
+                EntityId::new(Kind::Pawn, 1),
+                EntityId::new(Kind::Pawn, 2),
+            )
+            .unwrap(),
+            affinity: 0,
+            label: "stranger".into(),
+            last_interaction_tick: 0,
+            day: 0,
+            day_change: 0,
+        });
+        let text = w
+            .to_canon()
+            .to_canonical_string()
+            .replace("\"pawn_1+pawn_2\":{", "\"pawn_1+pawn_3\":{");
+        let err = WorldState::from_canon(&crate::canon::json::parse(&text).unwrap()).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                RestoreError::KeyMismatch {
+                    table: "relationships",
+                    ..
+                }
+            ),
+            "{err}"
+        );
     }
 
     #[test]

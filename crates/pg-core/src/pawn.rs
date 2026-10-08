@@ -7,7 +7,9 @@ use crate::map::{Dir4, Tile};
 use crate::read::{ReadError, Reader};
 use crate::reason::ReasonCode;
 use crate::schedule::DaySchedule;
+use crate::social::{Memory, Occupation};
 use pg_content::ActionId;
+use std::collections::BTreeMap;
 
 /// Where a pawn is.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -191,7 +193,20 @@ pub struct Pawn {
     pub move_failure: Option<String>,
     /// The last task failure, kept for the inspector until the next one.
     pub last_failure: Option<ReasonCode>,
+    /// What the pawn does for a living (an archetype; Blueprint §4.6).
+    pub occupation: Option<Occupation>,
+    /// Need id -> level, 0 to 1000. A need the pawn has no entry for is added at its starting level by
+    /// the needs system.
+    pub needs: BTreeMap<String, i32>,
+    /// A mood id from the game data (`neutral` until the mood system sets it).
+    pub mood: String,
+    pub household: Option<EntityId>,
+    /// Bounded by the memory parameters; oldest first.
+    pub memories: Vec<Memory>,
 }
+
+/// The mood a pawn has before the mood system has looked at it.
+pub const DEFAULT_MOOD: &str = "neutral";
 
 impl Pawn {
     pub fn new(id: EntityId, name: &str, position: Position) -> Pawn {
@@ -207,6 +222,11 @@ impl Pawn {
             replan: None,
             move_failure: None,
             last_failure: None,
+            occupation: None,
+            needs: BTreeMap::new(),
+            mood: DEFAULT_MOOD.to_owned(),
+            household: None,
+            memories: Vec::new(),
         }
     }
 }
@@ -248,6 +268,30 @@ impl ToCanon for Pawn {
                 self.last_failure
                     .as_ref()
                     .map_or(Canon::Null, ToCanon::to_canon),
+            ),
+            (
+                "occupation",
+                self.occupation
+                    .as_ref()
+                    .map_or(Canon::Null, ToCanon::to_canon),
+            ),
+            (
+                "needs",
+                Canon::Map(
+                    self.needs
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.to_canon()))
+                        .collect(),
+                ),
+            ),
+            ("mood", Canon::str(self.mood.clone())),
+            (
+                "household",
+                self.household.map_or(Canon::Null, |h| h.to_canon()),
+            ),
+            (
+                "memories",
+                Canon::List(self.memories.iter().map(ToCanon::to_canon).collect()),
             ),
         ])
     }
@@ -379,6 +423,11 @@ impl Pawn {
             "replan",
             "move_failure",
             "last_failure",
+            "occupation",
+            "needs",
+            "mood",
+            "household",
+            "memories",
         ])?;
         let facing_child = r.child("facing")?;
         let facing = Dir4::from_name(facing_child.reader().str()?)
@@ -413,6 +462,33 @@ impl Pawn {
                 Some(c) => Some(ReasonCode::from_reader(c.reader())?),
                 None => None,
             },
+            occupation: match r.maybe("occupation")? {
+                Some(c) => Some(Occupation::from_reader(c.reader())?),
+                None => None,
+            },
+            needs: {
+                let mut needs = BTreeMap::new();
+                for (k, c) in r.child("needs")?.reader().entries()? {
+                    let v = c.reader().i32()?;
+                    if !(0..=1000).contains(&v) {
+                        return Err(c.reader().err("a need level is 0 to 1000"));
+                    }
+                    needs.insert(k, v);
+                }
+                needs
+            },
+            mood: r.child("mood")?.reader().str()?.to_owned(),
+            household: match r.maybe("household")? {
+                Some(c) => Some(c.reader().parse()?),
+                None => None,
+            },
+            memories: r
+                .child("memories")?
+                .reader()
+                .list()?
+                .iter()
+                .map(|c| Memory::from_reader(c.reader()))
+                .collect::<Result<Vec<_>, _>>()?,
         })
     }
 }
@@ -456,7 +532,7 @@ mod tests {
         );
         assert_eq!(
             p.to_canon().to_canonical_string(),
-            r#"{"facing":"S","id":"pawn_1","intent":"free","last_failure":null,"move_failure":null,"name":"Ann","position":{"map":"map_1","tile":[1,2]},"replan":null,"route":null,"schedule":null,"task":null}"#
+            r#"{"facing":"S","household":null,"id":"pawn_1","intent":"free","last_failure":null,"memories":[],"mood":"neutral","move_failure":null,"name":"Ann","needs":{},"occupation":null,"position":{"map":"map_1","tile":[1,2]},"replan":null,"route":null,"schedule":null,"task":null}"#
         );
     }
 }

@@ -191,5 +191,8 @@
   "relationship.acquaintance": "Acquaintance",
   "relationship.friendly": "Friendly",
   "relationship.friend": "Friend",
-  "relationship.close_friend": "Close friend"
+  "relationship.close_friend": "Close friend",
+  "memory.start.household": "Shared a home with {other}.",
+  "memory.start.coworkers": "Worked alongside {other} for a while.",
+  "memory.start.neighbors": "Got to know {other} around town."
 }

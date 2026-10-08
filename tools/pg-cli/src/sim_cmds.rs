@@ -450,8 +450,8 @@ fn snapshot_equivalence(
 }
 
 const REPLAY_SPEC: Spec<'static> = Spec {
-    values: &["snapshot-at", "content"],
-    switches: &["diff", "bisect"],
+    values: &["snapshot-at", "content", "out"],
+    switches: &["diff", "bisect", "rerecord"],
     optional: &[],
 };
 
@@ -465,6 +465,9 @@ pub fn replay_cmd(args: &[String]) -> Result<ExitCode, String> {
     }
     let path = p.positional.first().ok_or("replay needs <log.json>")?;
     let log = read_log(path)?;
+    if p.has("rerecord") {
+        return rerecord_cmd(path, log, &p);
+    }
     println!(
         "{path}: world {:?} seed {:?}, {} ticks, {} input(s), {} day hash(es), {} content pack(s)",
         log.world_name,
@@ -504,6 +507,38 @@ pub fn replay_cmd(args: &[String]) -> Result<ExitCode, String> {
     } else {
         ExitCode::FAILURE
     })
+}
+
+/// `pg replay <log> --rerecord [--out file]`: runs the log's inputs again against the current build and
+/// content and writes the result with its new hashes (the golden logs are re-pinned this way after a
+/// deliberate change to the state shape or the base content; say why in `docs/DECISIONS.md`).
+fn rerecord_cmd(path: &str, mut log: ReplayLog, p: &Parsed) -> Result<ExitCode, String> {
+    if log.start.is_some() {
+        return Err("a trimmed log cannot be re-recorded (it has no start of its own)".into());
+    }
+    let content = content_for(&log, p)?;
+    if let Some(c) = &content {
+        log.content = c
+            .refs()
+            .into_iter()
+            .map(|r| pg_core::replay::ContentRefRecord {
+                pack_id: r.pack_id.to_string(),
+                version: r.version.to_string(),
+                hash: r.hash,
+            })
+            .collect();
+    }
+    let mut sim = build_sim(&log, content).map_err(|e| e.to_string())?;
+    sim.run_ticks(log.ticks).map_err(|e| e.to_string())?;
+    let out = p.one("out").unwrap_or(path);
+    write_log(out, &ReplayLog::record(&sim), false)?;
+    println!(
+        "re-recorded {} tick(s), {} input(s): final hash {} written to {out}",
+        log.ticks,
+        log.inputs.len(),
+        short(&sim.world().state_hash())
+    );
+    Ok(ExitCode::SUCCESS)
 }
 
 fn two_logs(p: &Parsed, what: &str) -> Result<(ReplayLog, ReplayLog), String> {

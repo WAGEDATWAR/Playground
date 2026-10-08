@@ -360,7 +360,7 @@ fn a_save_from_a_newer_version_is_refused_not_marked_damaged() {
         codec::decode(&mem.get_raw("worlds/town/state.1.pgsave").unwrap(), 1 << 30).unwrap();
     let text = String::from_utf8(payload)
         .unwrap()
-        .replacen("\"schema\":3", "\"schema\":99", 1);
+        .replacen("\"schema\":4", "\"schema\":99", 1);
     mem.put_raw(
         "worlds/town/state.1.pgsave",
         codec::encode(99, text.as_bytes()),

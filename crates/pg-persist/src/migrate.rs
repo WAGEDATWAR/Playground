@@ -5,8 +5,9 @@
 //! **newer** schema than this build knows are refused, never partially loaded. Migrations are
 //! additive-first and never change ids.
 //!
-//! The world schema is 3 and no older schema ever shipped, so the real chain is empty; the framework is
-//! exercised by test chains and by the pinned v3 fixture.
+//! The world schema is 4. Schema 3 (Stage 0) is the oldest that ever shipped; the shipped chain brings it to
+//! 4 by adding the social tables and the resident fields of Stage 1. The framework is also exercised by test
+//! chains and by the pinned v3 and v4 fixtures.
 
 use pg_core::canon::Canon;
 use std::fmt;
@@ -81,11 +82,15 @@ impl Migrations {
         Ok(Migrations { current, steps })
     }
 
-    /// The chain this build ships: empty, because schema 3 is the first one that ever existed.
+    /// The chain this build ships: 3 to 4.
     pub fn builtin() -> Migrations {
         Migrations {
             current: pg_core::world::SCHEMA_VERSION,
-            steps: Vec::new(),
+            steps: vec![Migration {
+                from: 3,
+                describe: "residents: needs, mood, occupation, household and memories on pawns; households and relationships tables",
+                apply: v3_to_v4,
+            }],
         }
     }
 
@@ -131,6 +136,36 @@ impl Migrations {
         }
         Ok(raw)
     }
+}
+
+/// Schema 3 to 4 (Stage 1, milestone 1.0). Additive only: every existing pawn gets the new fields at
+/// their "nothing yet" values (no occupation, no needs, neutral mood, no household, no memories) and the new
+/// tables start empty. Ids and everything else are untouched.
+fn v3_to_v4(mut c: Canon) -> Result<Canon, String> {
+    let Canon::Map(world) = &mut c else {
+        return Err("the world is not an object".into());
+    };
+    if world.contains_key("households") || world.contains_key("relationships") {
+        return Err("a schema 3 save already has social tables".into());
+    }
+    world.insert("households".to_owned(), Canon::Map(Default::default()));
+    world.insert("relationships".to_owned(), Canon::Map(Default::default()));
+    match world.get_mut("pawns") {
+        Some(Canon::Map(pawns)) => {
+            for (id, pawn) in pawns.iter_mut() {
+                let Canon::Map(p) = pawn else {
+                    return Err(format!("pawn {id} is not an object"));
+                };
+                p.insert("occupation".to_owned(), Canon::Null);
+                p.insert("needs".to_owned(), Canon::Map(Default::default()));
+                p.insert("mood".to_owned(), Canon::str("neutral"));
+                p.insert("household".to_owned(), Canon::Null);
+                p.insert("memories".to_owned(), Canon::List(Vec::new()));
+            }
+        }
+        _ => return Err("the world has no pawns table".into()),
+    }
+    Ok(c)
 }
 
 #[cfg(test)]
@@ -251,10 +286,46 @@ mod tests {
     }
 
     #[test]
-    fn the_shipped_chain_reads_only_the_current_schema() {
+    fn the_shipped_chain_reads_schema_3_and_the_current_schema_and_nothing_older() {
         let b = Migrations::builtin();
-        assert_eq!(b.oldest(), b.current());
+        assert_eq!((b.oldest(), b.current()), (3, 4));
         assert!(b.migrate(doc(2), 2).is_err());
         assert!(b.migrate(doc(i128::from(b.current())), b.current()).is_ok());
+        assert!(b.migrate(doc(5), 5).is_err());
+    }
+
+    #[test]
+    fn the_3_to_4_step_is_additive_and_refuses_what_is_not_a_schema_3_world() {
+        let v3 = Canon::map([
+            ("schema", Canon::Int(3)),
+            (
+                "pawns",
+                Canon::map([("pawn_1", Canon::map([("name", Canon::str("Ann"))]))]),
+            ),
+        ]);
+        let v4 = Migrations::builtin().migrate(v3, 3).unwrap();
+        assert_eq!(v4.get("schema"), Some(&Canon::Int(4)));
+        let pawn = v4.get("pawns").and_then(|p| p.get("pawn_1")).unwrap();
+        assert_eq!(
+            pawn.get("name"),
+            Some(&Canon::str("Ann")),
+            "existing fields stay"
+        );
+        assert_eq!(pawn.get("mood"), Some(&Canon::str("neutral")));
+        assert_eq!(pawn.get("occupation"), Some(&Canon::Null));
+        assert!(v4.get("households").is_some() && v4.get("relationships").is_some());
+        for bad in [
+            Canon::map([("schema", Canon::Int(3))]),
+            Canon::map([("schema", Canon::Int(3)), ("pawns", Canon::List(vec![]))]),
+            Canon::map([
+                ("schema", Canon::Int(3)),
+                ("pawns", Canon::map([("pawn_1", Canon::Int(1))])),
+            ]),
+        ] {
+            assert!(matches!(
+                Migrations::builtin().migrate(bad, 3),
+                Err(MigrateError::Failed { from: 3, .. })
+            ),);
+        }
     }
 }

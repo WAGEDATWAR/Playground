@@ -39,6 +39,16 @@ pub fn check_cmd(rest: &[String]) -> Result<ExitCode, String> {
             needs: Some("data/base"),
         },
         Check {
+            name: "content inheritance tree",
+            args: args(&["content", "tree"]),
+            needs: Some("data/base"),
+        },
+        Check {
+            name: "generated residents",
+            args: args(&["residents", "generate", "--seed", "check", "--count", "14"]),
+            needs: Some("data/base"),
+        },
+        Check {
             name: "string tables",
             args: args(&["strings", "lint"]),
             needs: Some("data/base"),

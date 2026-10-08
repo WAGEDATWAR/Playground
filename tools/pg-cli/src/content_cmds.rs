@@ -171,7 +171,23 @@ fn lint(args: &[String]) -> Result<ExitCode, String> {
     let dirs = pack_dirs(args);
     match build(&dirs) {
         Ok(set) => {
-            let warnings = set.warnings().warnings().count();
+            let extra = pg_core::population::check_occupations(
+                set.game(),
+                &pg_core::action::ActionRegistry::builtin(),
+            );
+            if !extra.is_empty() {
+                for i in extra.issues() {
+                    println!("  {i}");
+                }
+            }
+            if !extra.is_ok() {
+                println!(
+                    "LINT FAILED: {} error(s) in the game data",
+                    extra.error_count()
+                );
+                return Ok(ExitCode::FAILURE);
+            }
+            let warnings = set.warnings().warnings().count() + extra.warnings().count();
             println!(
                 "OK: {} template(s) from {} pack(s) [load order: {}], {warnings} warning(s)",
                 set.len(),

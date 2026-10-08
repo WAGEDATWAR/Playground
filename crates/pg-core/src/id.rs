@@ -27,11 +27,12 @@ pub enum Kind {
     Commitment = 7,
     Reservation = 8,
     Conversation = 9,
+    Memory = 10,
 }
 
 impl Kind {
     /// Every kind, in ascending order.
-    pub const ALL: [Kind; 9] = [
+    pub const ALL: [Kind; 10] = [
         Kind::Map,
         Kind::Pawn,
         Kind::Household,
@@ -41,6 +42,7 @@ impl Kind {
         Kind::Commitment,
         Kind::Reservation,
         Kind::Conversation,
+        Kind::Memory,
     ];
 
     /// The textual prefix used in the id's display form.
@@ -55,6 +57,7 @@ impl Kind {
             Kind::Commitment => "cmt",
             Kind::Reservation => "res",
             Kind::Conversation => "conv",
+            Kind::Memory => "mem",
         }
     }
 

@@ -25,6 +25,6 @@
     { "op": "corrupt", "slot": "main", "how": "delete_manifest" },
     { "op": "load", "slot": "main", "expect": "no_manifest" },
     { "op": "load", "slot": "other", "expect": "clean" },
-    { "op": "expect", "pawns": 12, "day": 2, "hash": "a7d1b7b1" }
+    { "op": "expect", "pawns": 12, "day": 2, "hash": "5f82a3f3" }
   ]
 }

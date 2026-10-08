@@ -1279,6 +1279,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn duties_and_labels_are_checked_for_sense() {
         let mut r = ValidationReport::new();
         let mut data = GameData::default();
