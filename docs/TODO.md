@@ -12,7 +12,7 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## CI status
 
-GitHub Actions free minutes ran out (2026-10-08), so CI does not run. Until that changes, **`cargo run --release -p pg-cli -- check --full` (plus `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`) passing locally is the gate** for every push and milestone. The pre-push hook (`sh scripts/install-hooks.sh`) runs the first. What is lost: the Linux and macOS determinism comparison (pinned hashes are only checked on Windows). Options when you decide: make the repository public (Actions are free there), pay for minutes, trim the matrix to Linux only (macOS minutes cost ten times as much as Linux, Windows twice), or register a self-hosted runner on this machine.
+The repository is public (D-047), so GitHub Actions minutes are free again. Locally, `cargo run --release -p pg-cli -- check --full` stays the gate before a push; S-050 will make CI cheaper.
 
 ## Blocked / waiting on user
 
@@ -20,9 +20,14 @@ GitHub Actions free minutes ran out (2026-10-08), so CI does not run. Until that
 
 ## Next up
 
-1. Your review of 1.4 when convenient (nothing blocks 1.5).
-2. ~~1.3 Occupation schedules~~ done (D-045). Next: 1.4 memory, relationships, rule-based conversations.
-3. ~~1.4 Memory, relationships and rule-based conversations~~ done (D-046). Next: 1.5 AI lines.
+1. **Owner (repository settings):** turn on branch protection for `main`, private vulnerability reporting and secret scanning. Confirm the copyright line in `LICENSE` (currently "WAGEDATWAR and the Playground contributors").
+2. **1.4b Process and safety net** (new, before 1.5): S-050, S-051, S-059, S-066, S-068, S-065, S-052 and `pg bench` v1 (S-071).
+3. 1.5 AI lines, with S-054, S-057 and S-062.
+4. 1.6 Native renderer (checkpoint): S-069 social report first; render benchmark targets.
+5. 1.7 (S-056, S-058 observation and possession modes only, S-067), 1.8 (S-061, bench suite coverage, S-064), 1.9 gate (S-070 digest golden in `pg check --full`).
+6. Later: S-055 (Stage 2), S-053 (Stage 3), S-060 only when easy.
+
+Modes (D-048): observation mode includes possession and is all the product does today; player mode (a world-creation toggle locking the player to one pawn, blocking observation and possession) comes with possession in Stage 4.
 
 ## Shell note
 

@@ -35,8 +35,8 @@ exceptions = [
     { allow = ["OFL-1.1", "Ubuntu-font-1.0"], crate = "epaint_default_fonts" },
 ]
 
-# Our own crates are `publish = false` with a placeholder license (D-002); only third-party
-# dependencies are checked until a project license is chosen.
+# Our own crates are `publish = false` (MIT, D-047); only third-party
+# dependencies are checked.
 [licenses.private]
 ignore = true
 

@@ -4,7 +4,7 @@ members = ["crates/*", "tools/*"]
 
 [workspace.package]
 edition = "2021"
-license = "UNLICENSED"   # placeholder until a license is chosen (see docs/DECISIONS.md)
+license = "MIT"
 
 [profile.release]
 lto = "thin"
