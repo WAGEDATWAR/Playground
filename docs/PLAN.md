@@ -86,6 +86,7 @@ Decisions D-047 and D-048. Play modes: *observation mode* (includes possession) 
 | **1.5** (with AI lines) | S-062 dialogue lint (done). S-054 remember-when callbacks and S-057 per-turn tone and line bands moved to 1.6/1.7 (D-050) |
 | **1.6** (renderer, checkpoint) | S-069 social report before tuning; render targets for `pg bench` |
 | **1.7** | S-056 personality slice, S-058 town journal (observation and possession only), S-067 console extras |
+| **1.7 (step 4b)** | Journal persistence: the town journal stored in the world state (schema 4), so it survives saving and loading and is part of replays and hashes |
 | **1.8** (profile pass) | S-061 conversation scale check, `pg bench` grows to cover every system, S-064 save size watch in the gate report |
 | **1.9** (Stage 1 gate) | S-070 story digests, with the digest golden part of `pg check --full` and `pg pins` |
 | **Stage 2** | S-055 friends seek each other out |

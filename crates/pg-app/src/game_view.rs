@@ -446,6 +446,59 @@ impl GameView {
         }
     }
 
+    /// Paints a paused town as a slowly drifting picture behind a screen (the main menu). No input, no
+    /// names; it needs the GPU renderer and does nothing without it.
+    pub fn paint_backdrop(&mut self, ui: &egui::Ui, rect: egui::Rect, snap: &RenderSnapshot) {
+        let Some(map) = snap.maps.first().filter(|_| self.gpu) else {
+            return;
+        };
+        let (vw, vh) = (rect.width(), rect.height());
+        if vw < 2.0 || vh < 2.0 {
+            return;
+        }
+        self.track(snap);
+        // Big enough that the map covers the view, in whole multiples of the art size, then a slow drift
+        // over the slack.
+        let needed = (vw / map.width() as f32).max(vh / map.height() as f32);
+        let zoom = ((needed.max(32.0) / 16.0).ceil() * 16.0).min(96.0);
+        let t = ui.input(|i| i.time) as f32;
+        let slack_x = ((map.width() as f32 - vw / zoom) / 2.0).max(0.0);
+        let slack_y = ((map.height() as f32 - vh / zoom) / 2.0).max(0.0);
+        let cam = Camera {
+            cx: map.width() as f32 / 2.0 + slack_x * (t * 0.05).sin(),
+            cy: map.height() as f32 / 2.0 + slack_y * (t * 0.037).cos(),
+            zoom,
+        };
+        let pawns: Vec<PawnDraw> = snap
+            .pawns
+            .iter()
+            .filter_map(|p| {
+                let id = p.id.counter() as u64;
+                let placed = self.interp.sample(id, snap.tick as f64, 1.0)?;
+                Some(PawnDraw {
+                    id,
+                    x: placed.x,
+                    y: placed.y,
+                    facing: facing_of(p.facing),
+                    moving: false,
+                    progress: 1.0,
+                    selected: false,
+                })
+            })
+            .collect();
+        let scene = build_scene(&cam, vw, vh, &MapTerrain(map), &pawns, &self.atlas);
+        let ppp = ui.ctx().pixels_per_point();
+        ui.painter_at(rect)
+            .add(egui_wgpu::Callback::new_paint_callback(
+                rect,
+                SceneCallback {
+                    quads: scene.quads,
+                    scale: ppp,
+                    view_px: [vw * ppp, vh * ppp],
+                },
+            ));
+    }
+
     /// The painter-based drawing, kept for the headless smoke test and as a fallback.
     fn show_painter(
         &self,

@@ -62,6 +62,9 @@ pub struct App {
     focus: Option<pg_core::id::EntityId>,
     /// Text waiting to go on the clipboard.
     pending_copy: Option<String>,
+    /// The paused town behind the main menu, built in the background at start-up.
+    backdrop: std::sync::Arc<std::sync::Mutex<Option<pg_runtime::snapshot::RenderSnapshot>>>,
+    backdrop_view: GameView,
     tracker: FocusTracker,
     overlay_tracker: FocusTracker,
     styled: bool,
@@ -72,11 +75,23 @@ impl App {
     /// Tells the map view the sprite renderer is available on the GPU.
     pub fn set_gpu(&mut self, on: bool) {
         self.view.set_gpu(on);
+        self.backdrop_view.set_gpu(on);
     }
 
     /// Boots the controller and the model.
     pub fn new(mut controller: AppController) -> App {
         let mut model = AppModel::new();
+        // The main menu's backdrop town is made on another thread so the window opens at once.
+        let backdrop = std::sync::Arc::new(std::sync::Mutex::new(None));
+        if let Some(content) = controller.content() {
+            let slot = std::sync::Arc::clone(&backdrop);
+            std::thread::spawn(move || {
+                let built = pg_runtime::backdrop::build(&content);
+                if let Ok(mut g) = slot.lock() {
+                    *g = built;
+                }
+            });
+        }
         let boot = controller.boot();
         model.update(boot);
         App {
@@ -85,6 +100,8 @@ impl App {
             view: GameView::default(),
             focus: None,
             pending_copy: None,
+            backdrop,
+            backdrop_view: GameView::default(),
             tracker: FocusTracker::default(),
             overlay_tracker: FocusTracker::default(),
             styled: false,
@@ -347,9 +364,20 @@ impl App {
                 }
             }
             _ => {
+                let behind_menu = matches!(screen, Screen::MainMenu);
                 egui::CentralPanel::default()
                     .frame(Frame::new().fill(Color32::from_rgb(26, 30, 38)))
                     .show(ui, |ui| {
+                        if behind_menu {
+                            let rect = ui.max_rect();
+                            let snap = self.backdrop.lock().ok().and_then(|g| g.clone());
+                            if let Some(snap) = snap {
+                                self.backdrop_view.paint_backdrop(ui, rect, &snap);
+                                // Dim it so the menu reads.
+                                ui.painter()
+                                    .rect_filled(rect, 0.0, Color32::from_black_alpha(175));
+                            }
+                        }
                         egui::ScrollArea::vertical().show(ui, |ui| {
                             ui.add_space(36.0);
                             centered_column(ui, 420.0, |ui| {

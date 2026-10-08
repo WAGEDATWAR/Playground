@@ -400,6 +400,11 @@ impl AppController {
     }
 
     /// The same picture as `(width, height, rgb bytes)`, ready for a texture.
+    /// The loaded content, for views that build their own small worlds (the main-menu backdrop).
+    pub fn content(&self) -> Option<Arc<ContentSet>> {
+        self.content.clone()
+    }
+
     pub fn thumbnail_image(&self, name: &str) -> Option<(u32, u32, Vec<u8>)> {
         if !name.starts_with("worlds/") || name.contains("..") {
             return None;
