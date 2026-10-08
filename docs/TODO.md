@@ -10,6 +10,10 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 **Parked (come back later):** weather, seasons and fire (S-048, Roadmap section 12 item 8); animals and non-human humanoids (the physiology profile leaves room); anatomy extensions after Stage 2B's base (eyes and ears, neck, spine segments); customisable map sizes (Stage 3 generator controls); real art assets to replace procedural sprites.
 
+## CI status
+
+GitHub Actions free minutes ran out (2026-10-08), so CI does not run. Until that changes, **`cargo run --release -p pg-cli -- check --full` (plus `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`) passing locally is the gate** for every push and milestone. The pre-push hook (`sh scripts/install-hooks.sh`) runs the first. What is lost: the Linux and macOS determinism comparison (pinned hashes are only checked on Windows). Options when you decide: make the repository public (Actions are free there), pay for minutes, trim the matrix to Linux only (macOS minutes cost ten times as much as Linux, Windows twice), or register a self-hosted runner on this machine.
+
 ## Blocked / waiting on user
 
 - [x] (done 2026-10-07, id in `pg_ai::login::CLIENT_ID`; terms at `player2.game/devtos` still worth a read before release) **Register a Player2 `client_id`** for this game (Roadmap §12 item 8) and confirm the API base URL and terms (`player2.game/devtos`). Until then `pg ai login player2` uses a placeholder the provider will likely refuse. Not blocking 0.8.
