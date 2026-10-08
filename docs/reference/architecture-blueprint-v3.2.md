@@ -1,8 +1,8 @@
-# Playground — Architecture Blueprint v3.1
+# Playground — Architecture Blueprint v3.2
 
-**Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.2 and Roadmap v4.7. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). Where a part is built, the text describes it **as built** and the code is the authority on names and signatures; where it is not built yet, the sketch is a contract whose invariants may not change. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems and the presentation layer. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
+**Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.2 and Roadmap v4.8. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). Where a part is built, the text describes it **as built** and the code is the authority on names and signatures; where it is not built yet, the sketch is a contract whose invariants may not change. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems and the presentation layer. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
 
-**Status (v3.1):** the document describes the system **as built through milestone 0.10** (the end of Stage 0 apart from the gate, 0.11). Notes that earlier versions kept per milestone have been folded into the sections they belong to, text that disagreed with the code was corrected (listed in `docs/DECISIONS.md` D-035), and the presentation layer (§14) was rewritten around the three-layer UI that was built.
+**Status (v3.2):** adds the organism system as a contract (§8.9, Stage 2B), emotional-only moods (§8.2), the capacities interface (§8.1) and the injury model (§16.5) built on the organism; nothing already built changes. **Status (v3.1):** the document describes the system **as built through milestone 0.10** (the end of Stage 0 apart from the gate, 0.11). Notes that earlier versions kept per milestone have been folded into the sections they belong to, text that disagreed with the code was corrected (listed in `docs/DECISIONS.md` D-035), and the presentation layer (§14) was rewritten around the three-layer UI that was built.
 
 ### Revision history
 
@@ -20,6 +20,7 @@
 | 2.8 | ScriptVm spike outcome (0.9): compiler configuration, no string caps, extension data semantics, quarantine as world state, the `ScriptVm` trait as built (D-031) | §23 |
 | 2.9 | App shell and main menu (0.10): the three-layer UI (D-033) | §14 |
 | 3.0 | Consolidation: as-built description through 0.10, notes folded into their sections, corrections (D-035) | whole document |
+| 3.2 | Organism system (pawn health) as a Stage 2B contract; emotional-only moods; capacities interface in Stage 1 (D-038, D-039) | §8.1, §8.2, §8.9, §16.5, §22, §23.8, App. B |
 | 3.1 | Review of the Stage 0 build (0.11): in-game layout, drawers and their placement rules, developer mode, saving only in the pause menu (D-037) | §14, App. C |
 
 ## 0. Architectural principles
@@ -492,15 +493,20 @@ Values are integers 0–1000 (1000 = fully satisfied). Parameters live in data (
 
 Decay rates are permille per minute and tunable. Activities declare `needs_restore` effects as per-minute deltas. At *critical*, a current reservation of priority 3 or lower-importance is interrupted and a priority-2 urgent-need reservation is inserted. Consequences of ignoring needs are limited in S1 (mood penalty, slowdown); stronger ones come with later systems. The `needs.decay_modifier` hook may scale decay within an engine-clamped range (500–1500 permille).
 
+**Capacities (interface built in Stage 1).** Consequences of needs are not hard-coded into movement or scheduling. The core derives a small record of integer permille capacities per pawn each minute (`consciousness`, `moving`, `manipulation`, `talking`, `eating`, `breathing`; sight and hearing later) and movement, the scheduler, conversation and actions read only that record (for example `movement.speed_modifier` scales by `moving`; an action declares which capacities it needs). In Stage 1 the record is filled from needs; from Stage 2B the organism (§8.9) produces it and the needs shortcut is removed. Hunger, energy and social stay as the player-readable needs.
+
 ### 8.2 Mood \[S1\]
 
 Mood is a small enum derived each minute by an ordered rule table (first match wins), for example:
 
-1. any need critical → the matching state (`exhausted`, `starving`, `lonely`)
-2. recent high-importance negative memory (last 6 game hours) → `upset`
+1. social need critical → `lonely`
+2. recent high-importance negative memory (last 6 game hours) → `upset` or `sad` (by the memory's tone)
 3. any need urgent → `uneasy`
 4. recent positive memory or all needs above 600 → `content` / `cheerful`
-5. otherwise → `neutral`
+5. nothing scheduled and nothing happening for a long stretch → `bored`
+6. otherwise → `neutral`
+
+Moods are **emotional states only**. Physical states such as exhaustion and starvation are body conditions (capacities now, organism conditions from Stage 2B), not moods. From Stage 2B the rule table may also read pain and conditions as inputs.
 
 The list and thresholds are data and are tuned in play. Packs may append rules at declared priorities through `mood.rules`; engine rules at priority 1 (critical needs) cannot be pre-empted. Mood influences conversation tone and activity choice weights, never hard rules.
 
@@ -625,6 +631,30 @@ enum Effect {                            // closed set: scripts can only produce
 ### 8.8 Reason codes \[S0\]
 
 Every planning, failure and acceptance decision stores a `ReasonCode` plus a small parameter bag (for example `{slot: 14, displaced_by: "res_a1"}`) **and its origin** (`Builtin` or `Pack(id)`). The inspector renders them as short plain sentences and attributes pack-influenced decisions to the pack. They are saved with the current day's schedule and dropped at day rollover, except those attached to memories or events.
+
+### 8.9 Organism system (pawn health) \[S2B\]
+
+A pawn's body is a simulated organism: integer vitals, parts, organs and attributes, stepped by the core. Full rationale, model and open questions: `docs/proposals/organism-system.md`. This section is the contract.
+
+**State.** Per pawn: a `vitals` row (blood volume ml, blood oxygen saturation, heart rate, stroke volume, mean pressure mmHg, breath rate, core temperature in tenths of a degree, total and felt pain, adrenaline, nerve, toxicity, consciousness, brain function, anoxic exposure, run state alive / unconscious / critical / arrest / dead) and sparse `attributes` rows (part, attribute type, severity and type-specific integers, start tick, effect id). Part and organ integrity, oxygenation and efficiency are small fixed arrays per physiology profile. Everything is integer (permille, ml, per-minute rates), canonical, hashed per row (§5.4) and migrated like any table; a pawn with no attributes stores no attribute rows.
+
+**Body and attributes.** A **physiology profile** (data) lists the parts, organs and skeleton segments, hit weights, and supplies body mass, height and baseline factors; blood volume comes from interpolating anchor points through mass, then the profile factor. An **attribute type** declares its kind (`innate`, `injury`, `condition`, `status`, ...), the parts it may attach to (empty means the whole body), a name and description as string keys with arguments (each with a variant for every filter level and an intensity tier), optional sub-attribute types, and required typed constants through the parameter schema (an injury requires `injury_type`). Static attributes are inert data. Dynamic attributes name a registered **effect**.
+
+**Status Effect Registry (SER).** The registry is built from loaded packs (base first) and then closed. An effect is a declarative program: a cadence in organism steps, an optional condition over vitals and attributes, bounded contributions to named vitals or organs (additive or multiplicative, rates per organism minute), transitions (attach, replace or end attributes at severity thresholds, with `injury_type` branching), and reason keys. The organism ticks every active effect in registry order at its cadence, in one place; attributes never tick themselves.
+
+**The step** (per pawn, fixed order): effects due; haemodynamics (heart rate set by the brain, adrenaline and pressure feedback; stroke volume from blood volume and heart efficiency; pressure from output and vessel tone); respiration (airway patency, lung function and fluid, ambient air); oxygen delivery and organ oxygenation (each organ with its own time constant, brain demand high); organ efficiency, liver clearance, heart autopilot when the brain cannot regulate; temperature; pain (diminishing aggregation, threshold, felt pain = total x (1 - adrenaline factor), temporary pain from harmful actions); consciousness; capacities; run-state transitions. Death is `brain_function` at zero for the irreversible condition (anoxic exposure beyond the limit, which the cold extends, or catastrophic cranial damage); arrest is the resuscitation window before it. Death sets `state = Dead` through the life-cycle path of §16.4.
+
+**Cost control.** A pawn with no active effect and all vitals inside their homeostatic band is **dormant** (no step; a slow daily baseline only). Pawns with active effects step at the base cadence (one game minute); acute pawns (a vital outside its critical band) step every 2 ticks. Per-pawn work is independent, so steps run on the worker pool and results are applied in pawn-id order (like path batches), identical at any thread count. Budget: under 5 percent of the tick at 200 pawns, measured by the profiler's system probe.
+
+**Time scale.** Rates are authored per organism minute and divided by the world's **clinical time scale** (a per-world setting; see the proposal), so acute events can be made to last game hours instead of real seconds.
+
+**Reasons.** Each vital change records the effect or attribute and the dominant input as a reason code (§8.8), so the health window and `pg organism explain` can say why.
+
+**API (`pg.organism`, API 0.2b).** Capabilities `organism.read`, `organism.define` (load-phase registration of attribute types, injury types and effects; closed after load) and `organism.apply` (request add or remove an attribute, or a treatment, as a validated command). Hooks `organism.onset`, `organism.escalate` and `organism.vital_modifier` run in batches at low cadence with clamped results. A pack can never set death or write a vital; contributions clamp to engine bounds; descriptions need every filter variant and an intensity tier or the pack is rejected; all cost is metered.
+
+**Fight-or-flight.** The psychology core (§16.4, Stage 7) owns the response; the organism provides adrenaline, nerve and a stress input. Before Stage 7 a placeholder reads them (adrenaline dampens pain, a threat raises adrenaline) so systems that need a response have one.
+
+**Tools.** `pg organism sim` (vitals over time with reasons), `pg organism explain <pawn>`, an overlay Organism tab (stepped pawns, cost, SER buckets), developer injure and heal (confirmed, logged as inputs), physiology golden traces in CI and a plausibility lint for pack effects.
 
 ## 9. Conversation system \[S1; player side S4\]
 
@@ -987,7 +1017,7 @@ City-owned plots (town hall, library, clinic, school, police / fire) are flagged
 ### 16.5 Events, crime, injury and services \[S8\]
 
 - **EventSystem** rolls categories using the tone preset (§11). Crime and injury are resolved by deterministic rule tables (location, opportunity, relationship, conditions, nearby services) with a `rand` draw per decision.
-- **Injury model:** abstract severity tiers and a small set of body-region tags for health effects; no gore data exists in content.
+- **Injury model:** injuries are attributes on the organism's parts (§8.9) with an `injury_type`; the event system chooses a cause, a part (by hit weights) and a severity from deterministic tables, and the organism produces the consequences. Presentation is abstract and filter-aware; no gore data exists in content, and the record is identical at every filter level. Treatment (first aid, resuscitation, transfusion, surgery as scoped) is a set of actions that request attribute changes through `organism.apply`.
 - **Law and consequences:** an `Offense` record yields a deterministic outcome table (warning, fine, detention, restitution) from service coverage and presence.
 - **Services:** `Service` entities (clinic, emergency response, later others) with staffing, coverage radius over the road graph, response time, and cost. Response is computed on the road graph deterministically.
 
@@ -1085,6 +1115,7 @@ Later (Stage 11): spawn and destroy, pawn editing, schedule viewer, route inspec
 | 0 | workspace + CI, pg-host (+ OS impls), pg-core (time, rng, ids, tables, store, schedule skeleton, spatial, actions skeleton, ext points), pg-api, pg-content + pack loader, pg-script (Luau host, sandbox, metering), pg-persist, ai client + settings, pg-runtime (sim thread, snapshots) | Deterministic sample town runs, saves, migrates, recovers; key safety; a test pack runs under replay | Replay hashes identical on Windows / Linux / macOS; save fault injection; sentinel-key test; sandbox conformance suite |
 | 1 | needs, mood, memory, social (affinity), conversation, worldgen v1, ui-model, pg-render, pg-app screens, inspector; base pack; script API 0.1: components, hooks, events (read) | Seeded 10–20 resident observation town on a native build | Autonomous run; overheard bubbles; restart retains state; base content loads via the pack loader |
 | 2 | scheduler full, commitments; script API 0.2: systems, actions, schedule and commitment hooks | Free-time scheduling, accepted plans | Same seed, same schedules; explainable conflicts; sample pack adds an action and system |
+| 2B | organism: vitals and step, parts and attributes, SER and effect programs, pain, consciousness, capacities, first conditions, health window; script API 0.2b (`pg.organism`) | Pawn health as a simulated body | Golden physiology traces on all systems; 200-pawn cost budget; pack cannot kill; sample pack adds an attribute type and effect |
 | 3 | worldgen controls, editor, mutation API, town validator; script API 0.3: worldgen stages, town designs | Create / generate / edit towns | Start edited town; no starting-state drift; sample worldgen pack |
 | 4 | control (possession), player conversation | Possess and talk | Possession round trip on reloaded save |
 | 5 | pawn creator, roster; API: traits, occupations, appearance parts | Custom pawn placement | Create, save, place, possess |
@@ -1297,6 +1328,7 @@ pg.actions.register({
 | World generation | Params, `GenContext` | `register_stage`; town designs | Named RNG streams; validated before start |
 | Spatial | Map, tiles, occupancy (read) | Editor mutation API with `world-write` + `worldgen` | Same mutation validator as the editor |
 | Economy and property \[S6\] | Accounts, prices, ownership | Items, jobs, shops, obligations as data; actions | Ledger is append-only; no direct balance writes |
+| Organism and health \[S2B\] | Vitals, capacities, attributes, events | Define attribute types, injury types and effect programs (data); request interventions; bounded batched hooks | No death or direct vital writes; clamped contributions; filter variants required |
 | Psychology and life cycle \[S7\] | Traits, conditions | Trait and condition data; bounded hooks | Cannot rewrite stable traits from minor events |
 | Services and crime \[S8\] | Services, offenses | Event categories, outcome tables (data) | Tone preset changes likelihood only |
 | Governance \[S9\] | Office, budget | New permissioned actions | Authority only through ActionDef permissions |
@@ -1431,6 +1463,8 @@ The original design document's enum table (`0 | move_to_room | room_id | current
 The **catalog** (`pg events list`, as built through 0.10, 28 kinds): `input_rejected`, `setting_changed`; world: `map.created`, `pawn.spawned`, `object.spawned`, `object.contained`, `world_edited`; movement: `move.requested`, `move.arrived`, `move.failed`, `move.sidestep`; schedule: `schedule.planned`, `schedule.replanned`; tasks: `task.started`, `task.done`, `task.failed`; commitments: `commitment.proposed`, `.accepted`, `.declined`, `.expired`, `.cancelled`, `.failed`, `.active`, `.completed`; pack diagnostics: `script.error`, `script.quarantined`; developer scaffolding: `dev.nudged`, `dev.day_started`. Each kind has a category, a field schema and a default visibility; debug builds validate every emitted event against the catalog.
 
 Planned: `conversation_closed`, `need_critical`, `mood_changed`, `memory_created`, `memory_expired`, `relationship_label_changed`, `possessed` / `released` \[S4\], later `transaction`, `birth`, `death`, `offense`, `injury`, `election_result`, `construction_started`. Packs register additional types as `<pack_id>.<type>` with all required filter variants.
+
+Organism events \[S2B\]: `organism.attribute_added`, `organism.attribute_removed`, `organism.state_changed` (alive, unconscious, critical, arrest, dead), `organism.unconscious`, `organism.regained_consciousness`, `organism.resuscitated`, `death`; each has an intensity tier and filter variants for its text.
 
 ## Appendix C. Key settings (data-driven, tunable)
 

@@ -1,6 +1,6 @@
-# Playground — Design Document v3.1
+# Playground — Design Document v3.3
 
-**Status (v3.2):** adds **Player2 as a fifth AI provider** (§ providers) and commits the project to localisation-ready text and keyboard- and screen-reader-friendly menus from the first graphical build (§12.6, §14.4); no change to scope or pillars. **Status (v3.1):** adds the developer-experience commitments accepted during Phase 0 (§12.6, §14.4); no change to scope or pillars. Updated from v2.0 to define Playground as a **native desktop game written in Rust, with a sandboxed Luau scripting layer for user-created content packs**. Where this document and earlier versions conflict, v3.0 decides (see §17). **Companion docs:** Native Desktop Roadmap v4.2 (when), Architecture Blueprint v2.3 (how).
+**Status (v3.3):** adds the **organism system** for pawn health (§6.8, §9), Stage 2B, with moods defined as emotional states only (§6.2); no change to pillars. **Status (v3.2):** adds **Player2 as a fifth AI provider** (§ providers) and commits the project to localisation-ready text and keyboard- and screen-reader-friendly menus from the first graphical build (§12.6, §14.4); no change to scope or pillars. **Status (v3.1):** adds the developer-experience commitments accepted during Phase 0 (§12.6, §14.4); no change to scope or pillars. Updated from v2.0 to define Playground as a **native desktop game written in Rust, with a sandboxed Luau scripting layer for user-created content packs**. Where this document and earlier versions conflict, v3.0 decides (see §17). **Companion docs:** Native Desktop Roadmap v4.2 (when), Architecture Blueprint v2.3 (how).
 
 ## 1. Premise
 
@@ -36,6 +36,7 @@ It takes inspiration from *Tomodachi Life* (charming, character-led social play)
 
 | Phase | Adds |
 | --- | --- |
+| Stage 2B | The organism system: a simulated body (vitals, parts, organs), pain, consciousness, first conditions, the health window |
 | Stage 3 | Generator controls, town editor, unrestricted editing in observation mode; modding API for worldgen stages and town designs |
 | Stage 4 | Possession and player dialogue |
 | Stage 5 | Simple custom pawn and local roster |
@@ -99,7 +100,8 @@ All in-world things are **objects** defined as JSON templates that inherit from 
 | --- | --- |
 | Identity | Name, appearance, occupation archetype, traits (later values and sliders) |
 | Needs | Hunger, energy / sleep, social connection (more later; packs may add needs within engine bounds) |
-| Mood | A few readable states derived from needs and events |
+| Mood | A few readable **emotional** states derived from needs, events and later pain and conditions |
+| Body (Stage 2B) | The organism: vitals, parts and organs with attributes, capacities (§6.8) |
 | Task | Current activity and any step directions (go here / do this) |
 | Reservation | The schedule slot currently being honored |
 | Goal | Long-term plans (buy a house, get promoted, marry) — later stages |
@@ -110,7 +112,7 @@ All in-world things are **objects** defined as JSON templates that inherit from 
 
 ### 6.2 Needs and mood
 
-Needs decay deterministically and are restored by activities. Mood is a function of current needs plus recent memory impact. Moods begin as a short, clear list tuned in play. Personality sliders and stable traits join later and bias, but never override, rules. Mods may adjust decay rates and add mood rules only within engine-clamped ranges.
+Needs decay deterministically and are restored by activities. Mood is a function of current needs plus recent memory impact. Moods are emotional states only (starting list: cheerful, content, neutral, bored, uneasy, sad, upset, lonely, tuned in play); exhaustion, starvation and the like are body conditions, shown as need levels and capacities at first and as organism conditions from Stage 2B. Personality sliders and stable traits join later and bias, but never override, rules. Mods may adjust decay rates and add mood rules only within engine-clamped ranges.
 
 ### 6.3 Memory
 
@@ -142,6 +144,12 @@ First: an occupation is an **identity and schedule archetype only** (for example
 
 Adults only at first. Later: children, elders, births, move-ins (each a separate per-world switch) with a population cap. One game year equals one year of aging by default, with an aging-speed multiplier. Death is permanent in a world; resurrection is a developer tool only.
 
+### 6.8 Health and the body (Stage 2B)
+
+A pawn's health is a simulated organism rather than hit points. The body has **parts** (hands, arms, chest, stomach, head, legs, feet), **organs** (brain, heart, throat, left and right lung, liver) and a **skeleton** (the spine), and each can carry **attributes**: innate ones such as hair and its colour, and afflictions such as injuries and conditions, which can have sub-attributes. What the player sees come from **vitals** that the simulation models with integers: blood volume, heart rate and pressure, breathing, oxygenation, temperature, pain, adrenaline, nerve, toxicity and consciousness. Blood loss lowers the oxygen that reaches organs; organs lose efficiency as their oxygen falls; pain can cause unconsciousness; a pawn dies only when the brain fails irreversibly, after a window in which resuscitation is possible.
+
+Other systems do not read body parts. They read **capacities** derived from the body (consciousness, moving, manipulation, talking and so on), so an unconscious pawn replans, an injured leg slows movement and a pawn who cannot talk is still part of the town. A health window (from inspection or a button) shows vitals, a schematic body, attributes with their descriptions and the reasons behind the numbers. Content packs can add attribute types, injury types and effects as data, within engine bounds, and can never set death or write a vital. Presentation is always abstract; the content rating and the graphic-content filter decide what the window lists and how it words things, never whether a part or an event exists. Design, model and open questions: `docs/proposals/organism-system.md`.
+
 ## 7. Social and dialogue
 
 - Residents start conversations autonomously when social need, proximity, schedule and cooldowns allow.
@@ -164,7 +172,7 @@ Providers: OpenAI, DeepSeek, Anthropic, OpenRouter and Player2. Players pay prov
 - **Tone preset (per world):** Cozy, Standard (default), Mature. Presets change the *likelihood* of serious events, never the authoritative outcome of an event.
 - **Graphic-content filter (global, default on):** changes descriptive text detail and visual intensity only. The underlying event record is identical either way.
 - Visuals are always abstract and non-graphic.
-- Crime, injury and death are fictional, rule-bound and carry in-game consequences only. Mental health and trauma are represented accurately and calmly, never as shorthand for danger.
+- Crime, injury and death are fictional, rule-bound and carry in-game consequences only. The body model is physiological, so what happens is authoritative whatever the settings; only its wording and level of descriptive detail are filtered. Substances and treatments are fictional or generic, never real compounds, doses or procedures to follow. Mental health and trauma are represented accurately and calmly, never as shorthand for danger.
 - **These rules bind mods.** Event types a pack registers must supply every filter variant and an intensity tier, or the pack is rejected. Packs cannot disable or bypass the filter or the tone preset.
 
 ## 10. Economy, services and governance (Stages 6, 8, 9)
@@ -330,7 +338,7 @@ The roadmap refined the original design document; v3.0 supersedes both where it 
 
 ## 18. Open tuning items
 
-Slot size and activity durations; mood list and label thresholds; conversation frequency; memory retention and decay; Cozy / Standard / Mature event rates; election cadence; tax formula; service coverage and cost; resident cap and minimum desktop specification; art palette and sound scope; whether mental-health content needs outside review; script fuel and memory budgets and quarantine thresholds; hook clamp ranges and combiners; the Luau binding approach (initially `mlua` behind a replaceable boundary, settled by the Stage 0 spike); whether to isolate the script host in a separate process; whether to add a workshop-style distribution channel later.
+Slot size and activity durations; mood list and label thresholds; organism time scale, cadence, pain thresholds, resuscitation window and hazards; conversation frequency; memory retention and decay; Cozy / Standard / Mature event rates; election cadence; tax formula; service coverage and cost; resident cap and minimum desktop specification; art palette and sound scope; whether mental-health content needs outside review; script fuel and memory budgets and quarantine thresholds; hook clamp ranges and combiners; the Luau binding approach (initially `mlua` behind a replaceable boundary, settled by the Stage 0 spike); whether to isolate the script host in a separate process; whether to add a workshop-style distribution channel later.
 
 ## 19. Glossary
 

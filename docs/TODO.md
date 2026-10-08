@@ -4,9 +4,9 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Stage 0 is complete: `m0.11` is accepted and tagged.** (Gate report `docs/gates/stage-0.md`; Blueprint v3.1, D-037.)
+**Stage 0 is complete (`m0.11`). Stage 1 plan accepted with your answers (D-038).** Spec versions are now Blueprint v3.2, Roadmap v4.8, Design Document v3.3.
 
-**Stage 1 planning:** the plan for milestones 1.0 to 1.9 is in `docs/PLAN.md` ("Phase 1"), waiting for your approval and answers to its five open questions (visual style, native dialog crate, mood list, default town size and population, checkpoints). No Stage 1 code until then.
+**Organism system (your outline) is evaluated and integrated (D-039):** Stage 2B in the roadmap, Blueprint section 8.9, Design Document section 6.8, proposal with fourteen questions in `docs/proposals/organism-system.md`, suggestions S-040 to S-047 proposed. It does not block Stage 1; the answers can arrive any time before Stage 2B planning (the first one that matters is question 1, placement).
 
 ## Blocked / waiting on user
 
@@ -14,8 +14,8 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Next up
 
-1. You review the Stage 1 plan; I fold in your answers (and record any decision in `docs/DECISIONS.md`).
-2. Start 1.0 (content and state for residents) once the plan is accepted.
+1. You answer the organism questions (or say "defaults"); I fold the answers into the specs.
+2. Start Stage 1 at 1.0 (content and state for residents), in the order of `docs/PLAN.md` Phase 1.
 3. Prune dev scaffolding as real systems land (D-009).
 
 ## Shell note

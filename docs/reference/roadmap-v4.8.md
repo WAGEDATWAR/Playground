@@ -1,9 +1,10 @@
 # Playground — Native Desktop Product & Build Roadmap
 
-**Version:** 4.7 · **Last updated:** 2026-10-08 **Basis:** Roadmap v4.6 (itself based on v4.0 and v3.0)
+**Version:** 4.8 · **Last updated:** 2026-10-08 **Basis:** Roadmap v4.7 (itself based on v4.0 and v3.0)
 
 ## 1. What changed from v3.0
 
+- **v4.8:** Stage 0 is accepted (`m0.11`). The Stage 1 plan is settled (procedural sprites for now, the `rfd` crate for native dialogs, emotional-only moods, current map sizes kept and made customisable later). **New: the organism system** (a realism-based pawn health model: body parts, organs, vitals, pain, consciousness, death only from irreversible brain failure) is added as **Stage 2B** after Stage 2, with a forward step in Stage 1 (the capacities interface), fight-or-flight and mental conditions in Stage 7, injury, treatment and services in Stage 8, and the API at 1.0 in Stage 11. Principle 17 is new. Placement and the open questions are in `docs/proposals/organism-system.md` and are confirmed or changed by your answers. No other product decision or gate changed.
 - **v4.7:** milestone 0.10 is accepted. Accepted suggestions S-037 to S-039 are scheduled in Stage 1 with the native renderer and UI work: native open and save dialogs replace the exports and imports folders (S-037), AccessKit output for screen readers is switched on (S-038; the full screen-reader pass stays a Stage 11 target) and the main menu gets a living town backdrop (S-039). No product decision or gate changed.
 - **v4.6:** milestone 0.9 is accepted. Accepted suggestions S-034 to S-036 are scheduled: the script cost view joins the 0.10 dev overlay (S-036); real batch calls into scripts are built at Stage 1 if the first real system profile shows scripts above a few percent of the tick (S-034); Luau type checking in `pg pack lint` is evaluated with the Stage 11 editor support (S-035). No product decision or gate changed.
 - **v4.5:** accepted suggestion S-033 is scheduled as two evaluation items: optional Player2 voice and NPC extras at Stage 4 (possession dialogue) and Stage 11 (audio). No product decision or gate changed.
@@ -123,6 +124,7 @@ These replace the v3.0 neutrality rules.
 14. **One API, no back doors.** The base game uses the same pack format and API as player mods. Performance-critical mechanisms stay in Rust and are extended through hooks, not reimplemented in scripts.
 15. **Use the machine.** A dedicated simulation thread, a worker pool and data-oriented layout are the default; parallelism is allowed only where golden replays prove identical results at any thread count.
 16. **Reproducible, explainable, author-friendly tooling.** Any divergence, failure or odd behavior must be reproducible headlessly (replay diff and bisect, bug bundles, scenario files) and explainable from recorded reasons; content and scripting errors name the likely fix ("did you mean…?"); pack authors get editor support from generated schemas and type definitions, plus runnable cookbook samples that double as conformance tests.
+17. **Bodies, not hit points.** Pawn health is a simulated organism: vitals, parts, organs and attributes, with death only from irreversible brain failure. Other systems read derived capacities, never body parts. Pack effects are declarative and clamped, and a pack can never set death or write a vital. Presentation stays abstract and filter-aware, and parts exist regardless of the content rating.
 
 ## 6. Effort and foundation guide
 
@@ -163,7 +165,7 @@ These replace the v3.0 neutrality rules.
 - [ ] Replace hard-coded NPCs with validated resident definitions and world instances; generate 10–20 adults from a repeatable seed.
 - [ ] Generate households, starting relationships and a few shared memories.
 - [ ] Occupation schedule templates with small seeded variations. Occupations are identity / schedule archetypes only, not working jobs.
-- [ ] First needs: hunger, energy / sleep, social connection. A few clear mood states driven by needs and events.
+- [ ] First needs: hunger, energy / sleep, social connection. A few clear mood states driven by needs and events. Moods are **emotional states only**; physical states such as exhaustion and starvation are body conditions (need levels and capacities now, organism conditions from Stage 2B).
 - [ ] Record conversations and shared social events as memories. Important persist; minor fade. Explainable rules.
 - [ ] One affinity score with readable relationship labels. Resident inspector: current activity, mood, needs, relevant memories, relationship label (and pack-attributed reasons).
 - [ ] Watch, pause / speed, focus / inspect. The player cannot initiate or join conversations.
@@ -179,6 +181,7 @@ These replace the v3.0 neutrality rules.
 - [ ] Basic Mods screen: list, enable / disable, capability approval, errors, safe-mode launch.
 - [ ] **[DX] Script batching (S-034):** profile scripts with the first real systems (`pg pack bench`); if they use more than a few percent of the tick, add a batch entry point so a system's context is built once and Luau is entered once per batch (0.9 measured 12 µs per call and 1.6% of the tick for 200 pawns, so this is conditional).
 - [ ] **Pawn-aware routing:** idle pawns act as temporary obstacles (or a crowd cost) in path search, so pawns that stand still while working, sleeping or talking no longer block others; results stay deterministic and cacheable.
+- [ ] **Capacities interface (forward step for Stage 2B):** a small set of derived, integer capacities (consciousness, moving, manipulation, talking, eating, breathing) that movement, the scheduler, conversation and actions read instead of reading needs or body parts directly. Stage 1 fills them from needs (a collapsed pawn stops, an exhausted one slows); the organism later becomes their producer and the shortcut is removed.
 - [ ] **\[DX\]** `pg content tree` (inheritance forest); evaluate template variants (data-only expansion of one template into several) against the content written so far; add a cookbook sample for hooks.
 
 **Done when:** a seeded 10–20-resident town runs autonomously in the native app, can be observed and inspected, produces overheard conversation, and keeps state and social history after restart; the base content loads through the pack loader; a sample pack adds a component and a hook that visibly change behavior and are attributed in the inspector.
@@ -196,6 +199,26 @@ These replace the v3.0 neutrality rules.
 - [ ] **Modding API 0.2:** pack systems with anchored ordering and queries, pack actions in the closed action registry, schedule and commitment hooks, the typed `Effect` set; reason codes attributed to packs.
 
 **Done when:** repeat runs from the same seed and inputs produce the same valid schedules; accepted plans reserve both residents; conflict outcomes are explainable; a sample pack adds an action and a system that run deterministically under replay.
+
+### Stage 2B — Organism core and pawn health
+
+**Effort: XL · Foundation: Medium (high for mods, injury, medicine and psychology that follow)**
+
+A pawn's health is a simulated organism, not hit points. Design, units, model and open questions: `docs/proposals/organism-system.md`; contract: Architecture §8.9.
+
+- [ ] **Vitals and the organism step:** blood volume (from body mass and physiology profile), heart rate, stroke volume and pressure, breathing, blood and organ oxygenation, temperature, pain, adrenaline, nerve, toxicity, consciousness and brain function; integers with fixed units; one fixed-order step per pawn; healthy pawns dormant, acute pawns stepped more often; a world-level clinical time scale.
+- [ ] **Body:** parts (hands, arms, chest, stomach, head, legs, feet; mature-rating parts), organs (brain, heart, throat, left and right lung, liver) and skeleton (spine, in segments), each with integrity, oxygenation and efficiency as relevant; attributes with a type, allowed parts, name, description, sub-attributes and type-specific constants (for example `injury_type`); innate attributes for appearance (hair, colour).
+- [ ] **Status Effect Registry:** static attributes are plain data; dynamic ones name a registered effect that the organism ticks at a fixed cadence; effects are declarative programs (conditions, bounded vital contributions, transitions, reason keys) run natively, with bounded, batched script hooks only for onset, escalation and clamped modifiers.
+- [ ] **Blood, oxygen and organs:** transport from lungs to organs; lungs that can fill with fluid; throat patency (breathing and speech); liver toxin clearance; brain regulation of the heart and its autopilot; blood types (ABO and Rh), transfusion compatibility, `acute_hemolytic_reaction`.
+- [ ] **Pain and adrenaline:** diminishing aggregation of afflictions, per-pawn threshold, pain shock, temporary extra pain from harmful actions, felt pain = total pain x (1 - adrenaline factor); nerve as the fight-or-flight modifier; **fight-or-flight placeholder** (adrenaline response and a stress input) for systems that need it before Stage 7.
+- [ ] **Consciousness, arrest and death:** unconscious, critical, arrest (clinical death with a resuscitation window) and dead (irreversible, from brain failure only); deterministic, explainable, with a non-graphic record; resurrection stays a developer tool.
+- [ ] **Capacities** replace the Stage 1 shortcut; movement, scheduling, conversation and actions react (an unconscious pawn replans, a pawn who cannot talk is never dropped from the town).
+- [ ] **First conditions and sources of harm:** starvation, exhaustion, dehydration if water becomes a need, a first illness, and a small set of accidents (final list set with the Stage 2B questions); pawns self-treat and help each other with simple care.
+- [ ] **Health window:** vitals, a schematic body, attributes with their descriptions, reasons; reachable from inspection and from a button; abstract and filter-aware.
+- [ ] **Modding API 0.2b (`pg.organism`):** define attribute types, parts-with-attributes, injury types and effect programs at load time; read vitals and capacities; request interventions as validated commands; bounded hooks; events. A pack can never set death or write a vital; filter variants and an intensity tier are required.
+- [ ] **\[DX\]** `pg organism sim` and `pg organism explain`, an Organism tab in the overlay, physiology golden traces, a plausibility lint for pack effects, and a soak with shadow verification.
+
+**Done when:** a pawn that stops eating, or is hurt, goes through readable, explainable physiological changes that match the golden traces on every system; the same seed and inputs give identical bodies after save, reload and replay at any thread count; healthy towns of 200 pawns stay within the organism's cost budget; a sample pack adds an attribute type and an effect that behave and are attributed in the health window; no pack can cause death directly.
 
 ### Stage 3 — Town generation and creative editing
 
@@ -261,6 +284,7 @@ These replace the v3.0 neutrality rules.
 - [ ] Stable values / traits and numeric personality sliders (e.g. taciturn ↔ outspoken); editable in the later full pawn editor.
 - [ ] High-importance events and relationships influence psychology; minor events never rewrite stable traits.
 - [ ] Trauma and mental-health conditions only through research-informed, restrained representations. Never frame diagnosis as a predictor of violence.
+- [ ] **Fight-or-flight** in the psychology core (using the organism's adrenaline and nerve), replacing the Stage 2B placeholder; panic and anxiety conditions as organism conditions with mental inputs; brain-damage effects on traits and decisions; blood type inheritance for births; aging effects on physiological baselines.
 - [ ] Children and elders; births and move-ins independently toggleable per world with a configurable population cap.
 - [ ] One in-game year = one year of aging by default; aging-speed multiplier in settings.
 - [ ] Permanent death in a world; resurrection developer-only; non-graphic event record and continuing-world behavior.
@@ -272,7 +296,7 @@ These replace the v3.0 neutrality rules.
 
 **Effort: XL · Foundation: Medium**
 
-- [ ] Serious crime, injury and legal consequences as fictional, rule-based systems; likelihood responds to each world's preset.
+- [ ] Serious crime, injury and legal consequences as fictional, rule-based systems; likelihood responds to each world's preset. Injury is applied to the Stage 2B organism (attributes on parts, vitals, death only from brain failure), with treatment (first aid, resuscitation, transfusion; surgery as scoped) and a clinic and emergency response; abstract visuals only.
 - [ ] Generic, non-graphic visuals; the global filter reduces descriptive detail and visual intensity. Validate filtered and unfiltered presentation.
 - [ ] Public services in stages, beginning with a clinic and emergency response. Others only once their simulation purpose is defined; school follows child life stages.
 - [ ] Deterministic, understandable coverage, response, cost and legal outcomes.
@@ -342,6 +366,8 @@ These replace the v3.0 neutrality rules.
 10. **Mayor and advanced behavior:** elections, tax-funded construction / services, bounded LLM proposals including pack actions.
 11. **Release-ready desktop build:** API 1.0 and tooling, pack manager, \~200-resident performance on minimum spec, accessibility, onboarding, installers, reliable updates.
 
+Stage 2B has its own gate check, run with gate 3: the organism's physiology golden traces, its soak with shadow verification, and the pack-cannot-kill hostile cases, on a saved and reloaded world.
+
 A gate is complete only when its acceptance checks pass on a **saved and reloaded** world, not merely when a screen exists.
 
 ## 9. Explicit non-goals for the first observation release
@@ -361,6 +387,7 @@ Tune in the relevant prototype rather than blocking the roadmap:
 
 - Map-size, population, terrain / water ranges; schedule slot and activity durations.
 - Initial mood labels and relationship-label thresholds.
+- Organism: clinical time scale, step cadence, pain aggregation and thresholds, resuscitation window, blood volume anchors and profile factors, hit tables, first conditions and hazards, and whether mental-health content needs outside review (see the proposal's questions).
 - Conversation frequency, memory retention, decay and importance thresholds.
 - Cozy / Standard / Mature event rates, election cadence, tax formula, service coverage and cost.
 - Minimum desktop specification and performance thresholds (resident target starts at \~200, stretch 500).
@@ -390,6 +417,7 @@ These are open and should be settled early; none blocks Stage 0 except the first
 4. **Out-of-process script host:** whether to isolate scripts in a separate, OS-restricted process before distributing untrusted packs widely (Stage 11).
 5. **Workshop-style distribution:** whether to ever offer a hosted channel for packs; currently out of scope.
 6. **Minimum specification and resident cap:** set from profiling, not assumed.
+7. **Organism system:** placement as Stage 2B, clinical time scale, pressure model, death states, mature parts, physiology profile, harm sources before Stage 8, care scope, pain totals, extensibility approach, mental-health review, anatomy scope and species; the fourteen questions are in `docs/proposals/organism-system.md` section 12, each with a proposed default.
 7. **Pack signing:** deferred; integrity is by content hash until there is a distribution channel.
 
 8. **Player2 client id (new in v4.4).** Player2's device-code sign-in needs a `client_id` registered with Player2 for this game. Until one exists the build uses a placeholder and the provider will likely refuse it. Needed before the Player2 option can be tried by anyone but a developer; register it by Stage 0's 0.10 checkpoint. Also confirm the API base URL (`https://api.player2.game/v1`, taken from the published OpenAPI document) and the terms at `player2.game/devtos` for a distributed game.
