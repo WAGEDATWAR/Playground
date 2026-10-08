@@ -27,7 +27,10 @@ pub fn check_cmd(rest: &[String]) -> Result<ExitCode, String> {
         tmp.join("check.pgbundle").to_string_lossy().into_owned(),
     );
     std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
-    let checks = vec![
+    // `--full` adds the checks that are too slow for every edit (the 30-day soak); a milestone is not pushed
+    // until `pg check --full` passes, so every pinned hash has been compared (docs/BUILDING.md).
+    let full = rest.iter().any(|a| a == "--full");
+    let mut checks = vec![
         Check {
             name: "determinism vectors",
             args: args(&["selftest"]),
@@ -286,6 +289,13 @@ pub fn check_cmd(rest: &[String]) -> Result<ExitCode, String> {
             needs: Some("golden/dev-town-3days.json"),
         },
     ];
+    if full {
+        checks.push(Check {
+            name: "30-day soak (pinned hash)",
+            args: args(&["scenario", "run", "scenarios/soak-30-days.json"]),
+            needs: Some("scenarios/soak-30-days.json"),
+        });
+    }
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut failed = 0;
     let mut rows = Vec::new();

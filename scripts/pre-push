@@ -1,0 +1,5 @@
+#!/bin/sh
+# Git pre-push hook: every pinned hash (goldens, pack goldens, scenarios incl. the 30-day soak, town
+# starting hash, fixtures) must match before anything is pushed. Install: sh scripts/install-hooks.sh
+# Skip once, knowingly: git push --no-verify
+exec cargo run --release -q -p pg-cli -- check --full

@@ -217,6 +217,21 @@ cargo run -p pg-cli -- scenario run scenarios/gate-stage0-town.json scenarios/ga
 cargo run --release -p pg-cli -- scenario run scenarios/soak-30-days.json
 ```
 
+## Pinned hashes: the pre-push rule
+
+Anything that changes simulation state (a system, a data table, content, schema) changes pinned hashes:
+`golden/dev-town-3days.json` (`pg replay <log> --rerecord`), `packs/golden/*` (`pg pack test <dir> --update`
+for each cookbook pack), the `hash` pins in `scenarios/*.json` (including the 30-day soak, which only runs in
+release), the town starting hash in `pg check`, and the saved fixtures. Before a milestone is pushed, run
+
+```bash
+cargo run --release -p pg-cli -- check --full
+```
+
+`--full` is `pg check` plus the soak, so every pin is compared in one report. `sh scripts/install-hooks.sh`
+installs a git pre-push hook that runs it for you (`git push --no-verify` skips it knowingly). CI runs the
+same checks, so a pin that passes here passes there.
+
 The gate report with every clause, its evidence and its command is `docs/gates/stage-0.md`.
 
 ## Needs, mood and residents (Stage 1)
