@@ -26,6 +26,47 @@ pub enum Key {
     Journal,
 }
 
+/// What the Mods screen shows about one installed pack.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PackRow {
+    /// The pack id (`caffeine`); empty for a folder that is not a valid pack.
+    pub id: String,
+    /// The folder under `packs/` (what Remove acts on); empty for the base game.
+    pub folder: String,
+    pub name: String,
+    pub version: String,
+    pub depends: Vec<String>,
+    pub enabled: bool,
+    /// Whether the pack is part of the running game now.
+    pub loaded: bool,
+    pub base: bool,
+    /// Every capability the pack asks for, with whether it needs approval and whether it has it.
+    pub capabilities: Vec<CapRow>,
+    /// Why the pack is not valid, if it is not.
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CapRow {
+    pub name: String,
+    pub needs_approval: bool,
+    pub approved: bool,
+}
+
+/// The Mods screen's data.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ModsView {
+    pub packs: Vec<PackRow>,
+    /// Start the next launch with only the base game.
+    pub safe_mode: bool,
+    /// What happened at launch (packs left out and why, a fallback to the base game).
+    pub notes: Vec<String>,
+    /// The choices differ from what is running, so they take effect at the next launch.
+    pub restart_needed: bool,
+    /// The folder installed packs live in (empty when unknown).
+    pub folder: String,
+}
+
 /// One saved world as the Saved Worlds list shows it (suggestion S-024), built from the manifest alone.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorldEntry {
@@ -159,6 +200,8 @@ pub enum UiEvent {
     Hud(HudInfo),
     SettingsLoaded(Vec<SettingItem>),
     AiLoaded(AiState),
+    /// The installed packs and the player's choices about them (the Mods screen).
+    ModsLoaded(ModsView),
     LoginPrompt {
         code: String,
         url: String,
@@ -190,6 +233,7 @@ impl fmt::Debug for UiEvent {
             UiEvent::Hud(h) => write!(f, "Hud(tick {})", h.tick),
             UiEvent::SettingsLoaded(s) => write!(f, "SettingsLoaded({})", s.len()),
             UiEvent::AiLoaded(_) => write!(f, "AiLoaded"),
+            UiEvent::ModsLoaded(m) => write!(f, "ModsLoaded({} pack(s))", m.packs.len()),
             UiEvent::LoginPrompt { .. } => write!(f, "LoginPrompt"),
             UiEvent::LoginFinished(r) => write!(f, "LoginFinished(ok: {})", r.is_ok()),
             UiEvent::ConnectionResult(r) => write!(f, "ConnectionResult(ok: {})", r.is_ok()),
@@ -265,6 +309,26 @@ pub enum AppEffect {
     CutBundle,
     /// Empties the developer console's log.
     ClearConsole,
+    /// Reads the installed packs and the player's choices (opening the Mods screen).
+    ListMods,
+    SetPackEnabled {
+        id: String,
+        on: bool,
+    },
+    /// Approves or withdraws a capability for a pack.
+    ApproveCapability {
+        id: String,
+        cap: String,
+        on: bool,
+    },
+    /// Asks for a folder and installs the content pack in it.
+    InstallPack,
+    /// Deletes an installed pack's folder.
+    RemovePack(String),
+    /// Start the next launch with only the base game.
+    SetSafeMode(bool),
+    /// Shows the folder installed packs live in.
+    RevealPacks,
     /// Puts text on the clipboard (handled by the shell).
     CopyText(String),
     /// Writes the developer console's visible lines to a log file (redacted); the text is what was shown.
@@ -323,6 +387,15 @@ impl fmt::Debug for AppEffect {
             AppEffect::Rewind { tick } => write!(f, "Rewind({tick})"),
             AppEffect::CutBundle => write!(f, "CutBundle"),
             AppEffect::ClearConsole => write!(f, "ClearConsole"),
+            AppEffect::ListMods => write!(f, "ListMods"),
+            AppEffect::SetPackEnabled { id, on } => write!(f, "SetPackEnabled({id}, {on})"),
+            AppEffect::ApproveCapability { id, cap, on } => {
+                write!(f, "ApproveCapability({id}, {cap}, {on})")
+            }
+            AppEffect::InstallPack => write!(f, "InstallPack"),
+            AppEffect::RemovePack(p) => write!(f, "RemovePack({p})"),
+            AppEffect::SetSafeMode(on) => write!(f, "SetSafeMode({on})"),
+            AppEffect::RevealPacks => write!(f, "RevealPacks"),
             AppEffect::CopyText(t) => write!(f, "CopyText({} chars)", t.len()),
             AppEffect::SaveConsoleLog(t) => write!(f, "SaveConsoleLog({} chars)", t.len()),
             AppEffect::SelectProvider(p) => write!(f, "SelectProvider({p})"),

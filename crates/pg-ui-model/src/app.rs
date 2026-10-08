@@ -24,6 +24,8 @@ pub enum Screen {
     SavedWorlds(SavedForm),
     Options,
     AiOptions(AiForm),
+    /// Installed content packs.
+    Mods,
     InGame,
     Pause,
 }
@@ -124,6 +126,7 @@ pub struct AppModel {
     open_drawer: Option<String>,
     overlay: Overlay,
     console: ConsoleModel,
+    mods: crate::types::ModsView,
     /// The town journal window is open.
     journal_open: bool,
     /// How the world is being played; the journal is for observation and possession modes only.
@@ -156,6 +159,7 @@ impl AppModel {
             open_drawer: None,
             overlay: Overlay::default(),
             console: ConsoleModel::default(),
+            mods: crate::types::ModsView::default(),
             journal_open: false,
             mode: crate::journal::Mode::Observation,
         }
@@ -179,6 +183,10 @@ impl AppModel {
 
     pub fn worlds(&self) -> &[WorldEntry] {
         &self.worlds
+    }
+
+    pub fn mods(&self) -> &crate::types::ModsView {
+        &self.mods
     }
 
     /// Whether the journal window should be drawn.
@@ -463,6 +471,10 @@ impl AppModel {
                 self.ai = a;
                 Vec::new()
             }
+            UiEvent::ModsLoaded(v) => {
+                self.mods = v;
+                Vec::new()
+            }
             UiEvent::LoginPrompt { code, url } => {
                 if let Screen::AiOptions(f) = &mut self.screen {
                     f.login = LoginUi::Prompt { code, url };
@@ -660,7 +672,7 @@ impl AppModel {
                     Vec::new()
                 }
             }
-            Screen::NewWorld(_) | Screen::SavedWorlds(_) | Screen::Options => {
+            Screen::NewWorld(_) | Screen::SavedWorlds(_) | Screen::Options | Screen::Mods => {
                 self.back();
                 Vec::new()
             }

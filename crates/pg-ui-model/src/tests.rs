@@ -192,6 +192,7 @@ fn the_main_menu_snapshot_is_stable() {
   >[ui.main.continue_named{name=Town,day=3}] <main.continue>
    [ui.main.new] <main.new>
    [ui.main.saved] <main.saved>
+   [ui.main.mods] <main.mods>
    [ui.main.options] <main.options>
    [ui.main.quit] <main.quit>
 ";
@@ -1220,4 +1221,122 @@ fn the_journal_opens_from_its_button_or_the_j_key_in_a_world_and_closes_again() 
         ..HudInfo::default()
     }));
     assert!(m.journal_visible(), "the same world carries on");
+}
+
+fn pack_row(
+    id: &str,
+    enabled: bool,
+    loaded: bool,
+    caps: &[(&str, bool, bool)],
+) -> crate::types::PackRow {
+    crate::types::PackRow {
+        id: id.into(),
+        folder: id.into(),
+        name: format!("Pack {id}"),
+        version: "0.1.0".into(),
+        depends: Vec::new(),
+        enabled,
+        loaded,
+        base: false,
+        capabilities: caps
+            .iter()
+            .map(|(n, needs, ok)| crate::types::CapRow {
+                name: (*n).into(),
+                needs_approval: *needs,
+                approved: *ok,
+            })
+            .collect(),
+        error: None,
+    }
+}
+
+#[test]
+fn the_mods_screen_lists_packs_and_turns_its_controls_into_effects() {
+    let mut m = boot(Vec::new(), None);
+    assert_eq!(click(&mut m, "main.mods"), vec![AppEffect::ListMods]);
+    assert!(matches!(m.screen(), Screen::Mods));
+    let base = crate::types::PackRow {
+        base: true,
+        enabled: true,
+        loaded: true,
+        folder: String::new(),
+        ..pack_row("base", true, true, &[])
+    };
+    let broken = crate::types::PackRow {
+        id: String::new(),
+        error: Some("bad json".into()),
+        ..pack_row("broken", false, false, &[])
+    };
+    m.update(UiEvent::ModsLoaded(crate::types::ModsView {
+        packs: vec![
+            base,
+            pack_row(
+                "caffeine",
+                true,
+                false,
+                &[("data", false, false), ("systems", true, false)],
+            ),
+            broken,
+        ],
+        safe_mode: false,
+        notes: vec!["'x' was left out: it needs your approval.".into()],
+        restart_needed: true,
+        folder: "C:/data/packs".into(),
+    }));
+    let snap = m.tree(&show).snapshot(m.focus());
+    for want in [
+        "ui.mods.base",
+        "ui.mods.state.pending",
+        "<mods.enable.caffeine>",
+        "<mods.cap.caffeine.systems>",
+        "ui.mods.asks{what=ui.mods.cap.data}",
+        "ui.mods.invalid",
+        "bad json",
+        "<mods.remove.caffeine>",
+        "<mods.safe>",
+        "<mods.install>",
+        "ui.mods.restart",
+        "needs your approval",
+    ] {
+        assert!(snap.contains(want), "missing {want:?} in\n{snap}");
+    }
+    assert!(
+        !snap.contains("<mods.enable.base>"),
+        "the base game cannot be switched off"
+    );
+    assert!(
+        !snap.contains("<mods.cap.caffeine.data>"),
+        "plain data needs no approval"
+    );
+    assert_eq!(
+        m.update(UiEvent::Toggle("mods.enable.caffeine".into(), false)),
+        vec![AppEffect::SetPackEnabled {
+            id: "caffeine".into(),
+            on: false
+        }]
+    );
+    assert_eq!(
+        m.update(UiEvent::Toggle("mods.cap.caffeine.systems".into(), true)),
+        vec![AppEffect::ApproveCapability {
+            id: "caffeine".into(),
+            cap: "systems".into(),
+            on: true
+        }]
+    );
+    assert_eq!(
+        m.update(UiEvent::Toggle("mods.safe".into(), true)),
+        vec![AppEffect::SetSafeMode(true)]
+    );
+    assert_eq!(click(&mut m, "mods.install"), vec![AppEffect::InstallPack]);
+    assert_eq!(click(&mut m, "mods.reveal"), vec![AppEffect::RevealPacks]);
+    assert_eq!(
+        click(&mut m, "mods.remove.caffeine"),
+        vec![AppEffect::RemovePack("caffeine".into())]
+    );
+    // Escape and Back return to the main menu.
+    press(&mut m, Key::Escape);
+    assert!(matches!(m.screen(), Screen::MainMenu));
+    click(&mut m, "main.mods");
+    click(&mut m, "mods.back");
+    assert!(matches!(m.screen(), Screen::MainMenu));
 }

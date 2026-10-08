@@ -917,3 +917,100 @@ fn export_and_import_use_the_system_dialogs_when_there_are_some_and_cancelling_d
     assert!(d.text().contains("bad.json"), "{}", d.text());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn the_mods_screen_installs_enables_approves_and_removes_a_pack() {
+    use pg_ui_model::types::UiEvent as Ev;
+    let data = std::env::temp_dir().join(format!("pg-mods-flow-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&data);
+    std::fs::create_dir_all(&data).unwrap();
+    let m = Machine::new();
+    let c = content(&[]);
+    let dialogs = Arc::new(pg_host::ScriptedDialogs::new());
+    let mut svc = m.services();
+    svc.dialogs = Some(dialogs.clone());
+    svc.data_dir = Some(data.clone());
+    let mut ctl = AppController::new(svc, Some(Arc::clone(&c)));
+    let mut model = AppModel::new();
+    let boot = ctl.boot();
+    model.update(boot);
+    let mut d = Driver { ctl, model };
+    d.click("main.mods");
+    assert!(
+        d.model.mods().packs.iter().any(|p| p.base),
+        "the base game is listed"
+    );
+    assert_eq!(d.model.mods().packs.len(), 1);
+    // Cancelling the folder dialog does nothing; choosing a folder installs it, switched off.
+    dialogs.answer_folder(None);
+    d.click("mods.install");
+    assert_eq!(d.model.mods().packs.len(), 1);
+    let source = std::path::PathBuf::from(format!(
+        "{}/../../packs/cookbook/caffeine",
+        env!("CARGO_MANIFEST_DIR")
+    ));
+    dialogs.answer_folder(Some(source));
+    d.click("mods.install");
+    let row = d
+        .model
+        .mods()
+        .packs
+        .iter()
+        .find(|p| p.id == "caffeine")
+        .cloned()
+        .expect("installed");
+    assert!(!row.enabled && !row.loaded);
+    assert!(row
+        .capabilities
+        .iter()
+        .any(|c| c.name == "systems" && c.needs_approval && !c.approved));
+    // Enabled but not approved: it will not load, and the screen says why only after approval changes.
+    d.send(Ev::Toggle("mods.enable.caffeine".into(), true));
+    assert!(
+        !d.model.mods().restart_needed,
+        "an unapproved pack will not load, so nothing changes"
+    );
+    d.send(Ev::Toggle("mods.cap.caffeine.systems".into(), true));
+    let row = d
+        .model
+        .mods()
+        .packs
+        .iter()
+        .find(|p| p.id == "caffeine")
+        .cloned()
+        .unwrap();
+    assert!(
+        row.enabled
+            && row
+                .capabilities
+                .iter()
+                .any(|c| c.name == "systems" && c.approved)
+    );
+    assert!(
+        d.model.mods().restart_needed,
+        "it will load at the next start"
+    );
+    assert!(
+        d.text().contains("next time the game starts")
+            || d.text().contains("ui.mods.restart")
+            || d.text().contains("Your changes take effect"),
+        "{}",
+        d.text()
+    );
+    // The choices are on disk.
+    let saved = String::from_utf8(m.storage.read("mods.json").unwrap().unwrap()).unwrap();
+    assert!(
+        saved.contains("caffeine") && saved.contains("systems"),
+        "{saved}"
+    );
+    // Safe mode is a one-shot request recorded for the next launch.
+    d.send(Ev::Toggle("mods.safe".into(), true));
+    assert!(d.model.mods().safe_mode);
+    // Removing deletes the folder and forgets the choices.
+    d.click("mods.remove.caffeine");
+    assert!(d.model.mods().packs.iter().all(|p| p.id != "caffeine"));
+    assert!(!data.join("packs/caffeine").exists());
+    let saved = String::from_utf8(m.storage.read("mods.json").unwrap().unwrap()).unwrap();
+    assert!(!saved.contains("caffeine"), "{saved}");
+    let _ = std::fs::remove_dir_all(&data);
+}

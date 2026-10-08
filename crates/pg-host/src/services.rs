@@ -480,12 +480,17 @@ impl Clock for FixedClock {
 pub trait Dialogs: Send + Sync {
     fn pick_file_to_read(&self, extensions: &[&str]) -> Option<PathBuf>;
     fn pick_file_to_write(&self, suggested: &str) -> Option<PathBuf>;
+    /// Chooses a folder (for installing a content pack). The default is a cancelled dialog.
+    fn pick_folder(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 /// Returns scripted answers (and `None` once they run out, like a cancelled dialog).
 #[derive(Default)]
 pub struct ScriptedDialogs {
     reads: Mutex<VecDeque<Option<PathBuf>>>,
+    folders: Mutex<VecDeque<Option<PathBuf>>>,
     writes: Mutex<VecDeque<Option<PathBuf>>>,
     asked: Mutex<Vec<String>>,
 }
@@ -497,6 +502,10 @@ impl ScriptedDialogs {
 
     pub fn answer_read(&self, p: Option<PathBuf>) {
         lock(&self.reads).push_back(p);
+    }
+
+    pub fn answer_folder(&self, p: Option<PathBuf>) {
+        lock(&self.folders).push_back(p);
     }
 
     pub fn answer_write(&self, p: Option<PathBuf>) {
@@ -517,6 +526,11 @@ impl Dialogs for ScriptedDialogs {
     fn pick_file_to_write(&self, suggested: &str) -> Option<PathBuf> {
         lock(&self.asked).push(format!("write {suggested}"));
         lock(&self.writes).pop_front().flatten()
+    }
+
+    fn pick_folder(&self) -> Option<PathBuf> {
+        lock(&self.asked).push("folder".to_owned());
+        lock(&self.folders).pop_front().flatten()
     }
 }
 

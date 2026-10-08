@@ -47,6 +47,7 @@ pub(crate) fn build(m: &AppModel, t: Text) -> Tree {
         Screen::SavedWorlds(f) => saved_worlds(st.worlds, f, t),
         Screen::Options => options(st.settings, t),
         Screen::AiOptions(f) => ai_options(st.ai, f, t),
+        Screen::Mods => mods(m.mods(), t),
         Screen::InGame => in_game(m, t),
         Screen::Pause => pause(t),
     }
@@ -72,6 +73,7 @@ fn main_menu(worlds: &[WorldEntry], t: Text) -> Tree {
             cont,
             Widget::button("main.new", t("ui.main.new", &[])),
             Widget::button("main.saved", t("ui.main.saved", &[])),
+            Widget::button("main.mods", t("ui.main.mods", &[])),
             Widget::button("main.options", t("ui.main.options", &[])),
             Widget::button("main.quit", t("ui.main.quit", &[])),
         ],
@@ -509,6 +511,7 @@ fn screen_kind(m: &AppModel) -> &'static str {
         Screen::SavedWorlds(_) => "saved",
         Screen::Options => "options",
         Screen::AiOptions(_) => "ai",
+        Screen::Mods => "mods",
         Screen::InGame => "hud",
         Screen::Pause => "pause",
     }
@@ -537,6 +540,11 @@ pub(crate) fn activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
             m.go_to(Screen::Options);
             Vec::new()
         }
+        ("main", "main.mods") => {
+            m.go_to(Screen::Mods);
+            vec![AppEffect::ListMods]
+        }
+        ("mods", _) => mods_activate(m, id),
         ("main", "main.quit") => vec![AppEffect::Quit],
         ("crash", "crash.reveal") => match m.screen() {
             Screen::CrashPrompt { path } => vec![AppEffect::RevealPath(path.clone())],
@@ -748,10 +756,130 @@ pub(crate) fn text(m: &mut AppModel, id: &str, s: String) -> Vec<AppEffect> {
 }
 
 pub(crate) fn toggle(m: &mut AppModel, id: &str, v: bool) -> Vec<AppEffect> {
-    if screen_kind(m) == "options" {
-        return setting_changed(m, id, SettingValue::Bool(v));
+    match screen_kind(m) {
+        "options" => return setting_changed(m, id, SettingValue::Bool(v)),
+        "mods" => {
+            if id == "mods.safe" {
+                return vec![AppEffect::SetSafeMode(v)];
+            }
+            if let Some(pack) = id.strip_prefix("mods.enable.") {
+                return vec![AppEffect::SetPackEnabled {
+                    id: pack.to_owned(),
+                    on: v,
+                }];
+            }
+            // `mods.cap.<pack>.<capability>`: pack ids never contain a dot, capability names do not either.
+            if let Some((pack, cap)) = id.strip_prefix("mods.cap.").and_then(|r| r.split_once('.'))
+            {
+                return vec![AppEffect::ApproveCapability {
+                    id: pack.to_owned(),
+                    cap: cap.to_owned(),
+                    on: v,
+                }];
+            }
+        }
+        _ => {}
     }
     Vec::new()
+}
+
+fn mods_activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
+    match id {
+        "mods.back" => {
+            m.go_back();
+            Vec::new()
+        }
+        "mods.install" => vec![AppEffect::InstallPack],
+        "mods.reveal" => vec![AppEffect::RevealPacks],
+        other => match other.strip_prefix("mods.remove.") {
+            Some(folder) => vec![AppEffect::RemovePack(folder.to_owned())],
+            None => Vec::new(),
+        },
+    }
+}
+
+/// The Mods screen: installed packs, what each asks for, what the player has allowed, and what applies when.
+fn mods(v: &crate::types::ModsView, t: Text) -> Tree {
+    let mut w = vec![Widget::Heading(t("ui.mods.title", &[]))];
+    w.push(Widget::Note(t("ui.mods.intro", &[])));
+    if v.restart_needed {
+        w.push(Widget::Label(t("ui.mods.restart", &[])));
+    }
+    for n in &v.notes {
+        w.push(Widget::Note(n.clone()));
+    }
+    for p in &v.packs {
+        let title = if p.id.is_empty() {
+            t("ui.mods.invalid_title", &[("folder", &p.folder)])
+        } else {
+            t(
+                "ui.mods.pack_title",
+                &[("name", &p.name), ("version", &p.version), ("id", &p.id)],
+            )
+        };
+        let mut kids = Vec::new();
+        if let Some(e) = &p.error {
+            kids.push(Widget::Label(t("ui.mods.invalid", &[])));
+            kids.push(Widget::Note(e.chars().take(300).collect()));
+        } else if p.base {
+            kids.push(Widget::Note(t("ui.mods.base", &[])));
+        } else {
+            let state = match (p.loaded, p.enabled) {
+                (true, true) => "ui.mods.state.loaded",
+                (true, false) => "ui.mods.state.unload",
+                (false, true) => "ui.mods.state.pending",
+                (false, false) => "ui.mods.state.off",
+            };
+            kids.push(Widget::Label(t(state, &[])));
+            kids.push(Widget::Toggle {
+                id: format!("mods.enable.{}", p.id),
+                label: t("ui.mods.enable", &[]),
+                value: p.enabled,
+            });
+            if !p.depends.is_empty() {
+                kids.push(Widget::Note(t(
+                    "ui.mods.depends",
+                    &[("packs", &p.depends.join(", "))],
+                )));
+            }
+            for c in &p.capabilities {
+                let what = t(&format!("ui.mods.cap.{}", c.name.replace('-', "_")), &[]);
+                if c.needs_approval {
+                    kids.push(Widget::Toggle {
+                        id: format!("mods.cap.{}.{}", p.id, c.name),
+                        label: t("ui.mods.allow", &[("what", &what)]),
+                        value: c.approved,
+                    });
+                } else {
+                    kids.push(Widget::Note(t("ui.mods.asks", &[("what", &what)])));
+                }
+            }
+        }
+        if !p.base {
+            kids.push(Widget::button(
+                &format!("mods.remove.{}", p.folder),
+                t("ui.mods.remove", &[]),
+            ));
+        }
+        w.push(Widget::Group {
+            title,
+            children: kids,
+        });
+    }
+    w.push(Widget::Toggle {
+        id: "mods.safe".into(),
+        label: t("ui.mods.safe", &[]),
+        value: v.safe_mode,
+    });
+    w.push(Widget::Row(vec![
+        Widget::button("mods.install", t("ui.mods.install", &[])),
+        Widget::button("mods.reveal", t("ui.mods.reveal", &[])),
+    ]));
+    if !v.folder.is_empty() {
+        w.push(Widget::Note(t("ui.mods.folder", &[("folder", &v.folder)])));
+    }
+    w.push(Widget::button("mods.back", t("ui.mods.back", &[])));
+    Tree::new(t("ui.mods.title", &[]), w)
 }
 
 pub(crate) fn choose(m: &mut AppModel, id: &str, v: &str) -> Vec<AppEffect> {

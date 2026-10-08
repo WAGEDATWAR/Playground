@@ -171,6 +171,7 @@ impl App {
                 self.dispatch(UiEvent::Key(pg_ui_model::Key::Console));
                 self.dispatch(UiEvent::Toggle("console.type.debug".into(), true));
             }
+            "mods" => click(self, "main.mods"),
             "journal" => {
                 start_world(self);
                 click(self, "hud.speed.27x");

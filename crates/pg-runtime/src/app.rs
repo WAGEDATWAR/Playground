@@ -99,6 +99,8 @@ pub struct AppController {
     console: pg_host::Console,
     /// Lines for conversations the focused resident can hear (milestone 1.5).
     dialogue: crate::dialogue::DialogueHook,
+    /// What happened when the packs were chosen at launch (packs left out and why).
+    mods_notes: Vec<String>,
     /// The resident the inspector looks at, shared with the simulation loop.
     focus: Arc<std::sync::Mutex<Option<pg_core::id::EntityId>>>,
 }
@@ -173,6 +175,7 @@ impl AppController {
         ));
         let c = AppController {
             dialogue,
+            mods_notes: Vec::new(),
             focus: Arc::new(std::sync::Mutex::new(None)),
             svc,
             content,
@@ -690,6 +693,28 @@ impl AppController {
                 Vec::new()
             }
             AppEffect::CopyText(_) => Vec::new(),
+            AppEffect::ListMods => vec![UiEvent::ModsLoaded(self.mods_view())],
+            AppEffect::SetPackEnabled { id, on } => self.change_mods(|c| {
+                if on {
+                    c.enabled.insert(id.clone());
+                } else {
+                    c.enabled.remove(&id);
+                }
+            }),
+            AppEffect::ApproveCapability { id, cap, on } => {
+                self.change_mods(|c| c.set_approved(&id, &cap, on))
+            }
+            AppEffect::SetSafeMode(on) => self.change_mods(|c| c.safe_mode = on),
+            AppEffect::InstallPack => self.install_pack(),
+            AppEffect::RemovePack(folder) => self.remove_pack(&folder),
+            AppEffect::RevealPacks => {
+                if let Some(d) = &self.svc.data_dir {
+                    let dir = d.join(crate::mods::PACKS_DIR);
+                    let _ = std::fs::create_dir_all(&dir);
+                    (self.svc.reveal_path)(&dir);
+                }
+                Vec::new()
+            }
             AppEffect::SaveConsoleLog(text) => {
                 // The text is what the console showed, already redacted on its way in; redact again anyway.
                 let clean = pg_host::redact(&text, &[]);
@@ -974,6 +999,184 @@ impl AppController {
             }
         });
         Vec::new()
+    }
+
+    // ---- content packs (the Mods screen) ----------------------------------------------------------------------
+
+    /// Tells the controller what happened when the packs were chosen at launch.
+    pub fn set_startup_notes(&mut self, notes: Vec<String>) {
+        self.mods_notes = notes;
+    }
+
+    fn mods_config(&self) -> (crate::mods::ModsConfig, Option<String>) {
+        crate::mods::ModsConfig::load(self.svc.storage.as_ref())
+    }
+
+    fn mods_view(&self) -> pg_ui_model::types::ModsView {
+        use pg_content::manifest::Capability;
+        use pg_ui_model::types::{CapRow, ModsView, PackRow};
+        let (config, note) = self.mods_config();
+        let installed = self
+            .svc
+            .data_dir
+            .as_deref()
+            .map(crate::mods::discover)
+            .unwrap_or_default();
+        let loaded: Vec<String> = self
+            .content
+            .as_ref()
+            .map(|c| c.load_order().iter().map(|p| p.to_string()).collect())
+            .unwrap_or_default();
+        let mut packs = Vec::new();
+        if let Some(c) = &self.content {
+            if let Some(m) = c
+                .manifests()
+                .find(|m| m.id.to_string() == crate::mods::BASE)
+            {
+                packs.push(PackRow {
+                    id: m.id.to_string(),
+                    folder: String::new(),
+                    name: m.name.clone(),
+                    version: format!(
+                        "{}.{}.{}",
+                        m.version.major, m.version.minor, m.version.patch
+                    ),
+                    depends: Vec::new(),
+                    enabled: true,
+                    loaded: true,
+                    base: true,
+                    capabilities: Vec::new(),
+                    error: None,
+                });
+            }
+        }
+        for i in &installed {
+            match &i.outcome {
+                Err(e) => packs.push(PackRow {
+                    id: String::new(),
+                    folder: i.folder.clone(),
+                    name: i.folder.clone(),
+                    version: String::new(),
+                    depends: Vec::new(),
+                    enabled: false,
+                    loaded: false,
+                    base: false,
+                    capabilities: Vec::new(),
+                    error: Some(e.clone()),
+                }),
+                Ok(s) if s.id == crate::mods::BASE => {}
+                Ok(s) => packs.push(PackRow {
+                    id: s.id.clone(),
+                    folder: i.folder.clone(),
+                    name: s.name.clone(),
+                    version: s.version.clone(),
+                    depends: s
+                        .depends
+                        .iter()
+                        .filter(|d| *d != crate::mods::BASE)
+                        .cloned()
+                        .collect(),
+                    enabled: config.enabled.contains(&s.id),
+                    loaded: loaded.contains(&s.id),
+                    base: false,
+                    capabilities: s
+                        .capabilities
+                        .iter()
+                        .map(|c| {
+                            let needs =
+                                Capability::from_name(c).is_some_and(crate::mods::needs_approval);
+                            CapRow {
+                                name: c.clone(),
+                                needs_approval: needs,
+                                approved: config.is_approved(&s.id, c),
+                            }
+                        })
+                        .collect(),
+                    error: None,
+                }),
+            }
+        }
+        let will_load: Vec<String> = crate::mods::plan(&installed, &config, false)
+            .dirs
+            .iter()
+            .filter_map(|d| installed.iter().find(|i| &i.path == d))
+            .filter_map(|i| i.outcome.as_ref().ok().map(|s| s.id.clone()))
+            .collect();
+        let now_installed: Vec<String> = installed
+            .iter()
+            .filter_map(|i| i.outcome.as_ref().ok().map(|s| s.id.clone()))
+            .filter(|id| loaded.contains(id) && id != crate::mods::BASE)
+            .collect();
+        let mut a = will_load.clone();
+        let mut b = now_installed.clone();
+        a.sort();
+        b.sort();
+        let mut notes = self.mods_notes.clone();
+        notes.extend(note);
+        ModsView {
+            packs,
+            safe_mode: config.safe_mode,
+            notes,
+            restart_needed: a != b || (config.safe_mode && !b.is_empty()),
+            folder: self
+                .svc
+                .data_dir
+                .as_ref()
+                .map(|d| d.join(crate::mods::PACKS_DIR).display().to_string())
+                .unwrap_or_default(),
+        }
+    }
+
+    /// Changes the saved choices and shows the screen again.
+    fn change_mods(&mut self, f: impl FnOnce(&mut crate::mods::ModsConfig)) -> Vec<UiEvent> {
+        let (mut config, _) = self.mods_config();
+        f(&mut config);
+        match config.save(self.svc.storage.as_ref()) {
+            Ok(()) => vec![UiEvent::ModsLoaded(self.mods_view())],
+            Err(e) => vec![UiEvent::Failed(format!(
+                "The mods settings could not be saved: {e}"
+            ))],
+        }
+    }
+
+    fn install_pack(&mut self) -> Vec<UiEvent> {
+        let (Some(dialogs), Some(data_dir)) = (self.svc.dialogs.clone(), self.svc.data_dir.clone())
+        else {
+            return vec![UiEvent::Failed(
+                "Installing a pack needs the system folder dialog, which is not available here. Copy the pack folder into the packs folder instead.".to_owned(),
+            )];
+        };
+        let Some(folder) = dialogs.pick_folder() else {
+            return Vec::new();
+        };
+        match crate::mods::install(&data_dir, &folder) {
+            Ok(id) => vec![
+                UiEvent::Notice(self.text("ui.notice.pack_installed", &[("id", &id)])),
+                UiEvent::ModsLoaded(self.mods_view()),
+            ],
+            Err(e) => vec![UiEvent::Failed(e)],
+        }
+    }
+
+    fn remove_pack(&mut self, folder: &str) -> Vec<UiEvent> {
+        let Some(data_dir) = self.svc.data_dir.clone() else {
+            return Vec::new();
+        };
+        // Forget the pack's choices too, so a pack installed again later starts from nothing.
+        let id = crate::mods::discover(&data_dir)
+            .into_iter()
+            .find(|i| i.folder == folder)
+            .and_then(|i| i.outcome.ok().map(|s| s.id));
+        if let Err(e) = crate::mods::remove(&data_dir, folder) {
+            return vec![UiEvent::Failed(e)];
+        }
+        if let Some(id) = id {
+            let (mut config, _) = self.mods_config();
+            config.enabled.remove(&id);
+            config.approved.remove(&id);
+            let _ = config.save(self.svc.storage.as_ref());
+        }
+        vec![UiEvent::ModsLoaded(self.mods_view())]
     }
 
     // ---- export and import ------------------------------------------------------------------------------------

@@ -13,6 +13,7 @@ pub mod guard;
 pub mod inspect;
 pub mod journal;
 pub mod keyframes;
+pub mod mods;
 pub mod pool;
 pub mod profile;
 pub mod scenario_env;

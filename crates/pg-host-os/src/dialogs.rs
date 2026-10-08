@@ -29,6 +29,12 @@ impl Dialogs for NativeDialogs {
         d.pick_file()
     }
 
+    fn pick_folder(&self) -> Option<PathBuf> {
+        rfd::FileDialog::new()
+            .set_title(format!("{}: choose the pack folder", self.title))
+            .pick_folder()
+    }
+
     fn pick_file_to_write(&self, suggested: &str) -> Option<PathBuf> {
         rfd::FileDialog::new()
             .set_title(format!("{}: save", self.title))
