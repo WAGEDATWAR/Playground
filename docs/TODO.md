@@ -20,7 +20,7 @@ The repository is public (D-047), so GitHub Actions minutes are free again. Loca
 
 ## Next up
 
-1. **Owner (repository settings):** turn on branch protection for `main`, private vulnerability reporting and secret scanning. Confirm the copyright line in `LICENSE` (currently "WAGEDATWAR and the Playground contributors").
+1. ~~Owner repository settings~~ done 2026-10-08: branch ruleset on `main` (no deletion, no force push, admin bypass), private vulnerability reporting, secret scanning. Optional: require status checks once S-050 makes CI cheap and stable. Still to confirm: the copyright line in `LICENSE` (currently "WAGEDATWAR and the Playground contributors").
 2. **1.4b Process and safety net** (new, before 1.5): S-050, S-051, S-059, S-066, S-068, S-065, S-052 and `pg bench` v1 (S-071).
 3. 1.5 AI lines, with S-054, S-057 and S-062.
 4. 1.6 Native renderer (checkpoint): S-069 social report first; render benchmark targets.
