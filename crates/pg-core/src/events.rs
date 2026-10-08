@@ -24,6 +24,8 @@ pub enum Category {
     Commitment,
     /// Needs, mood and what they do to a pawn.
     Life,
+    /// Conversations, memories and relationships.
+    Social,
     Dev,
     /// Declared by a content pack.
     Pack,
@@ -39,6 +41,7 @@ impl Category {
             Category::Task => "task",
             Category::Commitment => "commitment",
             Category::Life => "life",
+            Category::Social => "social",
             Category::Dev => "dev",
             Category::Pack => "pack",
         }
@@ -85,6 +88,12 @@ pub const SEVERITIES: &[(&str, Severity)] = &[
     ("pawn.collapsed", Severity::Warn),
     ("pawn.recovered", Severity::Info),
     ("mood.changed", Severity::Debug),
+    ("conversation.started", Severity::Debug),
+    ("conversation.closed", Severity::Info),
+    ("conversation.cancelled", Severity::Debug),
+    ("memory.created", Severity::Debug),
+    ("memory.expired", Severity::Debug),
+    ("relationship.label_changed", Severity::Info),
     ("task.started", Severity::Debug),
     ("task.done", Severity::Debug),
     ("task.failed", Severity::Warn),
@@ -115,6 +124,11 @@ fn tile() -> Field {
 
 fn int() -> Field {
     Field::required_int(0, i64::MAX)
+}
+
+/// A signed whole number (a change that can be negative).
+fn signed() -> Field {
+    Field::required_int(-1_000_000_000, 1_000_000_000)
 }
 
 fn text(max: usize) -> Field {
@@ -360,6 +374,77 @@ impl EventCatalog {
                 ("from", text(24)),
                 ("to", text(24)),
                 ("rule", text(48)),
+            ],
+        );
+        add(
+            "conversation.started",
+            Social,
+            false,
+            "Two residents began a conversation.",
+            &[
+                ("a", id("pawn")),
+                ("b", id("pawn")),
+                ("topic", text(48)),
+                ("tone", text(48)),
+                ("turns", int()),
+            ],
+        );
+        add(
+            "conversation.closed",
+            Social,
+            true,
+            "A conversation ended and changed how the two feel about each other.",
+            &[
+                ("a", id("pawn")),
+                ("b", id("pawn")),
+                ("topic", text(48)),
+                ("tone", text(48)),
+                ("delta", signed()),
+                ("affinity", signed()),
+            ],
+        );
+        add(
+            "conversation.cancelled",
+            Social,
+            false,
+            "A conversation was called off because the two moved apart or one could not carry on.",
+            &[("a", id("pawn")), ("b", id("pawn")), ("topic", text(48))],
+        );
+        add(
+            "memory.created",
+            Social,
+            false,
+            "A pawn formed a memory.",
+            &[
+                ("pawn", id("pawn")),
+                ("memory", id("mem")),
+                ("other", id("pawn")),
+                ("topic", text(48)),
+                ("importance", int()),
+            ],
+        );
+        add(
+            "memory.expired",
+            Social,
+            false,
+            "A pawn forgot a memory (it faded, or was crowded out by more important ones).",
+            &[
+                ("pawn", id("pawn")),
+                ("memory", id("mem")),
+                ("why", text(24)),
+            ],
+        );
+        add(
+            "relationship.label_changed",
+            Social,
+            true,
+            "Two residents' relationship moved to a different label (friendly, friend, wary, ...).",
+            &[
+                ("a", id("pawn")),
+                ("b", id("pawn")),
+                ("from", text(48)),
+                ("to", text(48)),
+                ("affinity", signed()),
             ],
         );
         add(

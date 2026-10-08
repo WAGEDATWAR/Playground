@@ -4,9 +4,9 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Stage 1, milestone 1.2 is implemented: the first checkpoint for you.** 1.0 (content and state), 1.1 (needs, mood, capacities) and 1.2 (town generator, New world controls, pawn-aware routing S-018 moved up from 1.3) are done: D-041 to D-043, Blueprint v3.4. **Gate for you:** run the game (`cargo run -p pg-app`), create a world (try the water and tone controls and the three sizes), and watch the town: residents walk between home, the shops and offices, and the plazas; they eat, sleep and meet. `cargo run -q -p pg-cli -- worldgen preview --seed anything` draws a town as text. CI should be green on all three systems (it now includes the pinned town-generator hash). After your review: 1.3 occupation schedules.
+**Stage 1, milestone 1.4 is implemented (accepted: 1.2 `m1.2`, 1.3 `m1.3`).** Residents now talk: nearby free residents chat about topics from `conversation.json` with a tone chosen by rules, which moves their relationship (daily cap, label hysteresis), restores social and leaves a memory each; memories fade daily and are bounded; D-046, Blueprint v3.6. Look with `cargo run -q -p pg-cli -- sim --seed demo --town 64x48 --residents 14 --content data/base --days 3 --events conversation` and `pg residents inspect pawn_1 --seed demo --town 64x48 --residents 14 --content data/base --days 2` (needs, mood, memories with reasons, relationships). Next: 1.5 AI lines, then 1.6 (renderer, the next checkpoint for you).
 
-**Known, scheduled:** conversations arrive in 1.4 (until then the plaza's "company" is the only thing that restores social, so some residents get lonely); the map view still draws generated towns with the painter-based view (the real renderer is 1.6); building roles are not yet drawn differently.
+**Known, scheduled:** the map view still draws generated towns with the painter-based view (the real renderer is 1.6); building roles are not yet drawn differently; conversation bubbles and the inspector panel come with 1.6/1.7 (the data and `pg residents inspect` exist now).
 
 **Parked (come back later):** weather, seasons and fire (S-048, Roadmap section 12 item 8); animals and non-human humanoids (the physiology profile leaves room); anatomy extensions after Stage 2B's base (eyes and ears, neck, spine segments); customisable map sizes (Stage 3 generator controls); real art assets to replace procedural sprites.
 
@@ -16,9 +16,9 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Next up
 
-1. Your checkpoint review of 1.2; fold in anything you want changed.
+1. Your review of 1.4 when convenient (nothing blocks 1.5).
 2. ~~1.3 Occupation schedules~~ done (D-045). Next: 1.4 memory, relationships, rule-based conversations.
-3. 1.4 Memory, relationships and rule-based conversations.
+3. ~~1.4 Memory, relationships and rule-based conversations~~ done (D-046). Next: 1.5 AI lines.
 
 ## Shell note
 

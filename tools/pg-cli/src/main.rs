@@ -123,6 +123,7 @@ USAGE:
     pg worldgen preview [--seed S] [--size WxH] [--water PERCENT] [--residents N] [--tone T] [--no-map] [--expect HASH]
                                           Generate a town and draw it: districts, roads, buildings, plazas, homes.
     pg residents generate [--seed S] [--count N] [--content dir]...
+    pg residents inspect <pawn> --seed S --town WxH [--residents N] [--days N] [--topic T] [--with PAWN] [--content dir]...
                                           The people a seed produces: households, occupations, starting
                                           relationships and shared memories.
     pg content list [pack-dir...]         List every resolved template: pack, chain depth, tags, components.

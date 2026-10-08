@@ -451,6 +451,8 @@ pub fn apply_population(
                 last_interaction_tick: 0,
                 day: 0,
                 day_change: 0,
+                last_topic: None,
+                forgotten: 0,
             });
         }
         if let (true, Some(mem)) = (link.shared_memory, memory) {

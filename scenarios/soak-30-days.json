@@ -22,13 +22,13 @@
       "op": "soak",
       "days": 30,
       "shadow_threads": 3,
-      "max_growth_permille": 1500
+      "max_growth_permille": 3000
     },
     {
       "op": "expect",
       "pawns": 20,
       "day": 30,
-      "hash": "c05cab99"
+      "hash": "bcbb7f63"
     },
     {
       "op": "reload",

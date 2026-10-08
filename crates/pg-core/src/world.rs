@@ -790,6 +790,8 @@ mod tests {
             last_interaction_tick: 0,
             day: 0,
             day_change: 0,
+            last_topic: None,
+            forgotten: 0,
         });
         assert_eq!(changed(&b, &c), ["relationships"]);
         assert_eq!(differing_rows(&b, &c, "relationships"), ["pawn_1+pawn_2"]);
@@ -826,6 +828,8 @@ mod tests {
             last_interaction_tick: 0,
             day: 0,
             day_change: 0,
+            last_topic: None,
+            forgotten: 0,
         });
         let text = w
             .to_canon()

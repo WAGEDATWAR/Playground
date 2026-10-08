@@ -293,7 +293,8 @@ impl HookPoint {
 }
 
 /// Every hook point in API 0.1.
-pub const HOOK_POINTS: &[HookPoint] = &[HookPoint {
+pub const HOOK_POINTS: &[HookPoint] = &[
+    HookPoint {
     id: "movement.speed_modifier",
     combiner: Combiner::ProductPermille,
     min: 500,
@@ -302,6 +303,26 @@ pub const HOOK_POINTS: &[HookPoint] = &[HookPoint {
     since: "0.1",
     summary: "Scales how fast a pawn walks, in permille (1000 is normal, 1500 is one and a half times as fast).",
     context: "pawn: Entity",
+},
+HookPoint {
+    id: "memory.importance_modifier",
+    combiner: Combiner::ProductPermille,
+    min: 500,
+    max: 2000,
+    default: 1000,
+    since: "0.1",
+    summary: "Scales how important a new memory is to the pawn who forms it, in permille (1000 leaves it alone). Important memories fade more slowly and the most important never fade.",
+    context: "pawn: Entity",
+},
+HookPoint {
+    id: "relationship.delta_modifier",
+    combiner: Combiner::ProductPermille,
+    min: 0,
+    max: 2000,
+    default: 1000,
+    since: "0.1",
+    summary: "Scales the change a conversation makes to a relationship, in permille (1000 leaves it alone, 0 cancels it). The pair's daily cap still applies afterwards.",
+    context: "pawn: Entity (the lower id of the pair)",
 }];
 
 pub fn hook_point(id: &str) -> Option<&'static HookPoint> {

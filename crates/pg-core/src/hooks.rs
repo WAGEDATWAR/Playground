@@ -27,6 +27,16 @@ pub fn movement_speed() -> Option<&'static HookPoint> {
     pg_api::hook_point("movement.speed_modifier")
 }
 
+/// `memory.importance_modifier`: permille scaling a new memory's importance.
+pub fn memory_importance() -> Option<&'static HookPoint> {
+    pg_api::hook_point("memory.importance_modifier")
+}
+
+/// `relationship.delta_modifier`: permille scaling a conversation's change to a relationship.
+pub fn relationship_delta() -> Option<&'static HookPoint> {
+    pg_api::hook_point("relationship.delta_modifier")
+}
+
 /// The number of ticks a step takes when a pawn walks at `permille` of normal speed (never below one).
 pub fn scaled_step_ticks(base: u32, permille: i64) -> u32 {
     if permille <= 0 {

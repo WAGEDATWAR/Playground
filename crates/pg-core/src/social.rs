@@ -35,6 +35,51 @@ impl Occupation {
     }
 }
 
+/// A conversation a pawn is in the middle of (Blueprint §9.2). Both pawns hold a copy; the one with the
+/// lower id is the leader and closes it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Talk {
+    pub partner: EntityId,
+    pub topic: String,
+    pub tone: String,
+    pub started: u64,
+    /// The tick it closes.
+    pub ends: u64,
+    pub turns: u32,
+    pub leader: bool,
+}
+
+impl ToCanon for Talk {
+    fn to_canon(&self) -> Canon {
+        Canon::map([
+            ("partner", self.partner.to_canon()),
+            ("topic", Canon::str(self.topic.clone())),
+            ("tone", Canon::str(self.tone.clone())),
+            ("started", self.started.to_canon()),
+            ("ends", self.ends.to_canon()),
+            ("turns", self.turns.to_canon()),
+            ("leader", Canon::Bool(self.leader)),
+        ])
+    }
+}
+
+impl Talk {
+    pub fn from_reader(r: Reader<'_>) -> Result<Talk, ReadError> {
+        r.only(&[
+            "partner", "topic", "tone", "started", "ends", "turns", "leader",
+        ])?;
+        Ok(Talk {
+            partner: r.child("partner")?.reader().parse()?,
+            topic: r.child("topic")?.reader().str()?.to_owned(),
+            tone: r.child("tone")?.reader().str()?.to_owned(),
+            started: r.child("started")?.reader().u64()?,
+            ends: r.child("ends")?.reader().u64()?,
+            turns: r.child("turns")?.reader().u32()?,
+            leader: r.child("leader")?.reader().bool()?,
+        })
+    }
+}
+
 /// How important a memory is: severity (1 to 5) scaled by how strongly it affected the pawn.
 pub fn importance(severity: u8, impact: i32) -> i32 {
     i32::from(severity).saturating_mul(10i32.saturating_add(impact.saturating_abs()))
@@ -231,6 +276,10 @@ pub struct Relationship {
     pub day: u64,
     /// Total affinity change so far on `day` (for the daily cap).
     pub day_change: i32,
+    /// The topic of the latest conversation, kept even after its memory fades.
+    pub last_topic: Option<String>,
+    /// How many of this pair's memories have been forgotten (rolled up from the pawns' memories).
+    pub forgotten: u32,
 }
 
 impl ToCanon for Relationship {
@@ -246,7 +295,89 @@ impl ToCanon for Relationship {
             ),
             ("day", self.day.to_canon()),
             ("day_change", self.day_change.to_canon()),
+            (
+                "last_topic",
+                self.last_topic
+                    .as_ref()
+                    .map_or(Canon::Null, |t| Canon::str(t.clone())),
+            ),
+            ("forgotten", self.forgotten.to_canon()),
         ])
+    }
+}
+
+/// What applying an affinity change did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeltaResult {
+    /// The change that was actually made (after the daily cap and the -1000..=1000 clamp).
+    pub applied: i32,
+    /// `(from, to)` when the label changed.
+    pub label_change: Option<(String, String)>,
+}
+
+/// The label for `affinity` given the label the pair has now: it moves up only once affinity is `hysteresis`
+/// past the next label's threshold, and down only once it is that far below its own, so a pair hovering at
+/// a threshold does not flicker.
+pub fn label_with_hysteresis(
+    params: &pg_content::gamedata::RelationshipParams,
+    current: &str,
+    affinity: i32,
+) -> String {
+    let labels = &params.labels;
+    let Some(mut idx) = labels.iter().position(|l| l.id == current) else {
+        return params
+            .label_for(affinity)
+            .map(|l| l.id.clone())
+            .unwrap_or_default();
+    };
+    let h = params.hysteresis;
+    while let Some(next) = labels.get(idx + 1) {
+        if affinity >= next.min.saturating_add(h) {
+            idx += 1;
+        } else {
+            break;
+        }
+    }
+    while idx > 0 {
+        let here = labels.get(idx).map_or(i32::MIN, |l| l.min);
+        if affinity < here.saturating_sub(h) {
+            idx -= 1;
+        } else {
+            break;
+        }
+    }
+    labels.get(idx).map(|l| l.id.clone()).unwrap_or_default()
+}
+
+impl Relationship {
+    /// Adds `requested` to the affinity, held to the pair's daily cap (diminishing returns: the net change
+    /// since the start of `day` stays within `+-daily_cap`) and to -1000..=1000, and updates the label.
+    pub fn apply_delta(
+        &mut self,
+        params: &pg_content::gamedata::RelationshipParams,
+        requested: i32,
+        day: u64,
+        tick: u64,
+    ) -> DeltaResult {
+        if self.day != day {
+            self.day = day;
+            self.day_change = 0;
+        }
+        let cap = params.daily_cap;
+        let target = self.day_change.saturating_add(requested).clamp(-cap, cap);
+        let mut applied = target - self.day_change;
+        let affinity = self.affinity.saturating_add(applied).clamp(-1000, 1000);
+        applied = affinity - self.affinity;
+        self.affinity = affinity;
+        self.day_change = self.day_change.saturating_add(applied);
+        self.last_interaction_tick = tick;
+        let label = label_with_hysteresis(params, &self.label, affinity);
+        let label_change = (label != self.label).then(|| (self.label.clone(), label.clone()));
+        self.label = label;
+        DeltaResult {
+            applied,
+            label_change,
+        }
     }
 }
 
@@ -260,6 +391,8 @@ impl Relationship {
             "last_interaction_tick",
             "day",
             "day_change",
+            "last_topic",
+            "forgotten",
         ])?;
         let key = PairKey::new(
             r.child("a")?.reader().parse()?,
@@ -280,6 +413,11 @@ impl Relationship {
             last_interaction_tick: r.child("last_interaction_tick")?.reader().u64()?,
             day: r.child("day")?.reader().u64()?,
             day_change: r.child("day_change")?.reader().i32()?,
+            last_topic: match r.maybe("last_topic")? {
+                Some(c) => Some(c.reader().str()?.to_owned()),
+                None => None,
+            },
+            forgotten: r.child("forgotten")?.reader().u32()?,
         })
     }
 }
@@ -473,6 +611,8 @@ mod tests {
             last_interaction_tick: 10,
             day: 0,
             day_change: 0,
+            last_topic: None,
+            forgotten: 0,
         }
     }
 
@@ -523,5 +663,100 @@ mod tests {
             json::parse(r#"{"id":"hh_1","name":"Lee","members":["pawn_4","pawn_1"],"home":null}"#)
                 .unwrap();
         assert!(Household::from_reader(Reader::new(&unsorted, "h")).is_err());
+    }
+
+    fn rel_params() -> pg_content::gamedata::RelationshipParams {
+        use pg_content::gamedata::{RelationshipLabel, RelationshipParams};
+        let label = |id: &str, min: i32| RelationshipLabel {
+            id: id.into(),
+            label_key: format!("relationship.{id}"),
+            min,
+        };
+        RelationshipParams {
+            start_affinity: 0,
+            daily_cap: 120,
+            hysteresis: 40,
+            labels: vec![
+                label("enemy", -1000),
+                label("stranger", -100),
+                label("acquaintance", 100),
+                label("friendly", 300),
+            ],
+        }
+    }
+
+    #[test]
+    fn labels_move_only_after_passing_a_threshold_by_the_margin() {
+        let p = rel_params();
+        // Up: friendly starts at 300, so 300..339 stays acquaintance, 340 is friendly.
+        assert_eq!(
+            label_with_hysteresis(&p, "acquaintance", 339),
+            "acquaintance"
+        );
+        assert_eq!(label_with_hysteresis(&p, "acquaintance", 340), "friendly");
+        // Down: friendly holds until 260 is passed, so 261 stays friendly, 259 drops.
+        assert_eq!(label_with_hysteresis(&p, "friendly", 261), "friendly");
+        assert_eq!(label_with_hysteresis(&p, "friendly", 259), "acquaintance");
+        // Jumps over several labels at once; an unknown label starts fresh.
+        assert_eq!(label_with_hysteresis(&p, "enemy", 500), "friendly");
+        assert_eq!(label_with_hysteresis(&p, "nonsense", 150), "acquaintance");
+    }
+
+    #[test]
+    fn a_pair_hovering_at_a_threshold_does_not_flicker() {
+        let p = rel_params();
+        let mut r = rel(1, 2, 290);
+        r.label = "acquaintance".into();
+        let mut changes = 0;
+        // Wobble +-30 around the threshold for two hundred conversations.
+        for i in 0..200u64 {
+            let d = if i % 2 == 0 { 30 } else { -30 };
+            // A new day each time so the daily cap is out of the way.
+            if r.apply_delta(&p, d, i, i).label_change.is_some() {
+                changes += 1;
+            }
+        }
+        assert_eq!(changes, 0, "290 +- 30 never passes 300 + 40 or 300 - 40");
+    }
+
+    #[test]
+    fn the_daily_cap_and_the_clamp_hold_and_a_new_day_starts_over() {
+        let p = rel_params();
+        let mut r = rel(1, 2, 0);
+        r.label = "stranger".into();
+        let first = r.apply_delta(&p, 100, 5, 1);
+        let second = r.apply_delta(&p, 100, 5, 2);
+        assert_eq!((first.applied, second.applied), (100, 20), "cap 120 a day");
+        assert_eq!(r.affinity, 120);
+        assert_eq!(r.apply_delta(&p, 50, 5, 3).applied, 0);
+        // Bad news the same day is not capped by the good news already counted; it works back toward -cap.
+        assert_eq!(r.apply_delta(&p, -50, 5, 4).applied, -50);
+        // A new day starts over.
+        assert_eq!(r.apply_delta(&p, 100, 6, 5).applied, 100);
+        assert_eq!((r.day, r.last_interaction_tick), (6, 5));
+        // The clamp.
+        let mut top = rel(3, 4, 990);
+        let p2 = pg_content::gamedata::RelationshipParams {
+            daily_cap: 2000,
+            ..p
+        };
+        assert_eq!(top.apply_delta(&p2, 500, 1, 1).applied, 10);
+        assert_eq!(top.affinity, 1000);
+    }
+
+    #[test]
+    fn a_talk_round_trips() {
+        let t = Talk {
+            partner: pawn(2),
+            topic: "food".into(),
+            tone: "warm".into(),
+            started: 100,
+            ends: 160,
+            turns: 3,
+            leader: true,
+        };
+        let text = t.to_canon().to_canonical_string();
+        let back = Talk::from_reader(Reader::new(&json::parse(&text).unwrap(), "t")).unwrap();
+        assert_eq!(back, t);
     }
 }

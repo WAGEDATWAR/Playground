@@ -1,0 +1,38 @@
+{
+  "talk_range": 2,
+  "hear_range": 8,
+  "social_below": 750,
+  "cooldown_minutes": 150,
+  "chance_permille": 120,
+  "turns_min": 2,
+  "turns_max": 4,
+  "turn_minutes": 1,
+  "max_apart": 4,
+  "social_restore": 150,
+  "topics": [
+    { "id": "small_talk", "weight": 30, "delta": 25, "severity": 1 },
+    { "id": "work", "weight": 20, "delta": 20, "severity": 1 },
+    { "id": "food", "weight": 15, "delta": 20, "severity": 1 },
+    { "id": "town_news", "weight": 15, "delta": 15, "severity": 1 },
+    { "id": "personal", "weight": 10, "delta": 60, "severity": 3, "min_affinity": 250 },
+    { "id": "complaint", "weight": 14, "delta": -30, "severity": 2, "moods": ["sad", "upset", "uneasy", "bored"] }
+  ],
+  "tones": [
+    { "id": "hostile", "priority": 1, "delta_permille": -1500, "restore_permille": 0, "max_affinity": -250 },
+    { "id": "curt", "priority": 2, "delta_permille": -400, "restore_permille": 300, "moods": ["upset", "uneasy"] },
+    { "id": "warm", "priority": 3, "delta_permille": 1500, "restore_permille": 1200, "min_affinity": 300 },
+    { "id": "cheerful", "priority": 4, "delta_permille": 1200, "restore_permille": 1100, "moods": ["cheerful"] },
+    { "id": "friendly", "priority": 9, "delta_permille": 1000, "restore_permille": 1000 }
+  ],
+  "lines": [
+    { "tone": "hostile", "keys": ["dialogue.hostile.1", "dialogue.hostile.2", "dialogue.hostile.3"] },
+    { "tone": "curt", "keys": ["dialogue.curt.1", "dialogue.curt.2", "dialogue.curt.3"] },
+    { "topic": "small_talk", "keys": ["dialogue.small_talk.1", "dialogue.small_talk.2", "dialogue.small_talk.3"] },
+    { "topic": "work", "keys": ["dialogue.work.1", "dialogue.work.2", "dialogue.work.3"] },
+    { "topic": "food", "keys": ["dialogue.food.1", "dialogue.food.2", "dialogue.food.3"] },
+    { "topic": "town_news", "keys": ["dialogue.town_news.1", "dialogue.town_news.2", "dialogue.town_news.3"] },
+    { "topic": "personal", "keys": ["dialogue.personal.1", "dialogue.personal.2", "dialogue.personal.3"] },
+    { "topic": "complaint", "keys": ["dialogue.complaint.1", "dialogue.complaint.2", "dialogue.complaint.3"] },
+    { "keys": ["dialogue.generic.1", "dialogue.generic.2"] }
+  ]
+}

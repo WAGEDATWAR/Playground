@@ -7,6 +7,7 @@
 //! | `needs.json` | a list of need definitions (decay, thresholds) |
 //! | `mood.json` | `{ "moods": [...], "rules": [...] }`: the emotional moods and the ordered rule table |
 //! | `memory.json` | memory parameters (persistence threshold, bounds, decay, severity by type) |
+//! | `conversation.json` | when residents talk, topics, tones, outcomes and the fallback lines |
 //! | `relationships.json` | affinity labels, hysteresis and the daily cap |
 //! | `occupations.json` | occupation schedule templates (identity and schedule archetypes) |
 //! | `names.json` | name pools for generated residents |
@@ -31,8 +32,9 @@ pub const OCCUPATIONS_FILE: &str = "data/game/occupations.json";
 pub const NAMES_FILE: &str = "data/game/names.json";
 pub const RESIDENTS_FILE: &str = "data/game/residents.json";
 pub const WORLDGEN_FILE: &str = "data/game/worldgen.json";
+pub const CONVERSATION_FILE: &str = "data/game/conversation.json";
 
-pub const KNOWN_FILES: [&str; 8] = [
+pub const KNOWN_FILES: [&str; 9] = [
     NEEDS_FILE,
     MOOD_FILE,
     MEMORY_FILE,
@@ -41,6 +43,7 @@ pub const KNOWN_FILES: [&str; 8] = [
     NAMES_FILE,
     RESIDENTS_FILE,
     WORLDGEN_FILE,
+    CONVERSATION_FILE,
 ];
 
 /// Needs and affinity use this scale (Blueprint §8.1).
@@ -201,6 +204,99 @@ impl RelationshipParams {
     }
 }
 
+/// What residents can talk about. The topic decides the memory's weight and how far the talk moves the
+/// relationship before the tone scales it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TopicDef {
+    pub id: String,
+    pub weight: u32,
+    /// Affinity change at a neutral (1000 permille) tone; may be negative.
+    pub delta: i32,
+    /// Memory severity, 1 to 5.
+    pub severity: u8,
+    pub min_affinity: i32,
+    pub max_affinity: i32,
+    /// Only when one of the two is in one of these moods (empty: any).
+    pub moods: Vec<String>,
+}
+
+/// How a conversation goes. The first tone (by priority) whose conditions hold is used.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ToneDef {
+    pub id: String,
+    pub priority: u32,
+    /// Scales the topic's delta (negative turns a pleasant topic sour).
+    pub delta_permille: i32,
+    /// Scales the company a talk gives the social need.
+    pub restore_permille: i32,
+    pub min_affinity: i32,
+    pub max_affinity: i32,
+    pub moods: Vec<String>,
+}
+
+/// Fallback dialogue: string keys for a topic and tone (either may be left open with `None`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LineSet {
+    pub topic: Option<String>,
+    pub tone: Option<String>,
+    pub keys: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConversationParams {
+    /// Tiles (Manhattan) two residents may be apart to start talking.
+    pub talk_range: u32,
+    /// How near a focused resident must be to hear (used by the renderer and the AI lines).
+    pub hear_range: u32,
+    /// A resident wants company when social is below this.
+    pub social_below: i32,
+    pub cooldown_minutes: u32,
+    /// Chance per eligible pair per game minute, in permille.
+    pub chance_permille: u32,
+    pub turns_min: u32,
+    pub turns_max: u32,
+    pub turn_minutes: u32,
+    /// A talk is called off if the two end up further apart than this.
+    pub max_apart: u32,
+    /// Social need restored to each, at a 1000 permille tone.
+    pub social_restore: i32,
+    pub topics: Vec<TopicDef>,
+    pub tones: Vec<ToneDef>,
+    pub lines: Vec<LineSet>,
+}
+
+impl ConversationParams {
+    pub fn topic(&self, id: &str) -> Option<&TopicDef> {
+        self.topics.iter().find(|t| t.id == id)
+    }
+
+    pub fn tone(&self, id: &str) -> Option<&ToneDef> {
+        self.tones.iter().find(|t| t.id == id)
+    }
+
+    /// Tones in evaluation order.
+    pub fn ordered_tones(&self) -> Vec<&ToneDef> {
+        let mut v: Vec<&ToneDef> = self.tones.iter().collect();
+        v.sort_by(|a, b| (a.priority, &a.id).cmp(&(b.priority, &b.id)));
+        v
+    }
+
+    /// The string keys of the lines for a topic and tone: the most specific set that exists.
+    pub fn line_keys(&self, topic: &str, tone: &str) -> &[String] {
+        let pick = |t: Option<&str>, o: Option<&str>| {
+            self.lines
+                .iter()
+                .find(|l| l.topic.as_deref() == t && l.tone.as_deref() == o)
+                .map(|l| l.keys.as_slice())
+        };
+        pick(Some(topic), Some(tone))
+            .or_else(|| pick(None, Some(tone)))
+            .or_else(|| pick(Some(topic), None))
+            .or_else(|| pick(None, None))
+            .unwrap_or(&[])
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PlaceKind {
     Home,
@@ -321,6 +417,7 @@ pub struct GameData {
     pub names: NamePools,
     pub residents: BTreeMap<String, ResidentDef>,
     pub worldgen: Option<WorldgenParams>,
+    pub conversation: Option<ConversationParams>,
 }
 
 impl GameData {
@@ -399,6 +496,11 @@ impl GameData {
                 other.relationships.is_some(),
                 "relationship parameters",
             ),
+            (
+                self.conversation.is_some(),
+                other.conversation.is_some(),
+                "conversation parameters",
+            ),
         ] {
             if mine && theirs {
                 report.warn(
@@ -413,6 +515,9 @@ impl GameData {
         }
         if other.relationships.is_some() {
             self.relationships = other.relationships;
+        }
+        if other.conversation.is_some() {
+            self.conversation = other.conversation;
         }
         if other.worldgen.is_some() {
             if self.worldgen.is_some() {
@@ -493,6 +598,9 @@ impl GameData {
                 );
             }
         }
+        if let Some(c) = &self.conversation {
+            self.validate_conversation(c, report);
+        }
         for occ in self.occupations.values() {
             let path = format!("{OCCUPATIONS_FILE}.{}", occ.id);
             for (i, d) in occ.duties.iter().enumerate() {
@@ -535,6 +643,94 @@ impl GameData {
         }
     }
 
+    fn validate_conversation(&self, c: &ConversationParams, report: &mut ValidationReport) {
+        let at = |s: &str| format!("{CONVERSATION_FILE}.{s}");
+        if c.turns_min > c.turns_max {
+            report.error("bad_range", at("turns_min"), "turns_min is above turns_max");
+        }
+        if c.topics.is_empty() {
+            report.error(
+                "missing_field",
+                at("topics"),
+                "at least one topic is needed",
+            );
+        }
+        if !c
+            .tones
+            .iter()
+            .any(|t| t.moods.is_empty() && t.min_affinity <= -SCALE && t.max_affinity >= SCALE)
+        {
+            report.error(
+                "no_default_tone",
+                at("tones"),
+                "no tone without conditions, so a pair that matches nothing has no tone; add a final catch-all tone",
+            );
+        }
+        let mood_ids = self.moods.keys().map(String::as_str);
+        let moods = c
+            .topics
+            .iter()
+            .flat_map(|t| t.moods.iter().map(move |m| (format!("topics.{}", t.id), m)))
+            .chain(
+                c.tones
+                    .iter()
+                    .flat_map(|t| t.moods.iter().map(move |m| (format!("tones.{}", t.id), m))),
+            );
+        for (place, m) in moods {
+            if !self.moods.contains_key(m) {
+                report.error(
+                    "unknown_mood",
+                    at(&place),
+                    format!("mood '{m}' is not defined{}", hint(m, mood_ids.clone())),
+                );
+            }
+        }
+        for (i, l) in c.lines.iter().enumerate() {
+            if let Some(t) = &l.topic {
+                if c.topic(t).is_none() {
+                    report.error(
+                        "unknown_topic",
+                        at(&format!("lines[{i}]")),
+                        format!(
+                            "topic '{t}' is not defined{}",
+                            hint(t, c.topics.iter().map(|x| x.id.as_str()))
+                        ),
+                    );
+                }
+            }
+            if let Some(t) = &l.tone {
+                if c.tone(t).is_none() {
+                    report.error(
+                        "unknown_tone",
+                        at(&format!("lines[{i}]")),
+                        format!(
+                            "tone '{t}' is not defined{}",
+                            hint(t, c.tones.iter().map(|x| x.id.as_str()))
+                        ),
+                    );
+                }
+            }
+        }
+        if c.lines.is_empty() {
+            report.error(
+                "missing_field",
+                at("lines"),
+                "at least one set of lines is needed",
+            );
+        }
+        if !c
+            .lines
+            .iter()
+            .any(|l| l.topic.is_none() && l.tone.is_none())
+        {
+            report.warn(
+                "no_default_lines",
+                at("lines"),
+                "no lines without a topic or tone, so some talks may have nothing to say",
+            );
+        }
+    }
+
     /// Every string-table key the data refers to (for the missing-key lint).
     pub fn string_keys(&self) -> BTreeSet<String> {
         let mut keys = BTreeSet::new();
@@ -543,6 +739,10 @@ impl GameData {
         keys.extend(self.occupations.values().map(|o| o.name_key.clone()));
         if let Some(r) = &self.relationships {
             keys.extend(r.labels.iter().map(|l| l.label_key.clone()));
+        }
+        if let Some(c) = &self.conversation {
+            keys.extend(c.lines.iter().flat_map(|l| l.keys.iter().cloned()));
+            keys.extend(c.topics.iter().map(|t| memory_summary_key(&t.id)));
         }
         keys
     }
@@ -1049,6 +1249,176 @@ pub fn parse_memory(value: &Canon, report: &mut ValidationReport) -> Option<Memo
     })
 }
 
+/// The string key of the one-line memory a talk about `topic` leaves (`{other}` is filled in).
+pub fn memory_summary_key(topic: &str) -> String {
+    format!("memory.conversation.{topic}")
+}
+
+fn id_list(o: &Obj<'_>, key: &str, report: &mut ValidationReport) -> Vec<String> {
+    match o.map.get(key) {
+        None => Vec::new(),
+        Some(Canon::List(l)) => l
+            .iter()
+            .filter_map(|v| match v {
+                Canon::Str(s) => Some(s.clone()),
+                _ => {
+                    report.error("type_mismatch", o.at(key), "expected a list of ids");
+                    None
+                }
+            })
+            .collect(),
+        Some(_) => {
+            report.error("type_mismatch", o.at(key), "expected a list");
+            Vec::new()
+        }
+    }
+}
+
+pub fn parse_conversation(
+    value: &Canon,
+    report: &mut ValidationReport,
+) -> Option<ConversationParams> {
+    let o = Obj::new(
+        value,
+        CONVERSATION_FILE,
+        &[
+            "talk_range",
+            "hear_range",
+            "social_below",
+            "cooldown_minutes",
+            "chance_permille",
+            "turns_min",
+            "turns_max",
+            "turn_minutes",
+            "max_apart",
+            "social_restore",
+            "topics",
+            "tones",
+            "lines",
+        ],
+        report,
+    )?;
+    let topics = o.list("topics", report).map(|l| {
+        l.iter()
+            .enumerate()
+            .filter_map(|(i, v)| {
+                let t = Obj::new(
+                    v,
+                    format!("{CONVERSATION_FILE}.topics[{i}]"),
+                    &[
+                        "id",
+                        "weight",
+                        "delta",
+                        "severity",
+                        "min_affinity",
+                        "max_affinity",
+                        "moods",
+                    ],
+                    report,
+                )?;
+                let topic = TopicDef {
+                    id: t.id("id", report)?,
+                    weight: u32_of(t.int("weight", 0, 1000, None, report))?,
+                    delta: i32_of(t.int("delta", -1000, 1000, None, report))?,
+                    severity: u8::try_from(t.int("severity", 1, 5, None, report)?).ok()?,
+                    min_affinity: i32_of(t.int("min_affinity", -1000, 1000, Some(-1000), report))?,
+                    max_affinity: i32_of(t.int("max_affinity", -1000, 1000, Some(1000), report))?,
+                    moods: id_list(&t, "moods", report),
+                };
+                Some((topic.id.clone(), topic))
+            })
+            .collect::<Vec<_>>()
+    })?;
+    let tones = o.list("tones", report).map(|l| {
+        l.iter()
+            .enumerate()
+            .filter_map(|(i, v)| {
+                let t = Obj::new(
+                    v,
+                    format!("{CONVERSATION_FILE}.tones[{i}]"),
+                    &[
+                        "id",
+                        "priority",
+                        "delta_permille",
+                        "restore_permille",
+                        "min_affinity",
+                        "max_affinity",
+                        "moods",
+                    ],
+                    report,
+                )?;
+                let tone = ToneDef {
+                    id: t.id("id", report)?,
+                    priority: u32_of(t.int("priority", 0, 1000, None, report))?,
+                    delta_permille: i32_of(t.int("delta_permille", -3000, 3000, None, report))?,
+                    restore_permille: i32_of(t.int(
+                        "restore_permille",
+                        0,
+                        3000,
+                        Some(1000),
+                        report,
+                    ))?,
+                    min_affinity: i32_of(t.int("min_affinity", -1000, 1000, Some(-1000), report))?,
+                    max_affinity: i32_of(t.int("max_affinity", -1000, 1000, Some(1000), report))?,
+                    moods: id_list(&t, "moods", report),
+                };
+                Some((tone.id.clone(), tone))
+            })
+            .collect::<Vec<_>>()
+    })?;
+    let lines = o
+        .list("lines", report)
+        .map(|l| {
+            l.iter()
+                .enumerate()
+                .filter_map(|(i, v)| {
+                    let t = Obj::new(
+                        v,
+                        format!("{CONVERSATION_FILE}.lines[{i}]"),
+                        &["topic", "tone", "keys"],
+                        report,
+                    )?;
+                    let opt = |k: &str, report: &mut ValidationReport| match t.map.get(k) {
+                        None => Some(None),
+                        Some(Canon::Str(s)) => Some(Some(s.clone())),
+                        Some(_) => {
+                            report.error("type_mismatch", t.at(k), "expected an id");
+                            None
+                        }
+                    };
+                    let keys = id_list(&t, "keys", report);
+                    if keys.is_empty() {
+                        report.error("missing_field", t.at("keys"), "at least one line is needed");
+                        return None;
+                    }
+                    Some(LineSet {
+                        topic: opt("topic", report)?,
+                        tone: opt("tone", report)?,
+                        keys,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let topics = unique(topics, CONVERSATION_FILE, "topic", report);
+    let tones = unique(tones, CONVERSATION_FILE, "tone", report);
+    Some(ConversationParams {
+        talk_range: u32_of(o.int("talk_range", 1, 20, Some(2), report))?,
+        hear_range: u32_of(o.int("hear_range", 1, 64, Some(8), report))?,
+        social_below: i32_of(o.int("social_below", 0, 1000, Some(750), report))?,
+        cooldown_minutes: u32_of(o.int("cooldown_minutes", 0, 10_080, Some(120), report))?,
+        chance_permille: u32_of(o.int("chance_permille", 0, 1000, None, report))?,
+        turns_min: u32_of(o.int("turns_min", 1, 50, Some(2), report))?,
+        turns_max: u32_of(o.int("turns_max", 1, 50, Some(4), report))?,
+        turn_minutes: u32_of(o.int("turn_minutes", 1, 60, Some(1), report))?,
+        max_apart: u32_of(o.int("max_apart", 1, 40, Some(4), report))?,
+        social_restore: i32_of(o.int("social_restore", 0, 1000, Some(150), report))?,
+        topics: topics.into_values().collect(),
+        tones: tones.into_values().collect(),
+        lines,
+    })
+}
+
 pub fn parse_relationships(
     value: &Canon,
     report: &mut ValidationReport,
@@ -1448,6 +1818,7 @@ pub fn parse_files(files: &BTreeMap<String, Canon>, report: &mut ValidationRepor
             NAMES_FILE => data.names = parse_names(value, report),
             RESIDENTS_FILE => data.residents = parse_residents(value, report),
             WORLDGEN_FILE => data.worldgen = parse_worldgen(value, report),
+            CONVERSATION_FILE => data.conversation = parse_conversation(value, report),
             other => report.warn(
                 "unknown_game_file",
                 other.to_owned(),
@@ -1651,5 +2022,73 @@ mod tests {
         assert_eq!(a.names.given, ["Ann", "Bo"]);
         assert_eq!(needs_a.needs["hunger"].decay_per_hour, 10);
         assert!(r.has_code("overrides") && r.is_ok(), "{r}");
+    }
+
+    fn conversation_data(edit: impl Fn(String) -> String) -> (GameData, ValidationReport) {
+        let mut files = base_files();
+        let root = format!("{}/../../data/base", env!("CARGO_MANIFEST_DIR"));
+        let text = std::fs::read_to_string(format!("{root}/{CONVERSATION_FILE}")).unwrap();
+        files.insert(
+            CONVERSATION_FILE.to_owned(),
+            json::parse(&edit(text)).unwrap(),
+        );
+        let mut report = ValidationReport::new();
+        let data = parse_files(&files, &mut report);
+        data.validate(&mut report);
+        (data, report)
+    }
+
+    #[test]
+    fn the_base_conversation_table_is_complete_and_picks_the_most_specific_lines() {
+        let (data, report) = conversation_data(|t| t);
+        assert!(report.is_empty(), "{report}");
+        let c = data.conversation.unwrap();
+        assert_eq!((c.topics.len(), c.tones.len()), (6, 5));
+        assert_eq!(
+            c.ordered_tones().first().map(|t| t.id.as_str()),
+            Some("hostile")
+        );
+        assert!(c.line_keys("food", "friendly")[0].starts_with("dialogue.food."));
+        assert!(c.line_keys("food", "hostile")[0].starts_with("dialogue.hostile."));
+        assert!(c.line_keys("nothing", "friendly")[0].starts_with("dialogue.generic."));
+        let keys = data_keys(&base_data());
+        assert!(keys.contains("dialogue.hostile.1") && keys.contains("memory.conversation.food"));
+    }
+
+    fn base_data() -> GameData {
+        let mut report = ValidationReport::new();
+        parse_files(&base_files(), &mut report)
+    }
+
+    fn data_keys(d: &GameData) -> BTreeSet<String> {
+        d.string_keys()
+    }
+
+    #[test]
+    fn conversation_mistakes_are_reported_with_hints() {
+        let (_, r) = conversation_data(|t| t.replace("\"sad\"", "\"sadd\""));
+        assert!(r.to_string().contains("did you mean 'sad'"), "{r}");
+        let (_, r) = conversation_data(|t| t.replace("\"topic\": \"food\"", "\"topic\": \"fod\""));
+        assert!(
+            r.to_string().contains("unknown_topic") && r.to_string().contains("food"),
+            "{r}"
+        );
+        let (_, r) = conversation_data(|t| {
+            t.replace(
+                "\"friendly\", \"priority\"",
+                "\"cool\", \"moods\": [\"sad\"], \"priority\"",
+            )
+        });
+        assert!(r.to_string().contains("no_default_tone"), "{r}");
+        let (_, r) = conversation_data(|t| t.replace("\"turns_min\": 2", "\"turns_min\": 9"));
+        assert!(
+            r.to_string().contains("turns_min is above turns_max"),
+            "{r}"
+        );
+        let (_, r) = conversation_data(|t| {
+            t.replace("\"talk_rang\"", "x")
+                .replace("\"talk_range\"", "\"talk_rang\"")
+        });
+        assert!(r.to_string().contains("talk_range"), "{r}");
     }
 }

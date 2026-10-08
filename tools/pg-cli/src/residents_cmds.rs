@@ -1,7 +1,10 @@
-//! Developer commands for residents (Stage 1, milestone 1.0): `residents generate`.
+//! Developer commands for residents (Stage 1): `residents generate` (1.0) and `residents inspect` (1.4).
 
 use crate::args::{parse, Spec};
 use crate::shared::{load_content, DEFAULT_CONTENT_DIR};
+use crate::sim_cmds::{build_demo, demo_from_flags, SIM_SPEC};
+use pg_core::id::EntityId;
+use pg_core::memory::{select_relevant_memories, Context};
 use pg_core::population::{plan_population, PopulationPlan};
 use pg_core::rng::Seed;
 use std::process::ExitCode;
@@ -9,10 +12,11 @@ use std::process::ExitCode;
 pub fn residents_cmd(args: &[String]) -> Result<ExitCode, String> {
     match args.first().map(String::as_str) {
         Some("generate") => generate(&args[1..]),
+        Some("inspect") => inspect(&args[1..]),
         Some(other) => Err(format!(
-            "unknown residents command '{other}' (try generate)"
+            "unknown residents command '{other}' (try generate or inspect)"
         )),
-        None => Err("residents needs a command: generate".into()),
+        None => Err("residents needs a command: generate or inspect".into()),
     }
 }
 
@@ -105,4 +109,150 @@ fn print_plan(
             }
         );
     }
+}
+
+const INSPECT_USAGE: &str = "usage: pg residents inspect <pawn> --seed <text> --town WxH [--residents N] [--content dir] [--days N | --at TICK] [--topic T] [--with PAWN]";
+
+/// `pg residents inspect <pawn> ...`: builds the demo world, runs it, and shows one resident the way the
+/// inspector will: needs, mood, conversation, memories (with the ones that matter most and why) and
+/// relationships.
+fn inspect(args: &[String]) -> Result<ExitCode, String> {
+    let p = parse(args, &SIM_SPEC)?;
+    let pawn_text = p.positional.first().ok_or(INSPECT_USAGE)?;
+    let id: EntityId = pawn_text
+        .parse()
+        .map_err(|e| format!("pawn '{pawn_text}': {e}"))?;
+    let mut setup = demo_from_flags(&p)?;
+    let content = setup
+        .content
+        .clone()
+        .map_or_else(|| load_content(&[DEFAULT_CONTENT_DIR.to_owned()]), Ok)?;
+    setup.content = Some(content.clone());
+    let mut sim = build_demo(&setup)?;
+    let ticks = match (p.parse::<u64>("ticks")?, p.parse::<u64>("days")?) {
+        (Some(t), _) => t,
+        (None, Some(d)) => d * pg_core::time::TICKS_PER_DAY,
+        (None, None) => pg_core::time::TICKS_PER_DAY,
+    };
+    sim.run_ticks(ticks).map_err(|e| e.to_string())?;
+    let world = sim.world();
+    let pawn = world
+        .pawns
+        .get(id)
+        .ok_or_else(|| format!("no pawn {id} (the world has {})", world.pawns.len()))?;
+    let data = content.game();
+    let text = |key: &str, params: &[(&str, &str)]| content.strings().text("en", key, params);
+    let name = |who: EntityId| {
+        world
+            .pawns
+            .get(who)
+            .map_or_else(|| who.to_string(), |p| p.name.clone())
+    };
+    let job = pawn
+        .occupation
+        .as_ref()
+        .and_then(|o| data.occupations.get(&o.template))
+        .map_or_else(|| "no occupation".to_owned(), |o| text(&o.name_key, &[]));
+    println!(
+        "{} ({id})  {job}  mood {}  at {}  tick {}",
+        pawn.name,
+        pawn.mood,
+        pawn.position.tile,
+        world.clock.tick()
+    );
+    let needs: Vec<String> = pawn.needs.iter().map(|(k, v)| format!("{k} {v}")).collect();
+    println!("needs: {}", needs.join(", "));
+    match &pawn.talk {
+        Some(t) => println!(
+            "talking with {} about {} ({} tone) until tick {}",
+            name(t.partner),
+            t.topic,
+            t.tone,
+            t.ends
+        ),
+        None => println!("not in a conversation"),
+    }
+    let summary = |m: &pg_core::social::Memory| {
+        let other = m
+            .participants
+            .first()
+            .map_or_else(String::new, |o| name(*o));
+        match &m.summary_key {
+            Some(k) => text(k, &[("other", &other)]),
+            None => format!("{} with {other}", m.ty),
+        }
+    };
+    println!(
+        "
+memories ({}), newest first:",
+        pawn.memories.len()
+    );
+    let mut newest: Vec<_> = pawn.memories.iter().collect();
+    newest.sort_by(|a, b| b.tick.cmp(&a.tick).then(a.id.cmp(&b.id)));
+    for m in newest.iter().take(12) {
+        println!(
+            "  {} tick {:>6}  importance {:>3}  retention {:>4}{}  {}",
+            m.id,
+            m.tick,
+            m.importance,
+            m.retention,
+            if data
+                .memory
+                .as_ref()
+                .is_some_and(|mp| pg_core::memory::is_persistent(m, mp))
+            {
+                "  persistent"
+            } else {
+                ""
+            },
+            summary(m)
+        );
+    }
+    let with = p
+        .one("with")
+        .map(|w| {
+            w.parse::<EntityId>()
+                .map_err(|e| format!("--with '{w}': {e}"))
+        })
+        .transpose()?;
+    let ctx = Context {
+        now: world.clock.tick(),
+        with,
+        topic: p.one("topic"),
+    };
+    println!(
+        "
+what matters most now:"
+    );
+    for r in select_relevant_memories(&pawn.memories, &ctx, 5) {
+        let why: Vec<String> = r.reasons.iter().map(|x| x.text()).collect();
+        println!(
+            "  {:>4}  {}  [{}]",
+            r.score,
+            summary(r.memory),
+            why.join(", ")
+        );
+    }
+    let label = |key: &str| text(key, &[]);
+    println!(
+        "
+relationships:"
+    );
+    for r in world.relationships.of(id) {
+        let other = r.key.other(id).unwrap_or(id);
+        let l = data
+            .relationships
+            .as_ref()
+            .and_then(|rp| rp.labels.iter().find(|l| l.id == r.label))
+            .map_or_else(|| r.label.clone(), |l| label(&l.label_key));
+        println!(
+            "  {:<22} {:>5} {:<13} last talked about {:<12} forgotten {}",
+            name(other),
+            r.affinity,
+            l,
+            r.last_topic.as_deref().unwrap_or("-"),
+            r.forgotten
+        );
+    }
+    Ok(ExitCode::SUCCESS)
 }
