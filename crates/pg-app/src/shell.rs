@@ -82,6 +82,11 @@ impl Shell {
             el.exit();
             return;
         }
+        let gpu = painter
+            .render_state()
+            .map(|rs| crate::game_view::install_gpu(&rs))
+            .is_some();
+        self.app.set_gpu(gpu);
         let state = egui_winit::State::new(
             self.ctx.clone(),
             ViewportId::ROOT,

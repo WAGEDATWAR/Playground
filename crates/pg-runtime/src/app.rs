@@ -1029,7 +1029,7 @@ impl AppController {
 
     /// The resident whose surroundings are being watched or possessed; conversations within hearing range of
     /// them get lines prepared (and, with AI on, generated). `None` means nobody is listening.
-    pub fn set_dialogue_focus(&mut self, focus: Option<pg_core::id::EntityId>) {
+    pub fn set_dialogue_focus(&self, focus: Option<pg_core::id::EntityId>) {
         if let Ok(mut s) = self.dialogue.service.lock() {
             s.set_focus(focus);
         }

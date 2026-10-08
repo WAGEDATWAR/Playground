@@ -58,6 +58,8 @@ pub struct App {
     pub controller: AppController,
     pub model: AppModel,
     view: GameView,
+    /// The resident last handed to the dialogue service as the one being listened to.
+    focus: Option<pg_core::id::EntityId>,
     tracker: FocusTracker,
     overlay_tracker: FocusTracker,
     styled: bool,
@@ -65,6 +67,11 @@ pub struct App {
 }
 
 impl App {
+    /// Tells the map view the sprite renderer is available on the GPU.
+    pub fn set_gpu(&mut self, on: bool) {
+        self.view.set_gpu(on);
+    }
+
     /// Boots the controller and the model.
     pub fn new(mut controller: AppController) -> App {
         let mut model = AppModel::new();
@@ -74,6 +81,7 @@ impl App {
             controller,
             model,
             view: GameView::default(),
+            focus: None,
             tracker: FocusTracker::default(),
             overlay_tracker: FocusTracker::default(),
             styled: false,
@@ -247,6 +255,29 @@ impl App {
                             ui.centered_and_justified(|ui| ui.label("…"));
                         }
                     });
+                // Renderer numbers in developer mode (milestone 1.6).
+                if self.model.dev_mode() && in_game {
+                    let st = self.view.stats();
+                    egui::Area::new(egui::Id::new("render-stats"))
+                        .anchor(egui::Align2::LEFT_BOTTOM, egui::vec2(12.0, -12.0))
+                        .interactable(false)
+                        .show(&ctx, |ui| {
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "render: {} quads, {} tiles in view, {} draw call, {}px per tile",
+                                    st.quads, st.visible_tiles, st.draw_calls, st.zoom
+                                ))
+                                .monospace()
+                                .color(egui::Color32::from_rgb(255, 240, 180)),
+                            );
+                        });
+                }
+                // The resident clicked on the map is the one whose surroundings get dialogue lines.
+                let picked = self.view.selected();
+                if picked != self.focus {
+                    self.focus = picked;
+                    self.controller.set_dialogue_focus(picked);
+                }
                 // The simulation controls, bottom right; shown but dead while the pause menu is up.
                 egui::Area::new(egui::Id::new("hud-controls"))
                     .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-12.0, -12.0))

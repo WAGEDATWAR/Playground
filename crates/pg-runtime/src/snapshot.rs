@@ -29,6 +29,8 @@ pub struct PawnView {
 #[derive(Clone, Debug)]
 pub struct RenderSnapshot {
     pub tick: u64,
+    /// Ticks a resident takes to cross one tile (for drawing steps smoothly).
+    pub step_ticks: u32,
     pub day: u64,
     pub minute_of_day: u32,
     pub slot_of_day: u32,
@@ -99,6 +101,7 @@ impl RenderSnapshot {
         }
         RenderSnapshot {
             tick: clock.tick(),
+            step_ticks: world.settings.movement.move_ticks_per_tile.max(1),
             day: clock.day(),
             minute_of_day: clock.minute_of_day(),
             slot_of_day: clock.slot_of_day(slot),
