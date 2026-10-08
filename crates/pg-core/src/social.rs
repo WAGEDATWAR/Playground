@@ -49,6 +49,34 @@ pub struct Talk {
     pub leader: bool,
     /// What was actually said, once known (set by a recorded dialogue; empty until then).
     pub lines: Vec<String>,
+    /// The tone of each turn (the first is `tone`); a turn's tone may wander from the pair's.
+    pub tones: Vec<String>,
+    /// The relationship label when it began, and each speaker's mood (first speaker first): they choose
+    /// which fallback lines fit.
+    pub label: String,
+    pub moods: Vec<String>,
+    /// For a talk that looks back: the topic of the remembered conversation it refers to.
+    pub recalled: Option<String>,
+}
+
+fn strings_to_canon(v: &[String]) -> Canon {
+    Canon::List(v.iter().map(|l| Canon::str(l.clone())).collect())
+}
+
+fn strings_from(r: &Reader<'_>, key: &str) -> Result<Vec<String>, ReadError> {
+    r.child(key)?
+        .reader()
+        .list()?
+        .iter()
+        .map(|c| Ok(c.reader().str()?.to_owned()))
+        .collect()
+}
+
+fn opt_string(r: &Reader<'_>, key: &str) -> Result<Option<String>, ReadError> {
+    match r.maybe(key)? {
+        Some(c) => Ok(Some(c.reader().str()?.to_owned())),
+        None => Ok(None),
+    }
 }
 
 /// What a conversation memory remembers about the talk itself, so it can be recalled later: when it
@@ -61,6 +89,11 @@ pub struct TalkRecord {
     pub turns: u32,
     /// The lines as spoken, first speaker (the lower id) first; empty when only the fallback was used.
     pub lines: Vec<String>,
+    /// What the fallback lines were chosen by (see [`Talk`]).
+    pub tones: Vec<String>,
+    pub label: String,
+    pub moods: Vec<String>,
+    pub recalled: Option<String>,
 }
 
 impl ToCanon for TalkRecord {
@@ -69,9 +102,15 @@ impl ToCanon for TalkRecord {
             ("started", self.started.to_canon()),
             ("tone", Canon::str(self.tone.clone())),
             ("turns", self.turns.to_canon()),
+            ("lines", strings_to_canon(&self.lines)),
+            ("tones", strings_to_canon(&self.tones)),
+            ("label", Canon::str(self.label.clone())),
+            ("moods", strings_to_canon(&self.moods)),
             (
-                "lines",
-                Canon::List(self.lines.iter().map(|l| Canon::str(l.clone())).collect()),
+                "recalled",
+                self.recalled
+                    .as_ref()
+                    .map_or(Canon::Null, |t| Canon::str(t.clone())),
             ),
         ])
     }
@@ -79,18 +118,18 @@ impl ToCanon for TalkRecord {
 
 impl TalkRecord {
     pub fn from_reader(r: Reader<'_>) -> Result<TalkRecord, ReadError> {
-        r.only(&["started", "tone", "turns", "lines"])?;
+        r.only(&[
+            "started", "tone", "turns", "lines", "tones", "label", "moods", "recalled",
+        ])?;
         Ok(TalkRecord {
             started: r.child("started")?.reader().u64()?,
             tone: r.child("tone")?.reader().str()?.to_owned(),
             turns: r.child("turns")?.reader().u32()?,
-            lines: r
-                .child("lines")?
-                .reader()
-                .list()?
-                .iter()
-                .map(|c| Ok(c.reader().str()?.to_owned()))
-                .collect::<Result<Vec<_>, ReadError>>()?,
+            lines: strings_from(&r, "lines")?,
+            tones: strings_from(&r, "tones")?,
+            label: r.child("label")?.reader().str()?.to_owned(),
+            moods: strings_from(&r, "moods")?,
+            recalled: opt_string(&r, "recalled")?,
         })
     }
 }
@@ -105,9 +144,15 @@ impl ToCanon for Talk {
             ("ends", self.ends.to_canon()),
             ("turns", self.turns.to_canon()),
             ("leader", Canon::Bool(self.leader)),
+            ("lines", strings_to_canon(&self.lines)),
+            ("tones", strings_to_canon(&self.tones)),
+            ("label", Canon::str(self.label.clone())),
+            ("moods", strings_to_canon(&self.moods)),
             (
-                "lines",
-                Canon::List(self.lines.iter().map(|l| Canon::str(l.clone())).collect()),
+                "recalled",
+                self.recalled
+                    .as_ref()
+                    .map_or(Canon::Null, |t| Canon::str(t.clone())),
             ),
         ])
     }
@@ -116,7 +161,8 @@ impl ToCanon for Talk {
 impl Talk {
     pub fn from_reader(r: Reader<'_>) -> Result<Talk, ReadError> {
         r.only(&[
-            "partner", "topic", "tone", "started", "ends", "turns", "leader", "lines",
+            "partner", "topic", "tone", "started", "ends", "turns", "leader", "lines", "tones",
+            "label", "moods", "recalled",
         ])?;
         Ok(Talk {
             partner: r.child("partner")?.reader().parse()?,
@@ -126,13 +172,11 @@ impl Talk {
             ends: r.child("ends")?.reader().u64()?,
             turns: r.child("turns")?.reader().u32()?,
             leader: r.child("leader")?.reader().bool()?,
-            lines: r
-                .child("lines")?
-                .reader()
-                .list()?
-                .iter()
-                .map(|c| Ok(c.reader().str()?.to_owned()))
-                .collect::<Result<Vec<_>, ReadError>>()?,
+            lines: strings_from(&r, "lines")?,
+            tones: strings_from(&r, "tones")?,
+            label: r.child("label")?.reader().str()?.to_owned(),
+            moods: strings_from(&r, "moods")?,
+            recalled: opt_string(&r, "recalled")?,
         })
     }
 }
@@ -824,6 +868,10 @@ mod tests {
             turns: 3,
             leader: true,
             lines: vec!["Hi.".into()],
+            tones: vec!["warm".into(), "friendly".into(), "warm".into()],
+            label: "friend".into(),
+            moods: vec!["content".into(), "bored".into()],
+            recalled: Some("food".into()),
         };
         let text = t.to_canon().to_canonical_string();
         let back = Talk::from_reader(Reader::new(&json::parse(&text).unwrap(), "t")).unwrap();

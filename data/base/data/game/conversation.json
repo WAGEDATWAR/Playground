@@ -8,6 +8,7 @@
   "turns_max": 4,
   "turn_minutes": 1,
   "max_apart": 4,
+  "tone_drift": 150,
   "social_restore": 150,
   "topics": [
     { "id": "small_talk", "weight": 30, "delta": 25, "severity": 1 },
@@ -15,6 +16,7 @@
     { "id": "food", "weight": 15, "delta": 20, "severity": 1 },
     { "id": "town_news", "weight": 15, "delta": 15, "severity": 1 },
     { "id": "personal", "weight": 10, "delta": 60, "severity": 3, "min_affinity": 250 },
+    { "id": "remember", "weight": 18, "delta": 45, "severity": 2, "min_affinity": 100, "needs_shared_memory": true, "rehearse": 250 },
     { "id": "complaint", "weight": 14, "delta": -30, "severity": 2, "moods": ["sad", "upset", "uneasy", "bored"] }
   ],
   "tones": [
@@ -27,6 +29,11 @@
   "lines": [
     { "tone": "hostile", "keys": ["dialogue.hostile.1", "dialogue.hostile.2", "dialogue.hostile.3"] },
     { "tone": "curt", "keys": ["dialogue.curt.1", "dialogue.curt.2", "dialogue.curt.3"] },
+    { "topic": "small_talk", "labels": ["stranger", "acquaintance"], "keys": ["dialogue.small_talk.formal.1", "dialogue.small_talk.formal.2", "dialogue.small_talk.formal.3"] },
+    { "topic": "small_talk", "labels": ["friend", "close_friend"], "keys": ["dialogue.small_talk.close.1", "dialogue.small_talk.close.2", "dialogue.small_talk.close.3"] },
+    { "topic": "small_talk", "moods": ["sad", "upset", "uneasy", "lonely"], "keys": ["dialogue.small_talk.low.1", "dialogue.small_talk.low.2", "dialogue.small_talk.low.3"] },
+    { "topic": "work", "moods": ["sad", "upset", "uneasy", "lonely"], "keys": ["dialogue.work.low.1", "dialogue.work.low.2"] },
+    { "topic": "remember", "keys": ["dialogue.remember.1", "dialogue.remember.2", "dialogue.remember.3"] },
     { "topic": "small_talk", "keys": ["dialogue.small_talk.1", "dialogue.small_talk.2", "dialogue.small_talk.3"] },
     { "topic": "work", "keys": ["dialogue.work.1", "dialogue.work.2", "dialogue.work.3"] },
     { "topic": "food", "keys": ["dialogue.food.1", "dialogue.food.2", "dialogue.food.3"] },

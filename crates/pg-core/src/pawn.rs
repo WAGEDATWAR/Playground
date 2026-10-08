@@ -215,6 +215,9 @@ pub struct Pawn {
     pub idle_since: Option<u64>,
     /// The conversation the pawn is in, if any.
     pub talk: Option<crate::social::Talk>,
+    /// How outgoing the pawn is, -500 (reserved) to 500 (outgoing): scales how readily it starts a talk and
+    /// how much a talk lifts it. Set by population; 0 for pawns made any other way.
+    pub outgoing: i32,
 }
 
 /// The mood a pawn has before the mood system has looked at it.
@@ -244,6 +247,7 @@ impl Pawn {
             workplace: None,
             idle_since: None,
             talk: None,
+            outgoing: 0,
         }
     }
 }
@@ -327,6 +331,7 @@ impl ToCanon for Pawn {
                 "talk",
                 self.talk.as_ref().map_or(Canon::Null, ToCanon::to_canon),
             ),
+            ("outgoing", self.outgoing.to_canon()),
         ])
     }
 }
@@ -467,6 +472,7 @@ impl Pawn {
             "workplace",
             "idle_since",
             "talk",
+            "outgoing",
         ])?;
         let facing_child = r.child("facing")?;
         let facing = Dir4::from_name(facing_child.reader().str()?)
@@ -545,6 +551,10 @@ impl Pawn {
                 Some(c) => Some(crate::social::Talk::from_reader(c.reader())?),
                 None => None,
             },
+            outgoing: match r.maybe("outgoing")? {
+                Some(c) => c.reader().i32()?,
+                None => 0,
+            },
         })
     }
 }
@@ -588,7 +598,7 @@ mod tests {
         );
         assert_eq!(
             p.to_canon().to_canonical_string(),
-            r#"{"capacities":{"breathing":1000,"consciousness":1000,"eating":1000,"manipulation":1000,"moving":1000,"talking":1000},"facing":"S","home_tile":null,"household":null,"id":"pawn_1","idle_since":null,"intent":"free","last_failure":null,"memories":[],"mood":"neutral","move_failure":null,"name":"Ann","needs":{},"occupation":null,"position":{"map":"map_1","tile":[1,2]},"replan":null,"route":null,"schedule":null,"talk":null,"task":null,"workplace":null}"#
+            r#"{"capacities":{"breathing":1000,"consciousness":1000,"eating":1000,"manipulation":1000,"moving":1000,"talking":1000},"facing":"S","home_tile":null,"household":null,"id":"pawn_1","idle_since":null,"intent":"free","last_failure":null,"memories":[],"mood":"neutral","move_failure":null,"name":"Ann","needs":{},"occupation":null,"outgoing":0,"position":{"map":"map_1","tile":[1,2]},"replan":null,"route":null,"schedule":null,"talk":null,"task":null,"workplace":null}"#
         );
     }
 }

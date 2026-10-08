@@ -194,6 +194,7 @@ fn v3_to_v4(mut c: Canon) -> Result<Canon, String> {
                 p.insert("workplace".to_owned(), Canon::Null);
                 p.insert("idle_since".to_owned(), Canon::Null);
                 p.insert("talk".to_owned(), Canon::Null);
+                p.insert("outgoing".to_owned(), Canon::Int(0));
             }
         }
         _ => return Err("the world has no pawns table".into()),

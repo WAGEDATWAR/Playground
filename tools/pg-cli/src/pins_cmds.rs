@@ -31,10 +31,16 @@ const V4: &str = "fixtures/saves/world-v4";
 enum Kind {
     Replay,
     Pack(String),
-    Scenario { path: String, slow: bool },
+    Scenario {
+        path: String,
+        slow: bool,
+    },
     Town,
     FixtureV3,
     FixtureV4,
+    /// The saved world's shape (`pg schema`): it is sampled from a running town, so a change in behaviour can
+    /// show or hide an optional field; recording it with the other pins keeps them in step.
+    Schema,
 }
 
 #[derive(Clone, Debug)]
@@ -86,6 +92,10 @@ fn pins() -> Vec<Pin> {
     v.push(Pin {
         name: "town generator starting hash".into(),
         kind: Kind::Town,
+    });
+    v.push(Pin {
+        name: "saved world shape".into(),
+        kind: Kind::Schema,
     });
     v.push(Pin {
         name: "fixture: world-v3 (migrated)".into(),
@@ -172,6 +182,10 @@ fn check_one(pin: &Pin) -> (bool, String) {
                 .find(|l| l.contains("FAIL"))
                 .map_or_else(|| last_lines(&out, 1), |l| l.trim().to_owned());
             (ok, why)
+        }
+        Kind::Schema => {
+            let (ok, out) = run_self(&["schema", "check"]);
+            (ok, last_lines(&out, 1))
         }
         Kind::Town => {
             let args = town_args(&town_pin());
@@ -276,6 +290,10 @@ fn update_one(pin: &Pin) -> (bool, String) {
                 }
             }
             (false, "still failing after eight re-pins".into())
+        }
+        Kind::Schema => {
+            let (ok, out) = run_self(&["schema", "update"]);
+            (ok, last_lines(&out, 1))
         }
         Kind::Town => {
             let args = town_args("00000000");

@@ -226,7 +226,28 @@ fn close(
         });
     }
     // The outcome: the topic's change scaled by the tone, a small seeded wobble, then what packs say.
-    let base = i64::from(topic.delta) * i64::from(tone.delta_permille) / 1000;
+    // The tone can change turn by turn; the outcome follows the talk as a whole (the mean of the turns).
+    let turn_tones: Vec<&ToneDef> = talk.tones.iter().filter_map(|t| params.tone(t)).collect();
+    let n = i64::try_from(turn_tones.len()).unwrap_or(0).max(1);
+    let mean_delta = if turn_tones.is_empty() {
+        i64::from(tone.delta_permille)
+    } else {
+        turn_tones
+            .iter()
+            .map(|t| i64::from(t.delta_permille))
+            .sum::<i64>()
+            / n
+    };
+    let mean_restore = if turn_tones.is_empty() {
+        i64::from(tone.restore_permille)
+    } else {
+        turn_tones
+            .iter()
+            .map(|t| i64::from(t.restore_permille))
+            .sum::<i64>()
+            / n
+    };
+    let base = i64::from(topic.delta) * mean_delta / 1000;
     let rng = Rng::new(
         ctx.world.seed(),
         Stream::SocialOutcome,
@@ -259,13 +280,36 @@ fn close(
     rel.last_topic = Some(topic.id.clone());
     let affinity = rel.affinity;
     // Both feel less alone.
-    let restore = params.social_restore * tone.restore_permille / 1000;
-    for who in [a, b] {
+    // Outgoing residents get more out of company than reserved ones.
+    let outgoing = |id: EntityId| ctx.world.pawns.get(id).map_or(0, |p| i64::from(p.outgoing));
+    let (oa, ob) = (outgoing(a), outgoing(b));
+    for (who, o) in [(a, oa), (b, ob)] {
+        let restore = i32::try_from(
+            i64::from(params.social_restore) * mean_restore / 1000 * (1000 + o / 2) / 1000,
+        )
+        .unwrap_or(0);
         if let Some(p) = ctx.world.pawns.get_mut(who) {
             if let Some(v) = p.needs.get_mut(SOCIAL) {
                 *v = (*v + restore).clamp(0, 1000);
             }
             p.talk = None;
+        }
+    }
+    // A talk that looked back keeps the remembered conversation fresh for both.
+    if let (Some(recalled), true) = (&talk.recalled, topic.rehearse > 0) {
+        for (owner, other) in [(a, b), (b, a)] {
+            if let Some(m) = ctx.world.pawns.get_mut(owner).and_then(|p| {
+                p.memories
+                    .iter_mut()
+                    .filter(|m| {
+                        m.participants.contains(&other)
+                            && m.talk.is_some()
+                            && m.topic.as_deref() == Some(recalled.as_str())
+                    })
+                    .max_by_key(|m| (m.importance, m.tick))
+            }) {
+                m.retention = (m.retention + topic.rehearse).min(1000);
+            }
         }
     }
     ctx.emit(
@@ -326,6 +370,10 @@ fn record_memory(
         tone: talk.tone.clone(),
         turns: talk.turns,
         lines: talk.lines.clone(),
+        tones: talk.tones.clone(),
+        label: talk.label.clone(),
+        moods: talk.moods.clone(),
+        recalled: talk.recalled.clone(),
     });
     if let (Some(point), Some(host)) = (
         crate::hooks::memory_importance(),
@@ -407,8 +455,14 @@ fn start_new(ctx: &mut TickCtx<'_>, params: &ConversationParams, start_affinity:
                 continue;
             }
             if let Some(rel) = ctx.world.relationships.get(*a_id, *b_id) {
+                // Outgoing pairs talk again sooner, reserved pairs later.
+                let sociable =
+                    (1000 + (i64::from(a.outgoing) + i64::from(b.outgoing)) / 2).max(200);
+                let wait =
+                    u64::try_from(i64::try_from(cooldown).unwrap_or(i64::MAX) * 1000 / sociable)
+                        .unwrap_or(cooldown);
                 if rel.last_interaction_tick > 0
-                    && tick < rel.last_interaction_tick.saturating_add(cooldown)
+                    && tick < rel.last_interaction_tick.saturating_add(wait)
                 {
                     continue;
                 }
@@ -424,7 +478,12 @@ fn start_new(ctx: &mut TickCtx<'_>, params: &ConversationParams, start_affinity:
             continue;
         };
         let affinity = known_affinity(ctx.world, *a_id, b_id, start_affinity);
-        let chance = (i64::from(params.chance_permille) + i64::from(affinity) / 5).clamp(0, 1000);
+        // The more outgoing the pair, the likelier they start talking (and the more reserved, the less).
+        let sociable = 1000 + (i64::from(a.outgoing) + i64::from(b.outgoing)) / 2;
+        let chance = ((i64::from(params.chance_permille) + i64::from(affinity) / 5) * sociable
+            / 1000)
+            .clamp(0, 1000);
+        let shared = shared_memory_topic(a, *a_id, b_id);
         let rng = Rng::new(
             ctx.world.seed(),
             Stream::SocialTopic,
@@ -442,7 +501,8 @@ fn start_new(ctx: &mut TickCtx<'_>, params: &ConversationParams, start_affinity:
             .topics
             .iter()
             .map(|t| {
-                if topic_allowed(t, affinity, a, b) {
+                if topic_allowed(t, affinity, a, b) && (!t.needs_shared_memory || shared.is_some())
+                {
                     t.weight
                 } else {
                     0
@@ -467,6 +527,30 @@ fn start_new(ctx: &mut TickCtx<'_>, params: &ConversationParams, start_affinity:
             .and_then(|t| u32::try_from(t).ok())
             .unwrap_or(params.turns_min);
         let ends = tick + u64::from(turns) * u64::from(params.turn_minutes) * TICKS_PER_GAME_MINUTE;
+        // Each turn after the first reads the tone rules again with the affinity nudged a little, so a
+        // pair near a boundary can warm up or cool off during the talk.
+        let mut tones = vec![tone.id.clone()];
+        for turn in 1..turns {
+            let jitter = rng
+                .int_in(10 + turn, -params.tone_drift, params.tone_drift)
+                .unwrap_or(0);
+            let drifted = (affinity + jitter).clamp(-1000, 1000);
+            tones.push(
+                choose_tone(params, drifted, a, b)
+                    .map_or_else(|| tone.id.clone(), |t| t.id.clone()),
+            );
+        }
+        let label = ctx
+            .world
+            .relationships
+            .get(*a_id, b_id)
+            .map_or_else(String::new, |r| r.label.clone());
+        let moods = vec![a.mood.clone(), b.mood.clone()];
+        let recalled = if topic.needs_shared_memory {
+            shared.clone()
+        } else {
+            None
+        };
         let make = |partner: EntityId, leader: bool| Talk {
             partner,
             topic: topic.id.clone(),
@@ -476,6 +560,10 @@ fn start_new(ctx: &mut TickCtx<'_>, params: &ConversationParams, start_affinity:
             turns,
             leader,
             lines: Vec::new(),
+            tones: tones.clone(),
+            label: label.clone(),
+            moods: moods.clone(),
+            recalled: recalled.clone(),
         };
         let (topic_id, tone_id) = (topic.id.clone(), tone.id.clone());
         if let Some(p) = ctx.world.pawns.get_mut(*a_id) {
@@ -497,6 +585,16 @@ fn start_new(ctx: &mut TickCtx<'_>, params: &ConversationParams, start_affinity:
             ]),
         );
     }
+}
+
+/// The topic of the best conversation these two remember together (by importance, then the newer), if any:
+/// what a talk that looks back can refer to.
+fn shared_memory_topic(pawn: &Pawn, _id: EntityId, other: EntityId) -> Option<String> {
+    pawn.memories
+        .iter()
+        .filter(|m| m.talk.is_some() && m.participants.contains(&other))
+        .max_by_key(|m| (m.importance, m.tick))
+        .and_then(|m| m.topic.clone())
 }
 
 /// Fades and forgets memories at each new day.
@@ -633,8 +731,9 @@ pub fn record_dialogue(
 pub enum Spoken {
     /// Text that was generated or recorded.
     Written(String),
-    /// A fallback line: a string-table key with `{name}` and `{other}` to fill in.
-    Key(String),
+    /// A fallback line: a string-table key with `{name}` and `{other}` to fill in, and `{memory}` (the short
+    /// phrase of the remembered conversation named here by its topic) for lines that look back.
+    Key { key: String, memory: Option<String> },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -686,6 +785,10 @@ pub fn recall(
         turns: record.turns,
         leader: true,
         lines: Vec::new(),
+        tones: record.tones.clone(),
+        label: record.label.clone(),
+        moods: record.moods.clone(),
+        recalled: record.recalled.clone(),
     };
     Some(
         dialogue(params, world.seed(), first, &talk)
@@ -693,7 +796,10 @@ pub fn recall(
             .map(|l| Recalled {
                 speaker: l.speaker,
                 listener: l.listener,
-                said: Spoken::Key(l.key),
+                said: Spoken::Key {
+                    key: l.key,
+                    memory: l.memory,
+                },
             })
             .collect(),
     )
@@ -706,6 +812,8 @@ pub struct DialogueLine {
     pub speaker: EntityId,
     pub listener: EntityId,
     pub key: String,
+    /// The topic of the remembered conversation a looking-back line refers to.
+    pub memory: Option<String>,
 }
 
 /// The lines a talk would show, one per turn, alternating speakers starting with `first`. Presentation
@@ -717,7 +825,6 @@ pub fn dialogue(
     talk: &Talk,
 ) -> Vec<DialogueLine> {
     let second = talk.partner;
-    let keys = params.line_keys(&talk.topic, &talk.tone);
     let rng = Rng::new(
         seed,
         Stream::SocialTopic,
@@ -728,14 +835,27 @@ pub fn dialogue(
             Key::Int(i64::try_from(talk.started).unwrap_or(0)),
         ],
     );
-    // Start at a seeded line and walk the set, so no line repeats before the set is used up.
-    let start = rng
-        .range(0, u32::try_from(keys.len()).unwrap_or(1))
-        .unwrap_or(0) as usize;
+    // Each turn is chosen by its own tone, the relationship and the speaker's mood. Within a set the choice
+    // starts at a seeded line and walks on, skipping lines already used in this talk.
+    let mut used: Vec<String> = Vec::new();
     (0..talk.turns)
         .filter_map(|i| {
-            let key = keys.get((start + i as usize) % keys.len().max(1))?.clone();
-            let (speaker, listener) = if i % 2 == 0 {
+            let speaking_first = i % 2 == 0;
+            let mood = talk
+                .moods
+                .get(usize::from(!speaking_first))
+                .map_or("", String::as_str);
+            let tone = talk.tones.get(i as usize).unwrap_or(&talk.tone);
+            let keys = params.line_keys(&talk.topic, tone, &talk.label, mood);
+            let n = keys.len();
+            let start = rng.range(i, u32::try_from(n).unwrap_or(1)).unwrap_or(0) as usize;
+            let key = (0..n)
+                .filter_map(|j| keys.get((start + j) % n))
+                .find(|k| !used.contains(k))
+                .or_else(|| keys.get(start))?
+                .clone();
+            used.push(key.clone());
+            let (speaker, listener) = if speaking_first {
                 (first, second)
             } else {
                 (second, first)
@@ -744,6 +864,7 @@ pub fn dialogue(
                 speaker,
                 listener,
                 key,
+                memory: talk.recalled.clone(),
             })
         })
         .collect()

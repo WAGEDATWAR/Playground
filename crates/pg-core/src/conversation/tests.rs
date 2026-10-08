@@ -335,6 +335,10 @@ fn fallback_dialogue_is_seeded_complete_and_alternates() {
         turns,
         leader: true,
         lines: Vec::new(),
+        tones: vec![tone.to_owned(); turns as usize],
+        label: "stranger".into(),
+        moods: vec!["content".into(), "content".into()],
+        recalled: None,
     };
     let lines = dialogue(params, seed, a, &talk("food", "friendly", 4));
     assert_eq!(lines.len(), 4);
@@ -480,7 +484,10 @@ fn lines_recorded_afterwards_are_attached_and_without_them_the_fallback_is_rebui
         before.iter().map(|r| r.said.clone()).collect::<Vec<_>>(),
         shown
             .iter()
-            .map(|l| Spoken::Key(l.key.clone()))
+            .map(|l| Spoken::Key {
+                key: l.key.clone(),
+                memory: l.memory.clone(),
+            })
             .collect::<Vec<_>>()
     );
     let said: Vec<String> = (0..talk.turns).map(|i| format!("Later {i}.")).collect();
@@ -551,4 +558,148 @@ fn a_recording_is_part_of_the_logged_history_and_replays_the_same() {
         lines: vec!["Hi.".into(), "Hello.".into()],
     };
     assert_eq!(Command::from_canon(&cmd.to_canon()).unwrap(), cmd);
+}
+
+/// Runs a town for `days`, returning every conversation as it began (the leader's copy of the talk).
+fn talks_in(sim: &mut Sim, days: u64) -> Vec<(EntityId, Talk)> {
+    let mut seen: Vec<(EntityId, Talk)> = Vec::new();
+    for _ in 0..days * 14_400 / 10 {
+        sim.run_ticks(10).unwrap();
+        for (id, p) in sim.world().pawns.iter() {
+            if let Some(t) = p.talk.as_ref().filter(|t| t.leader) {
+                if !seen.iter().any(|(a, s)| *a == id && s.started == t.started) {
+                    seen.push((id, t.clone()));
+                }
+            }
+        }
+    }
+    seen
+}
+
+#[test]
+fn talks_carry_a_tone_per_turn_the_bands_they_were_read_by_and_what_they_look_back_on() {
+    let mut sim = town("bands");
+    let talks = talks_in(&mut sim, 5);
+    assert!(talks.len() > 60, "{} talks", talks.len());
+    let mut drifted = 0;
+    let mut looked_back = 0;
+    for (a, t) in &talks {
+        assert_eq!(t.tones.len(), t.turns as usize);
+        assert_eq!(t.tones[0], t.tone, "the first turn has the pair's tone");
+        assert_eq!(t.moods.len(), 2);
+        if t.tones.iter().any(|x| *x != t.tone) {
+            drifted += 1;
+        }
+        if let Some(topic) = &t.recalled {
+            looked_back += 1;
+            assert_eq!(t.topic, "remember");
+            // Both really do share a conversation about it.
+            let shared = |who: EntityId, other: EntityId| {
+                sim.world().pawns.get(who).is_some_and(|p| {
+                    p.memories.iter().any(|m| {
+                        m.talk.is_some()
+                            && m.participants.contains(&other)
+                            && m.topic.as_deref() == Some(topic.as_str())
+                    })
+                })
+            };
+            assert!(shared(*a, t.partner) && shared(t.partner, *a), "{topic}");
+        } else {
+            assert_ne!(t.topic, "remember", "nothing to look back on");
+        }
+    }
+    assert!(drifted > 0, "some talks changed tone part-way");
+    assert!(looked_back > 0, "some talks looked back");
+}
+
+#[test]
+fn looking_back_keeps_the_remembered_conversation_from_fading() {
+    let mut sim = town("rehearse");
+    let mut checked = 0;
+    let mut lifted = 0;
+    let mut open: Vec<(EntityId, EntityId, u64, String, i32)> = Vec::new();
+    for _ in 0..6 * 14_400 / 10 {
+        sim.run_ticks(10).unwrap();
+        let world = sim.world();
+        for (id, p) in world.pawns.iter() {
+            let Some(t) = p.talk.as_ref().filter(|t| t.leader) else {
+                continue;
+            };
+            let Some(topic) = &t.recalled else {
+                continue;
+            };
+            if open.iter().any(|o| o.0 == id && o.2 == t.started) {
+                continue;
+            }
+            let best = p
+                .memories
+                .iter()
+                .filter(|m| {
+                    m.talk.is_some()
+                        && m.participants.contains(&t.partner)
+                        && m.topic.as_deref() == Some(topic.as_str())
+                })
+                .max_by_key(|m| (m.importance, m.tick));
+            if let Some(m) = best {
+                open.push((id, t.partner, t.started, topic.clone(), m.retention));
+                open.last_mut().unwrap().3 = m.id.to_string();
+            }
+        }
+        // Close the ones that have ended.
+        open.retain(|(a, b, started, mem_id, before)| {
+            let Some(p) = world.pawns.get(*a) else {
+                return false;
+            };
+            if p.talk.as_ref().is_some_and(|t| t.started == *started) {
+                return true;
+            }
+            checked += 1;
+            if let Some(m) = p.memories.iter().find(|m| m.id.to_string() == *mem_id) {
+                assert!(
+                    m.retention >= *before,
+                    "{b}: it did not fade by looking back"
+                );
+                if m.retention > *before {
+                    lifted += 1;
+                }
+            }
+            false
+        });
+    }
+    assert!(checked > 2, "{checked} looking-back talks closed");
+    assert!(
+        lifted > 0,
+        "at least one memory had faded and was refreshed"
+    );
+}
+
+#[test]
+fn residents_get_a_spread_of_personalities_and_outgoing_pairs_talk_more() {
+    let mut sim = town("personalities");
+    sim.run_ticks(2).unwrap();
+    let outgoing: Vec<i32> = sim.world().pawns.iter().map(|(_, p)| p.outgoing).collect();
+    assert!(outgoing.iter().all(|o| (-500..=500).contains(o)));
+    assert!(
+        outgoing.iter().any(|o| *o > 100) && outgoing.iter().any(|o| *o < -100),
+        "{outgoing:?}"
+    );
+    // The same world with everyone made reserved starts fewer conversations than with everyone outgoing.
+    let count = |level: i32| {
+        let mut s = town("personalities");
+        s.run_ticks(2).unwrap();
+        let mut snap = s.snapshot();
+        let ids: Vec<EntityId> = snap.world.pawns.iter().map(|(id, _)| id).collect();
+        for id in ids {
+            snap.world.pawns.get_mut(id).unwrap().outgoing = level;
+        }
+        snap.world.rebuild_derived();
+        let mut s = Sim::restore(snap, crate::pipeline::Pipeline::new()).with_content(content());
+        talks_in(&mut s, 3).len()
+    };
+    let (reserved, bubbly) = (count(-500), count(500));
+    // Opportunities (being near someone free) limit how often people talk, so the effect is modest.
+    assert!(
+        bubbly > reserved,
+        "outgoing {bubbly} vs reserved {reserved}"
+    );
 }

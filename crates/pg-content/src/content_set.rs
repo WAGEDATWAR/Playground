@@ -284,18 +284,18 @@ impl ContentSet {
                         );
                     }
                     for ph in crate::strings::placeholders(&text) {
-                        if !["name", "other"].contains(&ph.as_str()) {
+                        if !["name", "other", "memory"].contains(&ph.as_str()) {
                             report.warn(
                                 "dialogue_placeholder",
                                 key.clone(),
-                                format!("{{{ph}}} is not filled in dialogue (use {{name}} or {{other}})"),
+                                format!("{{{ph}}} is not filled in dialogue (use {{name}}, {{other}} or {{memory}})"),
                             );
                         }
                     }
                 }
             }
             for t in &c.topics {
-                if c.line_keys(&t.id, "").is_empty() {
+                if c.line_keys(&t.id, "", "", "").is_empty() {
                     report.warn(
                         "topic_without_lines",
                         t.id.clone(),

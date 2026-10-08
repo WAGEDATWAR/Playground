@@ -398,7 +398,16 @@ pub fn apply_population(
     let mut ids = Vec::with_capacity(plan.residents.len());
     for (r, tile) in plan.residents.iter().zip(tiles) {
         let id = world.spawn_pawn(&r.full_name(), map, *tile)?;
+        let seed = world.seed();
         if let Some(p) = world.pawns.get_mut(id) {
+            // Personality: the average of two draws, so most residents are near the middle.
+            let rng = crate::rng::Rng::new(
+                seed,
+                crate::rng::Stream::WorldgenPeople,
+                &[crate::rng::Key::Id(id), crate::rng::Key::Str("outgoing")],
+            );
+            p.outgoing =
+                (rng.int_in(0, -500, 500).unwrap_or(0) + rng.int_in(1, -500, 500).unwrap_or(0)) / 2;
             p.occupation = Some(Occupation {
                 template: r.occupation.clone(),
                 variation: r.variation,

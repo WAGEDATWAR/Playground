@@ -240,10 +240,19 @@ recent conversations, as remembered:"
             for l in lines {
                 let said = match &l.said {
                     pg_core::conversation::Spoken::Written(t) => t.clone(),
-                    pg_core::conversation::Spoken::Key(k) => text(
-                        k,
-                        &[("name", &given(l.speaker)), ("other", &given(l.listener))],
-                    ),
+                    pg_core::conversation::Spoken::Key { key, memory } => {
+                        let phrase = memory.as_ref().map_or_else(String::new, |m| {
+                            text(&pg_content::gamedata::memory_phrase_key(m), &[])
+                        });
+                        text(
+                            key,
+                            &[
+                                ("name", &given(l.speaker)),
+                                ("other", &given(l.listener)),
+                                ("memory", &phrase),
+                            ],
+                        )
+                    }
                 };
                 println!("      {}: {said}", name(l.speaker));
             }

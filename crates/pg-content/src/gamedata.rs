@@ -221,6 +221,12 @@ pub struct TopicDef {
     pub max_affinity: i32,
     /// Only when one of the two is in one of these moods (empty: any).
     pub moods: Vec<String>,
+    /// The topic is looking back: it can only be chosen when the two share a remembered conversation, and
+    /// the line may refer to it with `{memory}`.
+    pub needs_shared_memory: bool,
+    /// Retention given back to the recalled memory (for both) when the talk closes: remembering it again
+    /// keeps it from fading. 0 for topics that do not look back.
+    pub rehearse: i32,
 }
 
 /// How a conversation goes. The first tone (by priority) whose conditions hold is used.
@@ -242,7 +248,44 @@ pub struct ToneDef {
 pub struct LineSet {
     pub topic: Option<String>,
     pub tone: Option<String>,
+    /// Only between people whose relationship has one of these labels (empty: any).
+    pub labels: Vec<String>,
+    /// Only when the speaker is in one of these moods (empty: any).
+    pub moods: Vec<String>,
     pub keys: Vec<String>,
+}
+
+impl LineSet {
+    /// How well this set fits a situation, or `None` if it does not. A matching tone counts most, then a
+    /// matching topic, then a relationship or mood band; a set with nothing specified fits anything.
+    fn fit(&self, topic: &str, tone: &str, label: &str, mood: &str) -> Option<u32> {
+        let mut score = 0;
+        if let Some(t) = &self.tone {
+            if t != tone {
+                return None;
+            }
+            score += 4;
+        }
+        if let Some(t) = &self.topic {
+            if t != topic {
+                return None;
+            }
+            score += 2;
+        }
+        if !self.labels.is_empty() {
+            if !self.labels.iter().any(|l| l == label) {
+                return None;
+            }
+            score += 1;
+        }
+        if !self.moods.is_empty() {
+            if !self.moods.iter().any(|m| m == mood) {
+                return None;
+            }
+            score += 1;
+        }
+        Some(score)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -261,6 +304,9 @@ pub struct ConversationParams {
     pub turn_minutes: u32,
     /// A talk is called off if the two end up further apart than this.
     pub max_apart: u32,
+    /// How far (in affinity) a turn's tone may wander from the pair's: each turn after the first re-reads the
+    /// tone rules with the affinity moved by up to this much either way.
+    pub tone_drift: i32,
     /// Social need restored to each, at a 1000 permille tone.
     pub social_restore: i32,
     pub topics: Vec<TopicDef>,
@@ -284,19 +330,18 @@ impl ConversationParams {
         v
     }
 
-    /// The string keys of the lines for a topic and tone: the most specific set that exists.
-    pub fn line_keys(&self, topic: &str, tone: &str) -> &[String] {
-        let pick = |t: Option<&str>, o: Option<&str>| {
-            self.lines
-                .iter()
-                .find(|l| l.topic.as_deref() == t && l.tone.as_deref() == o)
-                .map(|l| l.keys.as_slice())
-        };
-        pick(Some(topic), Some(tone))
-            .or_else(|| pick(None, Some(tone)))
-            .or_else(|| pick(Some(topic), None))
-            .or_else(|| pick(None, None))
-            .unwrap_or(&[])
+    /// The string keys of the lines for a situation: the best-fitting set (tone, then topic, then the
+    /// relationship and mood bands; the first in the file wins a tie).
+    pub fn line_keys(&self, topic: &str, tone: &str, label: &str, mood: &str) -> &[String] {
+        let mut best: Option<(u32, &LineSet)> = None;
+        for l in &self.lines {
+            if let Some(score) = l.fit(topic, tone, label, mood) {
+                if best.is_none_or(|(b, _)| score > b) {
+                    best = Some((score, l));
+                }
+            }
+        }
+        best.map_or(&[], |(_, l)| l.keys.as_slice())
     }
 }
 
@@ -701,6 +746,29 @@ impl GameData {
                     );
                 }
             }
+            for m in &l.moods {
+                if !self.moods.contains_key(m) {
+                    report.error(
+                        "unknown_mood",
+                        at(&format!("lines[{i}]")),
+                        format!("mood '{m}' is not defined{}", hint(m, mood_ids.clone())),
+                    );
+                }
+            }
+            if let Some(rp) = &self.relationships {
+                for lab in &l.labels {
+                    if !rp.labels.iter().any(|x| &x.id == lab) {
+                        report.error(
+                            "unknown_label",
+                            at(&format!("lines[{i}]")),
+                            format!(
+                                "relationship label '{lab}' is not defined{}",
+                                hint(lab, rp.labels.iter().map(|x| x.id.as_str()))
+                            ),
+                        );
+                    }
+                }
+            }
             if let Some(t) = &l.tone {
                 if c.tone(t).is_none() {
                     report.error(
@@ -746,6 +814,7 @@ impl GameData {
         if let Some(c) = &self.conversation {
             keys.extend(c.lines.iter().flat_map(|l| l.keys.iter().cloned()));
             keys.extend(c.topics.iter().map(|t| memory_summary_key(&t.id)));
+            keys.extend(c.topics.iter().map(|t| memory_phrase_key(&t.id)));
         }
         keys
     }
@@ -1257,6 +1326,11 @@ pub fn memory_summary_key(topic: &str) -> String {
     format!("memory.conversation.{topic}")
 }
 
+/// The string key of the short phrase a conversation memory stands for in `{memory}` ("talked about food").
+pub fn memory_phrase_key(topic: &str) -> String {
+    format!("memory.phrase.{topic}")
+}
+
 fn id_list(o: &Obj<'_>, key: &str, report: &mut ValidationReport) -> Vec<String> {
     match o.map.get(key) {
         None => Vec::new(),
@@ -1294,6 +1368,7 @@ pub fn parse_conversation(
             "turns_max",
             "turn_minutes",
             "max_apart",
+            "tone_drift",
             "social_restore",
             "topics",
             "tones",
@@ -1316,6 +1391,8 @@ pub fn parse_conversation(
                         "min_affinity",
                         "max_affinity",
                         "moods",
+                        "needs_shared_memory",
+                        "rehearse",
                     ],
                     report,
                 )?;
@@ -1327,6 +1404,11 @@ pub fn parse_conversation(
                     min_affinity: i32_of(t.int("min_affinity", -1000, 1000, Some(-1000), report))?,
                     max_affinity: i32_of(t.int("max_affinity", -1000, 1000, Some(1000), report))?,
                     moods: id_list(&t, "moods", report),
+                    needs_shared_memory: matches!(
+                        t.map.get("needs_shared_memory"),
+                        Some(Canon::Bool(true))
+                    ),
+                    rehearse: i32_of(t.int("rehearse", 0, 1000, Some(0), report))?,
                 };
                 Some((topic.id.clone(), topic))
             })
@@ -1378,7 +1460,7 @@ pub fn parse_conversation(
                     let t = Obj::new(
                         v,
                         format!("{CONVERSATION_FILE}.lines[{i}]"),
-                        &["topic", "tone", "keys"],
+                        &["topic", "tone", "labels", "moods", "keys"],
                         report,
                     )?;
                     let opt = |k: &str, report: &mut ValidationReport| match t.map.get(k) {
@@ -1397,6 +1479,8 @@ pub fn parse_conversation(
                     Some(LineSet {
                         topic: opt("topic", report)?,
                         tone: opt("tone", report)?,
+                        labels: id_list(&t, "labels", report),
+                        moods: id_list(&t, "moods", report),
                         keys,
                     })
                 })
@@ -1415,6 +1499,7 @@ pub fn parse_conversation(
         turns_max: u32_of(o.int("turns_max", 1, 50, Some(4), report))?,
         turn_minutes: u32_of(o.int("turn_minutes", 1, 60, Some(1), report))?,
         max_apart: u32_of(o.int("max_apart", 1, 40, Some(4), report))?,
+        tone_drift: i32_of(o.int("tone_drift", 0, 500, Some(120), report))?,
         social_restore: i32_of(o.int("social_restore", 0, 1000, Some(150), report))?,
         topics: topics.into_values().collect(),
         tones: tones.into_values().collect(),
@@ -2046,14 +2131,33 @@ mod tests {
         let (data, report) = conversation_data(|t| t);
         assert!(report.is_empty(), "{report}");
         let c = data.conversation.unwrap();
-        assert_eq!((c.topics.len(), c.tones.len()), (6, 5));
+        assert_eq!((c.topics.len(), c.tones.len()), (7, 5));
         assert_eq!(
             c.ordered_tones().first().map(|t| t.id.as_str()),
             Some("hostile")
         );
-        assert!(c.line_keys("food", "friendly")[0].starts_with("dialogue.food."));
-        assert!(c.line_keys("food", "hostile")[0].starts_with("dialogue.hostile."));
-        assert!(c.line_keys("nothing", "friendly")[0].starts_with("dialogue.generic."));
+        assert!(
+            c.line_keys("food", "friendly", "stranger", "content")[0].starts_with("dialogue.food.")
+        );
+        assert!(c.line_keys("food", "hostile", "stranger", "content")[0]
+            .starts_with("dialogue.hostile."));
+        assert!(c.line_keys("nothing", "friendly", "stranger", "content")[0]
+            .starts_with("dialogue.generic."));
+        // The relationship and mood bands pick their own lines for the same topic.
+        assert!(
+            c.line_keys("small_talk", "friendly", "stranger", "content")[0]
+                .starts_with("dialogue.small_talk.formal.")
+        );
+        assert!(
+            c.line_keys("small_talk", "friendly", "friend", "content")[0]
+                .starts_with("dialogue.small_talk.close.")
+        );
+        assert!(c.line_keys("small_talk", "friendly", "friend", "sad")[0]
+            .starts_with("dialogue.small_talk."));
+        assert!(c.line_keys("small_talk", "friendly", "friendly", "sad")[0]
+            .starts_with("dialogue.small_talk.low."));
+        assert!(c.line_keys("remember", "warm", "friend", "content")[0]
+            .starts_with("dialogue.remember."));
         let keys = data_keys(&base_data());
         assert!(keys.contains("dialogue.hostile.1") && keys.contains("memory.conversation.food"));
     }

@@ -198,7 +198,8 @@ pub struct LoadedPack {
     /// Game data tables (`data/game/*.json`): needs, moods, memory, relationships, occupations, names and
     /// residents (Stage 1).
     pub game: crate::gamedata::GameData,
-    /// Hex BLAKE3 over every file's path and bytes (see [`hash_files`]).
+    /// Hex BLAKE3 over every file's path and bytes except the string tables (see [`content_hash`]): what a
+    /// world and a replay record as the content they were made with.
     pub hash: String,
     pub file_count: usize,
     pub total_bytes: u64,
@@ -209,8 +210,19 @@ pub struct LoadedPack {
 /// Hashes a set of files: BLAKE3 over, for each file in path order, the path and the content, each
 /// prefixed with its length so no two different packs can produce the same byte stream.
 pub fn hash_files(files: &BTreeMap<String, Vec<u8>>) -> String {
+    hash_files_where(files, |_| true)
+}
+
+/// The content hash a world and a replay record: every file except the string tables. Text is presentation
+/// (it never reaches the simulation's state), so rewording a label must not make old saves and replays look
+/// like they were made with different content.
+pub fn content_hash(files: &BTreeMap<String, Vec<u8>>) -> String {
+    hash_files_where(files, |path| !path.starts_with(crate::strings::STRINGS_DIR))
+}
+
+fn hash_files_where(files: &BTreeMap<String, Vec<u8>>, keep: impl Fn(&str) -> bool) -> String {
     let mut h = blake3::Hasher::new();
-    for (path, content) in files {
+    for (path, content) in files.iter().filter(|(p, _)| keep(p)) {
         h.update(&(path.len() as u64).to_le_bytes());
         h.update(path.as_bytes());
         h.update(&(content.len() as u64).to_le_bytes());
@@ -412,7 +424,7 @@ pub fn load_pack(source: &dyn PackFiles, limits: &Limits) -> Result<LoadedPack, 
         strings,
         scripts,
         game,
-        hash: hash_files(&files),
+        hash: content_hash(&files),
         file_count: files.len(),
         total_bytes: total,
         warnings: report,
@@ -619,5 +631,20 @@ mod tests {
             "traversal is refused"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rewording_strings_does_not_change_the_content_hash_but_anything_else_does() {
+        let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+        files.insert("pack.json".into(), b"{}".to_vec());
+        files.insert("data/game/needs.json".into(), b"[1]".to_vec());
+        files.insert("data/strings/en.json".into(), b"{\"a\":\"one\"}".to_vec());
+        let before = content_hash(&files);
+        files.insert("data/strings/en.json".into(), b"{\"a\":\"two\"}".to_vec());
+        files.insert("data/strings/fr.json".into(), b"{}".to_vec());
+        assert_eq!(content_hash(&files), before, "text is presentation");
+        assert_ne!(hash_files(&files), hash_files(&BTreeMap::new()));
+        files.insert("data/game/needs.json".into(), b"[2]".to_vec());
+        assert_ne!(content_hash(&files), before, "rules are not");
     }
 }

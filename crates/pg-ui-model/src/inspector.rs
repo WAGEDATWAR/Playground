@@ -17,6 +17,8 @@ pub enum Said {
         key: String,
         name: String,
         other: String,
+        /// The topic of a remembered conversation a looking-back line refers to (`memory.phrase.<topic>`).
+        memory: Option<String>,
     },
 }
 
@@ -59,6 +61,8 @@ pub struct ResidentView {
     /// The occupation template id (`barista`); its string key is `occupation.<id>`.
     pub occupation: Option<String>,
     pub mood: String,
+    /// -500 (reserved) to 500 (outgoing).
+    pub outgoing: i32,
     /// What they are doing (an action id, or `free`).
     pub activity: String,
     pub talking_with: Option<String>,
@@ -82,6 +86,15 @@ pub fn tree(v: &ResidentView, t: Text) -> Tree {
             ("job", &job),
             ("mood", &t(&format!("mood.{}", v.mood), &[])),
         ],
+    )));
+    let trait_key = match v.outgoing {
+        o if o >= 150 => "ui.inspect.trait.outgoing",
+        o if o <= -150 => "ui.inspect.trait.reserved",
+        _ => "ui.inspect.trait.balanced",
+    };
+    w.push(Widget::Note(t(
+        "ui.inspect.personality",
+        &[("trait", &t(trait_key, &[]))],
     )));
     w.push(Widget::Note(match &v.talking_with {
         Some(other) => t("ui.inspect.talking", &[("other", other)]),
@@ -160,7 +173,20 @@ pub fn tree(v: &ResidentView, t: Text) -> Tree {
         for (speaker, said) in &c.lines {
             let text = match said {
                 Said::Written(s) => s.clone(),
-                Said::Key { key, name, other } => t(key, &[("name", name), ("other", other)]),
+                Said::Key {
+                    key,
+                    name,
+                    other,
+                    memory,
+                } => {
+                    let phrase = memory
+                        .as_ref()
+                        .map_or_else(String::new, |m| t(&format!("memory.phrase.{m}"), &[]));
+                    t(
+                        key,
+                        &[("name", name), ("other", other), ("memory", &phrase)],
+                    )
+                }
             };
             talks.push(Widget::Note(format!("{speaker}: {text}")));
         }
@@ -195,6 +221,7 @@ mod tests {
             name: "Ivan Bauer".into(),
             occupation: Some("gardener".into()),
             mood: "content".into(),
+            outgoing: 320,
             activity: "idle_at".into(),
             talking_with: None,
             needs: vec![("hunger".into(), 640), ("social".into(), 2000)],
@@ -223,6 +250,7 @@ mod tests {
                             key: "dialogue.food.1".into(),
                             name: "Ivan".into(),
                             other: "Tess".into(),
+                            memory: None,
                         },
                     ),
                     ("Tess".into(), Said::Written("Same here.".into())),
@@ -241,7 +269,8 @@ mod tests {
             "need.hunger",
             "memory.conversation.food{other=Tess} (recent, involves them)",
             "ui.inspect.relationship{other=Tess Fischer,label=relationship.friendly,affinity=320}",
-            "dialogue.food.1{name=Ivan,other=Tess}",
+            "dialogue.food.1{name=Ivan,other=Tess,memory=}",
+            "ui.inspect.personality{trait=ui.inspect.trait.outgoing}",
             "Tess: Same here.",
             "ui.inspect.rebuilt",
         ] {

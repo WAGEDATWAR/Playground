@@ -96,10 +96,11 @@ pub fn resident_view(sim: &Sim, id: EntityId) -> Option<ResidentView> {
                     .map(|l| {
                         let said = match l.said {
                             Spoken::Written(t) => Said::Written(t),
-                            Spoken::Key(key) => Said::Key {
+                            Spoken::Key { key, memory } => Said::Key {
                                 key,
                                 name: given(&name(l.speaker)),
                                 other: given(&name(l.listener)),
+                                memory,
                             },
                         };
                         (given(&name(l.speaker)), said)
@@ -113,6 +114,7 @@ pub fn resident_view(sim: &Sim, id: EntityId) -> Option<ResidentView> {
         name: p.name.clone(),
         occupation: p.occupation.as_ref().map(|o| o.template.clone()),
         mood: p.mood.clone(),
+        outgoing: p.outgoing,
         activity: p
             .task
             .as_ref()

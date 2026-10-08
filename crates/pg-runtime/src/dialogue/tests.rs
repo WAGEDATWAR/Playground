@@ -85,7 +85,14 @@ fn until_talk(sim: &mut Sim) -> (Vec<Event>, EntityId, EntityId, u64) {
                     .unwrap()
             };
             let (a, b, tick) = (get("a"), get("b"), e.tick);
-            return (r.events, a, b, tick);
+            // Only the first conversation of the tick (another pair may have started at the same moment).
+            let events = r
+                .events
+                .iter()
+                .filter(|x| x.kind != "conversation.started" || std::ptr::eq(*x, e))
+                .cloned()
+                .collect();
+            return (events, a, b, tick);
         }
     }
     panic!("nobody talked in two days");

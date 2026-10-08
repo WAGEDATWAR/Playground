@@ -387,9 +387,16 @@ pub fn describe(
             } else {
                 (given(&pb.name), given(&pa.name))
             };
+            let phrase = l.memory.as_ref().map_or_else(String::new, |m| {
+                strings.text("en", &pg_content::gamedata::memory_phrase_key(m), &[])
+            });
             (
                 l.speaker,
-                strings.text("en", &l.key, &[("name", speaker), ("other", listener)]),
+                strings.text(
+                    "en",
+                    &l.key,
+                    &[("name", speaker), ("other", listener), ("memory", &phrase)],
+                ),
             )
         })
         .collect();
