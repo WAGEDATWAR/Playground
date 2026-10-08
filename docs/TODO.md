@@ -4,9 +4,9 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Stage 0 is complete (`m0.11`). Stage 1 plan accepted with your answers (D-038).** Spec versions are now Blueprint v3.2, Roadmap v4.8, Design Document v3.3.
+**Stage 1 in progress.** Plan: `docs/PLAN.md` Phase 1 (1.0 to 1.9), accepted with your answers (D-038). Organism system settled (D-040), scheduled as Stage 2B; S-040 to S-047 accepted. Spec versions: Blueprint v3.3, Roadmap v4.9, Design Document v3.4.
 
-**Organism system (your outline) is evaluated and integrated (D-039):** Stage 2B in the roadmap, Blueprint section 8.9, Design Document section 6.8, proposal with fourteen questions in `docs/proposals/organism-system.md`, suggestions S-040 to S-047 proposed. It does not block Stage 1; the answers can arrive any time before Stage 2B planning (the first one that matters is question 1, placement).
+**Parked (come back later):** weather, seasons and fire (S-048, Roadmap section 12 item 8); animals and non-human humanoids (the physiology profile leaves room); anatomy extensions after Stage 2B's base (eyes and ears, neck, spine segments); customisable map sizes (Stage 3 generator controls); real art assets to replace procedural sprites.
 
 ## Blocked / waiting on user
 
@@ -14,8 +14,8 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Next up
 
-1. You answer the organism questions (or say "defaults"); I fold the answers into the specs.
-2. Start Stage 1 at 1.0 (content and state for residents), in the order of `docs/PLAN.md` Phase 1.
+1. Stage 1 milestone 1.0: content and state for residents (schema 4, resident and occupation data, `pg content tree`).
+2. Then 1.1 to 1.9 in the order of the plan, stopping at the marked checkpoints (after 1.2, 1.6, 1.8 and the gate).
 3. Prune dev scaffolding as real systems land (D-009).
 
 ## Shell note

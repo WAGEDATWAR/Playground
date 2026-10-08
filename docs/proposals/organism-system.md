@@ -1,6 +1,6 @@
 # Organism system (pawn health): evaluation and design proposal
 
-**Status:** proposal, integrated into the specs as Roadmap v4.8, Blueprint v3.2 and Design Document v3.3 (decision D-038). Items marked **[CONFIRM]** are open questions for you; none of them blocks Stage 1.
+**Status:** **accepted** (D-040); the answers are in section 13. Integrated into the specs as Roadmap v4.9, Blueprint v3.3 and Design Document v3.4. Items marked **[CONFIRM]** are open questions for you; none of them blocks Stage 1.
 
 **Source:** your outline (`organismoutline.txt`, 2026-10-08). This document keeps your intent, says where I think the outline needs adjusting to fit the game's determinism, performance and modding rules, and turns it into a staged build.
 
@@ -129,7 +129,7 @@ Moods cover only the emotional range. Proposed list for 1.1, tuned in play: chee
 
 S-040 capacities layer in Stage 1; S-041 declarative effect programs; S-042 dormancy and acute stepping with a cost budget; S-043 clinical time scale; S-044 physiology goldens and a plausibility lint for pack effects; S-045 parts exist regardless of rating; S-046 blood type inheritance for births; S-047 ambient hazards service (temperature, air, water) for weather, indoors and outdoors.
 
-## 12. Questions for you
+## 12. Questions (answered in section 13)
 
 Numbered so you can answer by number. My default is in brackets; I proceed with the default if you say "defaults".
 
@@ -147,3 +147,15 @@ Numbered so you can answer by number. My default is in brackets; I proceed with 
 12. **Mental health.** Keep panic and anxiety as Stage 7 content built with outside review, with only an adrenaline and stress placeholder in 2B? [yes]
 13. **Anatomy scope.** Start exactly with your list. Do you want eyes and ears (sight and hearing capacities), the neck, and spine segments (cervical, thoracic, lumbar for different paralysis) now, or later as extensions? [spine in segments now; eyes and ears later; neck folded into the throat]
 14. **Species.** Is the model for people only, or should the profile idea leave room for animals later (pets, wildlife)? [people only, profile structure left open]
+
+## 13. Answers (2026-10-08, D-040)
+
+Evaluation: all recommendations accepted. Fiction: substances are generic classes with accurate names. Questions: the defaults in brackets above were accepted for 1, 2, 4, 5, 8, 9, 10, 11 and 12, and these were answered individually:
+
+- **3 Pressure:** the realistic cardiac-output model (heart rate x stroke volume x vessel tone), not the single formula.
+- **6 Pawn creator:** body options are **height, weight, sex, age and fitness**, mapped to the physiology profile.
+- **7 Harm sources:** the suggested set (illness, starvation, exhaustion, a few accidents). **Weather and fire are noted for later** (Roadmap section 12 item 8, S-048).
+- **13 Anatomy:** start with the original list (single spine). Planned extensions, in this order: eyes and ears, the neck (a body part that holds the throat), spine segments.
+- **14 Species:** the model leaves room for animals; humans only for now. Non-human humanoids (aliens, fictional races) may follow, so the profile carries a species or race field and nothing assumes a human body outside the profile data.
+- **Suggestions:** S-040 to S-047 accepted.
+
