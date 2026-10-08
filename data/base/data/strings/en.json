@@ -239,5 +239,17 @@
   "memory.conversation.food": "Talked about food with {other}.",
   "memory.conversation.town_news": "Swapped news about town with {other}.",
   "memory.conversation.personal": "Opened up to {other}.",
-  "memory.conversation.complaint": "Complained to {other} about how things were going."
+  "memory.conversation.complaint": "Complained to {other} about how things were going.",
+  "ui.inspect.title": "Resident",
+  "ui.inspect.summary": "{job}, feeling {mood}",
+  "ui.inspect.talking": "Talking with {other}",
+  "ui.inspect.doing": "Doing: {activity}",
+  "ui.inspect.needs": "Needs",
+  "ui.inspect.memories": "What they remember",
+  "ui.inspect.relationships": "Relationships",
+  "ui.inspect.relationship": "{other}: {label} ({affinity})",
+  "ui.inspect.conversations": "Recent conversations",
+  "ui.inspect.none": "Nothing yet",
+  "ui.inspect.recorded": "recorded words",
+  "ui.inspect.rebuilt": "standard lines"
 }

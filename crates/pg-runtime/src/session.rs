@@ -135,6 +135,7 @@ mod tests {
             thumbnailer: None,
             console: None,
             dialogue: None,
+            focus: None,
         };
         let lp = SimLoop::new(
             SimFactory::dev(None, 2),

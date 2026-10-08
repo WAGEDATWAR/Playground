@@ -37,6 +37,8 @@ pub struct LoopServices {
     pub console: Option<pg_host::Console>,
     /// Prepares the lines of conversations someone can hear (milestone 1.5).
     pub dialogue: Option<crate::dialogue::DialogueHook>,
+    /// The resident the inspector looks at (set by the controller; `None` inside means nobody).
+    pub focus: Option<std::sync::Arc<std::sync::Mutex<Option<pg_core::id::EntityId>>>>,
 }
 
 /// Renders a world to PNG bytes for the Saved Worlds list.
@@ -616,7 +618,19 @@ impl SimLoop {
             self.run_event(RunEvent::Finished, &mut out);
         }
 
-        if self.dirty || !events.is_empty() {
+        let focus = self
+            .services
+            .focus
+            .as_ref()
+            .and_then(|f| f.lock().ok().and_then(|g| *g));
+        let tick_now = self.sim.world().clock.tick();
+        let bubbles = self
+            .services
+            .dialogue
+            .as_ref()
+            .map_or_else(Vec::new, |d| d.bubbles(tick_now));
+        let focus_changed = focus != self.publisher.latest().resident.as_ref().map(|r| r.id);
+        if self.dirty || !events.is_empty() || focus_changed || !bubbles.is_empty() {
             let prev = self.publisher.latest();
             let mut snap = RenderSnapshot::build(
                 self.sim.world(),
@@ -625,6 +639,8 @@ impl SimLoop {
                 &events,
                 &self.day_hash,
             );
+            snap.resident = focus.and_then(|f| crate::inspect::resident_view(&self.sim, f));
+            snap.bubbles = bubbles;
             snap.keyframes = self.ring.ticks();
             snap.keyframe_hash = self
                 .ring

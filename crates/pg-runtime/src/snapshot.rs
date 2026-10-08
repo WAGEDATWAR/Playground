@@ -48,6 +48,10 @@ pub struct RenderSnapshot {
     pub keyframe_hash: String,
     /// The latest planning failure of each pawn that has one, for the reason explorer (suggestion S-010).
     pub failures: Vec<(String, pg_core::reason::ReasonCode)>,
+    /// The focused resident's details for the inspector (milestone 1.7), when one is focused.
+    pub resident: Option<pg_ui_model::inspector::ResidentView>,
+    /// What residents are saying right now: `(speaker, text)` for conversations someone can hear.
+    pub bubbles: Vec<(EntityId, String)>,
 }
 
 /// How many recent events a snapshot carries.
@@ -112,6 +116,8 @@ impl RenderSnapshot {
             day_hash: day_hash.to_owned(),
             keyframes: prev.map_or_else(Vec::new, |p| p.keyframes.clone()),
             keyframe_hash: prev.map_or_else(String::new, |p| p.keyframe_hash.clone()),
+            resident: None,
+            bubbles: Vec::new(),
             failures: world
                 .pawns
                 .iter()

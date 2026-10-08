@@ -96,6 +96,8 @@ pub struct AppController {
     console: pg_host::Console,
     /// Lines for conversations the focused resident can hear (milestone 1.5).
     dialogue: crate::dialogue::DialogueHook,
+    /// The resident the inspector looks at, shared with the simulation loop.
+    focus: Arc<std::sync::Mutex<Option<pg_core::id::EntityId>>>,
 }
 
 fn slug(name: &str) -> String {
@@ -168,6 +170,7 @@ impl AppController {
         ));
         let c = AppController {
             dialogue,
+            focus: Arc::new(std::sync::Mutex::new(None)),
             svc,
             content,
             registry,
@@ -540,6 +543,7 @@ impl AppController {
             thumbnailer: Some(Arc::new(thumbnail_png)),
             console: Some(self.console.clone()),
             dialogue: Some(self.dialogue.clone()),
+            focus: Some(Arc::clone(&self.focus)),
         };
         self.console.info("app", &format!("world '{name}' opened"));
         let mut cfg = LoopConfig::new(id);
@@ -1032,6 +1036,9 @@ impl AppController {
     pub fn set_dialogue_focus(&self, focus: Option<pg_core::id::EntityId>) {
         if let Ok(mut s) = self.dialogue.service.lock() {
             s.set_focus(focus);
+        }
+        if let Ok(mut f) = self.focus.lock() {
+            *f = focus;
         }
     }
 

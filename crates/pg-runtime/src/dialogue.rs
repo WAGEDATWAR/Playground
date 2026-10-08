@@ -294,6 +294,23 @@ impl DialogueService {
         lines_of(s)
     }
 
+    /// What is being said at tick `now`: for each conversation under way that was heard, the current turn's
+    /// speaker and line.
+    pub fn bubbles(&self, now: u64) -> Vec<(EntityId, String)> {
+        self.stored
+            .iter()
+            .filter_map(|s| {
+                let span = s.turn_ticks.max(1) * s.turns as u64;
+                if now < s.started || now >= s.started + span {
+                    return None;
+                }
+                let turn = usize::try_from((now - s.started) / s.turn_ticks.max(1)).ok()?;
+                let line = lines_of(s)?.into_iter().nth(turn)?;
+                Some((line.speaker, line.text))
+            })
+            .collect()
+    }
+
     pub fn in_flight(&self) -> usize {
         self.pending.len()
     }
@@ -456,6 +473,14 @@ impl DialogueHook {
             service: std::sync::Arc::new(std::sync::Mutex::new(service)),
             settings: std::sync::Arc::new(std::sync::Mutex::new((AiSettings::default(), true))),
         }
+    }
+
+    /// What residents are saying at `tick` (see [`DialogueService::bubbles`]).
+    pub fn bubbles(&self, tick: u64) -> Vec<(EntityId, String)> {
+        self.service
+            .lock()
+            .map(|s| s.bubbles(tick))
+            .unwrap_or_default()
     }
 
     /// Called by the loop after each tick. Lines that were used are submitted as `RecordDialogue` inputs, so

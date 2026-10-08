@@ -188,6 +188,11 @@ impl GameView {
         self.gpu = on;
     }
 
+    /// Selects a resident as if it had been clicked.
+    pub fn select(&mut self, id: Option<EntityId>) {
+        self.selected = id;
+    }
+
     /// The resident the player clicked, if any.
     pub fn selected(&self) -> Option<EntityId> {
         self.selected
@@ -353,6 +358,54 @@ impl GameView {
             ));
         } else {
             self.show_painter(&painter, rect, map, snap);
+        }
+
+        // Speech bubbles for conversations someone can hear.
+        if cam.zoom >= 16.0 {
+            for (speaker, text) in &snap.bubbles {
+                let id = speaker.counter() as u64;
+                let Some(d) = pawns.iter().find(|d| d.id == id) else {
+                    continue;
+                };
+                let (sx, sy) = cam.to_screen(d.x + 0.5, d.y, vw, vh);
+                let anchor = rect.min + egui::vec2(sx, sy - 4.0);
+                if !rect.expand(cam.zoom).contains(anchor) {
+                    continue;
+                }
+                let galley = painter.layout(
+                    text.clone(),
+                    egui::FontId::proportional(12.0),
+                    Color32::from_rgb(30, 30, 36),
+                    170.0,
+                );
+                let size = galley.size() + egui::vec2(12.0, 8.0);
+                let bubble = egui::Rect::from_min_size(
+                    anchor - egui::vec2(size.x / 2.0, size.y + 6.0),
+                    size,
+                );
+                painter.rect_filled(
+                    bubble,
+                    6.0,
+                    Color32::from_rgba_unmultiplied(250, 250, 245, 235),
+                );
+                painter.rect_stroke(
+                    bubble,
+                    6.0,
+                    egui::Stroke::new(1.0, Color32::from_rgb(90, 90, 100)),
+                    egui::StrokeKind::Inside,
+                );
+                // A little tail toward the speaker.
+                painter.add(egui::Shape::convex_polygon(
+                    vec![
+                        anchor + egui::vec2(-4.0, -6.0),
+                        anchor + egui::vec2(4.0, -6.0),
+                        anchor,
+                    ],
+                    Color32::from_rgba_unmultiplied(250, 250, 245, 235),
+                    egui::Stroke::NONE,
+                ));
+                painter.galley(bubble.min + egui::vec2(6.0, 4.0), galley, Color32::BLACK);
+            }
         }
 
         // Names and the hover note, on top of the scene.

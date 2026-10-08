@@ -145,6 +145,12 @@ impl App {
                 self.dispatch(UiEvent::Key(pg_ui_model::Key::Console));
                 self.dispatch(UiEvent::Toggle("console.type.debug".into(), true));
             }
+            "inspector" => {
+                start_world(self);
+                // Focus the first resident, as if it had been clicked.
+                let id = pg_core::id::EntityId::new(pg_core::id::Kind::Pawn, 1);
+                self.view.select(Some(id));
+            }
             "drawer" => {
                 start_world(self);
                 click(self, "hud.speed");
@@ -218,6 +224,11 @@ impl App {
         let tree = self.model.tree(&t);
         let hud = self.model.hud_parts(&t);
         let overlay = self.model.overlay_tree(&t);
+        let inspector = self.controller.snapshot().and_then(|s| {
+            s.resident
+                .as_ref()
+                .map(|r| pg_ui_model::inspector::tree(r, &t))
+        });
         let console = self.model.console_tree(&t);
         let focus = self.model.focus().map(str::to_owned);
         let screen = self.model.screen().clone();
@@ -343,6 +354,20 @@ impl App {
                 .show(&ctx, |ui| {
                     let drawn = draw_tree(ui, &c, None, &self.overlay_tracker, &mut images);
                     events.extend(drawn.events);
+                });
+        }
+        if let Some(i) = inspector {
+            egui::Window::new("Resident")
+                .title_bar(false)
+                .default_width(300.0)
+                .anchor(egui::Align2::LEFT_TOP, egui::vec2(8.0, 40.0))
+                .show(&ctx, |ui| {
+                    egui::ScrollArea::vertical()
+                        .max_height(560.0)
+                        .show(ui, |ui| {
+                            let drawn = draw_tree(ui, &i, None, &self.overlay_tracker, &mut images);
+                            events.extend(drawn.events);
+                        });
                 });
         }
         if let Some(o) = overlay {

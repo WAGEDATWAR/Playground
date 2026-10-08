@@ -197,6 +197,7 @@ pub fn run_cmd(args: &[String]) -> Result<ExitCode, String> {
         thumbnailer: None,
         console: None,
         dialogue: None,
+        focus: None,
     };
     let mut cfg = LoopConfig::new(world_id);
     cfg.shadow_threads = p.parse::<usize>("shadow")?;
