@@ -475,10 +475,9 @@ fn draw_widget(
         Widget::Group { title, children } => {
             ui.add_space(6.0);
             ui.group(|ui| {
-                if title.is_empty() {
-                    // A tile: as wide as the room it is in.
-                    ui.set_min_width(ui.available_width());
-                } else {
+                // Every group is as wide as the room it is in, so a screen's groups line up.
+                ui.set_min_width(ui.available_width());
+                if !title.is_empty() {
                     ui.label(RichText::new(title).size(18.0).strong());
                 }
                 for c in children {

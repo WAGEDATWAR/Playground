@@ -272,8 +272,12 @@ fn saved_worlds_select_load_export_delete_import() {
         "damaged slots are marked: {s}"
     );
     assert!(
-        s.contains("(disabled)"),
-        "no actions until a world is selected"
+        !s.contains("<saved.load>") && !s.contains("<saved.delete>"),
+        "no actions until a world is selected (a tile opens when it is chosen): {s}"
+    );
+    assert!(
+        s.contains("scroll (up to 420)"),
+        "worlds are a bounded list: {s}"
     );
     assert!(click(&mut m, "saved.load").is_empty());
     click(&mut m, "saved.row.a");

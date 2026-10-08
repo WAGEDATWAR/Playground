@@ -268,10 +268,11 @@ impl App {
             .then(|| self.controller.snapshot())
             .flatten()
             .map(|s| pg_ui_model::journal::tree(&s.journal, &t));
+        let dev = self.model.dev_mode();
         let inspector = self.controller.snapshot().and_then(|s| {
             s.resident
                 .as_ref()
-                .map(|r| pg_ui_model::inspector::tree(r, &t))
+                .map(|r| pg_ui_model::inspector::tree(r, &t, dev))
         });
         let console = self.model.console_tree(&t);
         let focus = self.model.focus().map(str::to_owned);

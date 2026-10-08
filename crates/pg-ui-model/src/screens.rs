@@ -152,6 +152,9 @@ fn saved_worlds(worlds: &[WorldEntry], f: &SavedForm, t: Text) -> Tree {
     if worlds.is_empty() {
         w.push(Widget::Label(t("ui.saved.empty", &[])));
     }
+    // One tile per world in a bounded, scrolling list (like the Mods screen): the name and state on the first
+    // line; the chosen world's tile opens to show its picture, details and what can be done with it.
+    let mut tiles = Vec::new();
     for e in worlds {
         let mut label = t(
             "ui.saved.row",
@@ -164,12 +167,12 @@ fn saved_worlds(worlds: &[WorldEntry], f: &SavedForm, t: Text) -> Tree {
         if e.damaged {
             label.push_str(&t("ui.saved.damaged_suffix", &[]));
         }
-        w.push(Widget::button(&format!("saved.row.{}", e.id), label));
+        let mut kids = vec![Widget::button(&format!("saved.row.{}", e.id), label)];
         if f.selected.as_deref() == Some(e.id.as_str()) {
             if let Some(name) = &e.thumbnail {
-                w.push(Widget::Thumbnail { name: name.clone() });
+                kids.push(Widget::Thumbnail { name: name.clone() });
             }
-            w.push(Widget::Note(t(
+            kids.push(Widget::Note(t(
                 "ui.saved.details",
                 &[
                     ("saved", &e.saved),
@@ -177,38 +180,35 @@ fn saved_worlds(worlds: &[WorldEntry], f: &SavedForm, t: Text) -> Tree {
                     ("ticks", &e.play_ticks.to_string()),
                 ],
             )));
-        }
-    }
-    let selected = f
-        .selected
-        .as_ref()
-        .and_then(|id| worlds.iter().find(|e| &e.id == id));
-    if f.confirm_delete {
-        if let Some(e) = selected {
-            w.push(Widget::Label(t(
-                "ui.saved.confirm_delete",
-                &[("name", &e.name)],
-            )));
-            w.push(Widget::button(
-                "saved.confirm_yes",
-                t("ui.saved.delete_yes", &[]),
-            ));
-            w.push(Widget::button("saved.cancel", t("ui.cancel", &[])));
-        }
-    } else {
-        let can = selected.is_some();
-        let b = |id: &str, key: &str| {
-            if can {
-                Widget::button(id, t(key, &[]))
+            if f.confirm_delete {
+                kids.push(Widget::Label(t(
+                    "ui.saved.confirm_delete",
+                    &[("name", &e.name)],
+                )));
+                kids.push(Widget::Row(vec![
+                    Widget::button("saved.confirm_yes", t("ui.saved.delete_yes", &[])),
+                    Widget::button("saved.cancel", t("ui.cancel", &[])),
+                ]));
             } else {
-                Widget::disabled_button(id, t(key, &[]))
+                kids.push(Widget::Row(vec![
+                    Widget::button("saved.load", t("ui.saved.load", &[])),
+                    Widget::button("saved.export", t("ui.saved.export", &[])),
+                    Widget::button("saved.delete", t("ui.saved.delete", &[])),
+                ]));
             }
-        };
-        w.push(Widget::Row(vec![
-            b("saved.load", "ui.saved.load"),
-            b("saved.export", "ui.saved.export"),
-            b("saved.delete", "ui.saved.delete"),
-        ]));
+        }
+        tiles.push(Widget::Group {
+            title: String::new(),
+            children: kids,
+        });
+    }
+    if !tiles.is_empty() {
+        w.push(Widget::Scroll {
+            max_height: 420,
+            children: tiles,
+        });
+    }
+    if !f.confirm_delete {
         w.push(Widget::button("saved.import", t("ui.saved.import", &[])));
         w.push(Widget::button("saved.back", t("ui.back", &[])));
     }
@@ -846,25 +846,14 @@ fn mod_tile(m: &AppModel, p: &crate::types::PackRow, t: Text) -> Widget {
         && p.capabilities
             .iter()
             .any(|c| c.needs_approval && !c.approved);
+    // The first line is the same shape whatever state the pack is in: the name, the On/Off button, then a mark
+    // if something needs attention (so the button never moves when a mark appears). What the pack affects is
+    // the second line.
     let mut header = vec![Widget::button(
         &format!("mods.tile.{key}"),
         format!("{} {}", if open { "-" } else { "+" }, p.name),
     )];
-    if p.error.is_some() {
-        header.push(Widget::Label(t("ui.mods.error_mark", &[])));
-    } else if needs_approval {
-        header.push(Widget::Label(t("ui.mods.approval_mark", &[])));
-    }
-    if p.base {
-        header.push(Widget::Note(t("ui.mods.base_short", &[])));
-    } else if p.error.is_none() {
-        let affects = p
-            .capabilities
-            .iter()
-            .map(|c| c.name.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        header.push(Widget::Note(t("ui.mods.affects", &[("what", &affects)])));
+    if !p.base && p.error.is_none() {
         header.push(Widget::button(
             &format!("mods.enable.{}", p.id),
             t(
@@ -877,7 +866,28 @@ fn mod_tile(m: &AppModel, p: &crate::types::PackRow, t: Text) -> Widget {
             ),
         ));
     }
+    if p.error.is_some() {
+        header.push(Widget::Label(t("ui.mods.error_mark", &[])));
+    } else if needs_approval {
+        header.push(Widget::Label(t("ui.mods.approval_mark", &[])));
+    }
+    let affects = if p.base {
+        Some(t("ui.mods.base_short", &[]))
+    } else if p.error.is_none() {
+        let what = p
+            .capabilities
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        Some(t("ui.mods.affects", &[("what", &what)]))
+    } else {
+        None
+    };
     let mut kids = vec![Widget::Row(header)];
+    if let Some(a) = affects {
+        kids.push(Widget::Note(a));
+    }
     if open {
         if let Some(e) = &p.error {
             kids.push(Widget::Label(t("ui.mods.invalid", &[])));

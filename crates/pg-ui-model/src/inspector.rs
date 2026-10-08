@@ -84,7 +84,8 @@ pub struct PackEffectRow {
 }
 
 /// The inspector's window contents.
-pub fn tree(v: &ResidentView, t: Text) -> Tree {
+/// `dev` is developer mode: it adds what content packs are doing to this resident.
+pub fn tree(v: &ResidentView, t: Text, dev: bool) -> Tree {
     let mut w = vec![Widget::Heading(v.name.clone())];
     let job = v
         .occupation
@@ -204,7 +205,7 @@ pub fn tree(v: &ResidentView, t: Text) -> Tree {
     if talks.is_empty() {
         talks.push(Widget::Note(t("ui.inspect.none", &[])));
     }
-    if !v.pack_effects.is_empty() {
+    if dev && !v.pack_effects.is_empty() {
         w.push(Widget::Group {
             title: t("ui.inspect.pack_effects", &[]),
             children: v
@@ -296,7 +297,7 @@ mod tests {
 
     #[test]
     fn the_inspector_shows_state_memories_with_reasons_relationships_and_lines() {
-        let snap = tree(&view(), &show).snapshot(None);
+        let snap = tree(&view(), &show, true).snapshot(None);
         for want in [
             "Ivan Bauer",
             "ui.inspect.summary{job=occupation.gardener,mood=mood.content}",
@@ -321,7 +322,7 @@ mod tests {
         v.relationships.clear();
         v.conversations.clear();
         v.talking_with = Some("Tess".into());
-        let snap = tree(&v, &show).snapshot(None);
+        let snap = tree(&v, &show, true).snapshot(None);
         assert_eq!(snap.matches("ui.inspect.none").count(), 3, "{snap}");
         assert!(
             snap.contains("ui.inspect.talking{other=Tess}") && !snap.contains("ui.inspect.doing")
@@ -329,6 +330,20 @@ mod tests {
         assert!(
             snap.contains("need.social: 100%"),
             "an out-of-range level is held at full: {snap}"
+        );
+    }
+
+    #[test]
+    fn pack_effects_show_only_in_developer_mode() {
+        let plain = tree(&view(), &show, false).snapshot(None);
+        assert!(
+            !plain.contains("ui.inspect.pack_effects") && !plain.contains("need.decay_modifier"),
+            "{plain}"
+        );
+        let dev = tree(&view(), &show, true).snapshot(None);
+        assert!(
+            dev.contains("ui.inspect.pack_effects") && dev.contains("need.decay_modifier"),
+            "{dev}"
         );
     }
 }
