@@ -64,6 +64,9 @@ pub struct AppServices {
     pub app_version: String,
     /// The id this game is registered under with Player2.
     pub client_id: String,
+    /// The system's open and save dialogs; `None` where there are none (tests, headless runs), and the
+    /// folder-based import and export are used instead.
+    pub dialogs: Option<Arc<dyn pg_host::Dialogs>>,
 }
 
 struct ActiveWorld {
@@ -986,6 +989,20 @@ impl AppController {
             "{EXPORT_DIR}{id}-{}.pgworld.json",
             iso.replace([':', '.'], "-")
         );
+        // With system dialogs the player chooses where the file goes; cancelling does nothing.
+        if let Some(dialogs) = &self.svc.dialogs {
+            let suggested = format!("{id}.pgworld.json");
+            let Some(path) = dialogs.pick_file_to_write(&suggested) else {
+                return Vec::new();
+            };
+            return match std::fs::write(&path, &bytes) {
+                Ok(()) => vec![UiEvent::Exported(path.display().to_string())],
+                Err(e) => vec![UiEvent::Failed(format!(
+                    "The export could not be written to {}: {e}",
+                    path.display()
+                ))],
+            };
+        }
         match self.svc.storage.write_atomic(&name, &bytes) {
             Ok(()) => vec![UiEvent::Exported(match &self.svc.data_dir {
                 Some(d) => d.join(&name).display().to_string(),
@@ -998,6 +1015,22 @@ impl AppController {
     }
 
     fn import(&mut self) -> Vec<UiEvent> {
+        // With system dialogs the player picks the file; cancelling does nothing.
+        if let Some(dialogs) = self.svc.dialogs.clone() {
+            let Some(path) = dialogs.pick_file_to_read(&["json"]) else {
+                return Vec::new();
+            };
+            let label = path.display().to_string();
+            let bytes = match std::fs::read(&path) {
+                Ok(b) => b,
+                Err(e) => {
+                    return vec![UiEvent::Failed(format!("{label}: {e}"))];
+                }
+            };
+            let mut out = self.import_bytes(&label, &bytes, None);
+            out.push(UiEvent::WorldsListed(self.list_worlds()));
+            return out;
+        }
         let files: Vec<String> = self
             .svc
             .storage
@@ -1016,35 +1049,43 @@ impl AppController {
                 self.text("ui.notice.import_empty", &[("folder", &place)]),
             )];
         }
-        let refs = refs_of(&self.content);
         let mut out = Vec::new();
         for file in files {
             let bytes = match self.svc.storage.read(&file) {
                 Ok(Some(b)) => b,
                 _ => continue,
             };
-            let opts = ImportOptions {
-                content: self.content.as_deref(),
-                installed_refs: self.content.as_ref().map(|_| refs.clone()),
-                ..ImportOptions::default()
-            };
-            match import_world(&bytes, &opts) {
-                Ok(plan) => {
-                    let id = self.unique_world_id(&plan.world.meta.name);
-                    let iso = self.svc.clock.wall_clock_iso();
-                    match commit_import(&self.store(), &id, &plan, &iso, false) {
-                        Ok(_) => {
-                            let _ = self.svc.storage.delete(&file);
-                            out.push(UiEvent::Imported(plan.world.meta.name.clone()));
-                        }
-                        Err(e) => out.push(UiEvent::Failed(format!("{file}: {e}"))),
-                    }
-                }
-                Err(e) => out.push(UiEvent::Failed(format!("{file}: {e}"))),
-            }
+            out.extend(self.import_bytes(&file, &bytes, Some(&file)));
         }
         out.push(UiEvent::WorldsListed(self.list_worlds()));
         out
+    }
+
+    /// Imports one export file's bytes as a new world. `consume` names a file in storage to delete once it
+    /// has been imported (the folder-based flow); a file the player picked is left where it is.
+    fn import_bytes(&mut self, label: &str, bytes: &[u8], consume: Option<&str>) -> Vec<UiEvent> {
+        let refs = refs_of(&self.content);
+        let opts = ImportOptions {
+            content: self.content.as_deref(),
+            installed_refs: self.content.as_ref().map(|_| refs.clone()),
+            ..ImportOptions::default()
+        };
+        match import_world(bytes, &opts) {
+            Ok(plan) => {
+                let id = self.unique_world_id(&plan.world.meta.name);
+                let iso = self.svc.clock.wall_clock_iso();
+                match commit_import(&self.store(), &id, &plan, &iso, false) {
+                    Ok(_) => {
+                        if let Some(file) = consume {
+                            let _ = self.svc.storage.delete(file);
+                        }
+                        vec![UiEvent::Imported(plan.world.meta.name.clone())]
+                    }
+                    Err(e) => vec![UiEvent::Failed(format!("{label}: {e}"))],
+                }
+            }
+            Err(e) => vec![UiEvent::Failed(format!("{label}: {e}"))],
+        }
     }
 
     // ---- frame ----------------------------------------------------------------------------------------------------

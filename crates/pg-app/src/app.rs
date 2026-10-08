@@ -51,6 +51,7 @@ pub fn real_services(data_dir: &Path) -> Result<AppServices, String> {
         data_dir: Some(data_dir.to_path_buf()),
         app_version: env!("CARGO_PKG_VERSION").to_owned(),
         client_id: std::env::var("PG_PLAYER2_CLIENT_ID").unwrap_or_else(|_| CLIENT_ID.to_owned()),
+        dialogs: Some(Arc::new(pg_host_os::NativeDialogs::new("Playground world"))),
     })
 }
 

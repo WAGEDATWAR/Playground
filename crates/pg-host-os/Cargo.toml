@@ -8,4 +8,5 @@ publish = false
 [dependencies]
 keyring = "4.2.0"
 pg-host = { path = "../../crates/pg-host" }
+rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"] }
 ureq = "3.4.2"

@@ -2,7 +2,7 @@
 
 Working plan for building Playground in Rust. The three documents in `docs/reference/` are the **binding specification**:
 
-- `architecture-blueprint-v3.11.md` — how (crates, determinism, scripting, persistence)
+- `architecture-blueprint-v3.12.md` — how (crates, determinism, scripting, persistence)
 - `design-document-v3.4.md` — what and why (pillars, scope, modding boundaries)
 - `roadmap-v4.9.md` — when (stages, gates, decisions to confirm)
 

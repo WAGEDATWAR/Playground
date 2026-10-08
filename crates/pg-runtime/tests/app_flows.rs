@@ -63,7 +63,23 @@ impl Machine {
             data_dir: None,
             app_version: "test".into(),
             client_id: "test-client".into(),
+            dialogs: None,
         }
+    }
+
+    /// A launch with scripted system dialogs.
+    fn launch_with_dialogs(
+        &self,
+        content: &Arc<ContentSet>,
+        dialogs: Arc<pg_host::ScriptedDialogs>,
+    ) -> Driver {
+        let mut svc = self.services();
+        svc.dialogs = Some(dialogs);
+        let mut ctl = AppController::new(svc, Some(Arc::clone(content)));
+        let mut model = AppModel::new();
+        let boot = ctl.boot();
+        model.update(boot);
+        Driver { ctl, model }
     }
 
     /// A fresh launch: a controller and a model that has been through boot.
@@ -848,4 +864,56 @@ fn the_console_never_holds_a_pasted_key() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(!all.contains(SENTINEL_KEY), "{all}");
+}
+
+#[test]
+fn export_and_import_use_the_system_dialogs_when_there_are_some_and_cancelling_does_nothing() {
+    let m = Machine::new();
+    let c = content(&[]);
+    let dialogs = Arc::new(pg_host::ScriptedDialogs::new());
+    let mut d = m.launch_with_dialogs(&c, Arc::clone(&dialogs));
+    d.click("main.new");
+    d.type_into("new.name", "Dialog Town");
+    d.click("new.create");
+    d.settle(|d| d.model.hud().pawns == 14);
+    d.send(UiEvent::Key(Key::Escape));
+    d.click("pause.menu");
+    d.click("main.saved");
+    d.click("saved.row.dialog-town");
+    // Cancelled save dialog: nothing is written and nothing is announced.
+    dialogs.answer_write(None);
+    d.click("saved.export");
+    assert!(m.storage.list("exports/").unwrap().is_empty());
+    assert!(!d.text().contains("Exported to"), "{}", d.text());
+    // A chosen path gets the file, wherever it is.
+    let dir = std::env::temp_dir().join(format!("pg-dialog-test-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("mine.pgworld.json");
+    dialogs.answer_write(Some(file.clone()));
+    d.click("saved.export");
+    assert!(file.exists(), "the export went where the player chose");
+    assert!(d.text().contains("Exported to"), "{}", d.text());
+    assert!(
+        m.storage.list("exports/").unwrap().is_empty(),
+        "not the exports folder"
+    );
+    assert_eq!(dialogs.asked()[0], "write dialog-town.pgworld.json");
+    // Import: cancel does nothing; a picked file recreates the world and is left where it is.
+    d.click("saved.delete");
+    d.click("saved.confirm_yes");
+    assert!(d.model.worlds().is_empty());
+    dialogs.answer_read(None);
+    d.click("saved.import");
+    assert!(d.model.worlds().is_empty());
+    dialogs.answer_read(Some(file.clone()));
+    d.click("saved.import");
+    assert_eq!(d.model.worlds().len(), 1, "{}", d.text());
+    assert!(file.exists(), "a file the player picked is not consumed");
+    // A damaged file is reported with its path.
+    let bad = dir.join("bad.json");
+    std::fs::write(&bad, b"{ not an export").unwrap();
+    dialogs.answer_read(Some(bad.clone()));
+    d.click("saved.import");
+    assert!(d.text().contains("bad.json"), "{}", d.text());
+    let _ = std::fs::remove_dir_all(&dir);
 }

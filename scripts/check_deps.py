@@ -36,6 +36,7 @@ RESTRICTED = {
     "wgpu": {"pg-render", "pg-app"},
     "winit": {"pg-render", "pg-app"},
     "egui": {"pg-app"},
+    "rfd": {"pg-host-os"},          # native file dialogs live behind the Dialogs trait
     "rand": {"pg-cli"},             # never in the deterministic core or runtime logic
 }
 

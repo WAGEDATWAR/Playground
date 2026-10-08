@@ -3,8 +3,10 @@
 //! 0.6 provided [`FsStorage`]; 0.7 adds the credential store, HTTPS and the clock. Native dialogs arrive with
 //! the app shell (0.10), where they are first needed; audio is a Stage 11 item.
 
+pub mod dialogs;
 pub mod os_services;
 
+pub use dialogs::NativeDialogs;
 pub use os_services::{KeyringSecretStore, SystemClock, UreqNet};
 
 use pg_host::{check_name, BlobInfo, Storage};
