@@ -459,7 +459,8 @@ fn draw_widget(
                 });
         }
         Widget::Stack(children) => {
-            for c in children {
+            for (i, c) in children.iter().enumerate() {
+                separate(ui, i, c);
                 draw_widget(ui, c, focus, focus_moved, compact, images, d);
             }
         }
@@ -560,12 +561,15 @@ fn draw_widget(
             border,
             children,
         } => {
-            ui.add_space(6.0);
+            if border.style != BorderStyle::Between {
+                ui.add_space(6.0);
+            }
             framed(ui, border, 6, |ui| {
                 if !title.is_empty() {
                     ui.label(RichText::new(title).size(18.0).strong());
                 }
-                for c in children {
+                for (i, c) in children.iter().enumerate() {
+                    separate(ui, i, c);
                     draw_widget(ui, c, focus, focus_moved, compact, images, d);
                 }
             });
@@ -573,17 +577,40 @@ fn draw_widget(
     }
 }
 
+/// A line between a widget and the one above it, for widgets whose border only separates neighbours.
+fn separate(ui: &mut egui::Ui, index: usize, w: &Widget) {
+    let Some(b) = w.separator() else { return };
+    if index == 0 {
+        return;
+    }
+    ui.add_space(6.0);
+    let y = ui.cursor().top();
+    let (x0, x1) = (
+        ui.min_rect().left(),
+        ui.min_rect().left() + ui.available_width(),
+    );
+    ui.painter().hline(
+        x0..=x1,
+        y,
+        Stroke::new(b.width as f32, border_color(ui, b.tone)),
+    );
+    ui.add_space(6.0 + b.width as f32);
+}
+
+fn border_color(ui: &egui::Ui, tone: BorderTone) -> Color32 {
+    let base = ui.visuals().widgets.noninteractive.bg_stroke.color;
+    match tone {
+        BorderTone::Soft => base.gamma_multiply(0.5),
+        BorderTone::Normal => base,
+        BorderTone::Strong => ui.visuals().widgets.inactive.fg_stroke.color,
+    }
+}
+
 /// Draws `add` inside a frame with `border` (style, width, tone, corners) and `margin` points of room. The
 /// frame is as wide as the room it is in, so boxes on one screen line up. A border of `None` keeps the room
 /// but draws nothing.
 fn framed(ui: &mut egui::Ui, border: &Border, margin: i8, add: impl FnOnce(&mut egui::Ui)) {
-    let base = ui.visuals().widgets.noninteractive.bg_stroke.color;
-    let strong = ui.visuals().widgets.inactive.fg_stroke.color;
-    let color = match border.tone {
-        BorderTone::Soft => base.gamma_multiply(0.5),
-        BorderTone::Normal => base,
-        BorderTone::Strong => strong,
-    };
+    let color = border_color(ui, border.tone);
     let width = border.width as f32;
     let radius: u8 = match border.corners {
         Corners::Rounded => 6,

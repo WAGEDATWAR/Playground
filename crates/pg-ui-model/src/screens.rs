@@ -96,8 +96,9 @@ fn new_world(f: &NewWorldForm, t: Text) -> Tree {
             )
         })
         .collect();
+    // The category boxes only have a line between neighbours; the column around them has the box.
     let group = |title: &str, children: Vec<Widget>| Widget::Group {
-        border: crate::widget::Border::GROUP,
+        border: Border::between(1, BorderTone::Normal),
         title: t(title, &[]),
         children,
     };
@@ -106,13 +107,15 @@ fn new_world(f: &NewWorldForm, t: Text) -> Tree {
             label: t("ui.new.preview", &[]),
             height: 240,
         },
-        group(
-            "ui.new.packs.title",
-            vec![
+        // The pack list keeps a full box of its own.
+        Widget::Group {
+            border: Border::GROUP,
+            title: t("ui.new.packs.title", &[]),
+            children: vec![
                 Widget::Note(t("ui.new.packs.note", &[])),
                 Widget::disabled_button("new.packs", t("ui.new.packs.choose", &[])),
             ],
-        ),
+        },
     ];
     let settings = vec![
         group(

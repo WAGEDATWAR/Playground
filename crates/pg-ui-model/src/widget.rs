@@ -125,6 +125,8 @@ pub enum BorderStyle {
     None,
     Solid,
     Dashed,
+    /// No box: only a line between this widget and the one above it (nothing above the first).
+    Between,
 }
 
 /// How strongly a border stands out against the background.
@@ -156,6 +158,15 @@ impl Border {
     pub const fn solid(width: u32, tone: BorderTone) -> Border {
         Border {
             style: BorderStyle::Solid,
+            width,
+            tone,
+            corners: Corners::Rounded,
+        }
+    }
+
+    pub const fn between(width: u32, tone: BorderTone) -> Border {
+        Border {
+            style: BorderStyle::Between,
             width,
             tone,
             corners: Corners::Rounded,
@@ -216,6 +227,18 @@ impl Widget {
             id: id.to_owned(),
             label: label.into(),
             enabled: false,
+        }
+    }
+
+    /// The border that only separates this widget from the one above it, if it asks for that.
+    pub fn separator(&self) -> Option<Border> {
+        match self {
+            Widget::Group { border, .. } | Widget::Bordered { border, .. }
+                if border.style == BorderStyle::Between =>
+            {
+                Some(*border)
+            }
+            _ => None,
         }
     }
 
@@ -638,6 +661,20 @@ mod border_tests {
         assert!(s.contains("== G == [Solid 2 Strong Square]"), "{s}");
         assert!(s.contains("border (Dashed 1 Soft square):"), "{s}");
         assert_eq!(Border::GROUP.corners, Corners::Rounded);
+        let between = Widget::Group {
+            title: String::new(),
+            border: Border::between(1, BorderTone::Normal),
+            children: Vec::new(),
+        };
+        assert!(between.separator().is_some());
+        assert!(Widget::Label("x".into()).separator().is_none());
+        assert!(Widget::Group {
+            title: String::new(),
+            border: Border::GROUP,
+            children: Vec::new()
+        }
+        .separator()
+        .is_none());
         assert_eq!(Border::NONE.style, BorderStyle::None);
     }
 }
