@@ -4,7 +4,7 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Stage 1: 1.8 is implemented: the second checkpoint for you (D-062).** Try the sample pack in the game: `cargo run -p pg-app -- --pack packs/cookbook/hardy`, click a resident, and look for the "What content packs are doing" section (it lists three effects for a resident with grit and none for the others). `pg api`-style docs: `pg pack docs`. Cost numbers: `pg pack bench`. Remaining before the Stage 1 gate (1.9): the UI layout pass and AccessKit (D-061), the scale and save-size checks (S-061, S-064), and the Mods menu items listed above.
+**Stage 1: 1.8b, the consolidated UI layout pass, is in progress.** Tags: m1.7 and m1.8 are placed (m1.8 accepted). Done in 1.8b so far: Mods tiles, Saved worlds tiles, full-width groups, pack effects in the inspector only in developer mode, New world (D-064) and the border system (D-065: per-widget and per-group borders with style, width, tone, corners and a "between" style). Still in 1.8b, screen by screen with your direction: Options, AI options, pause menu, HUD, journal, console, inspector windows, a second New world pass, the Mods items listed below, scroll smoothing. Then, before the Stage 1 gate (1.9): the scale and save-size checks (S-061, S-064) and story digests (S-070). AccessKit is Stage 11.
 
 **Known, scheduled:** the map view still draws generated towns with the painter-based view (the real renderer is 1.6); building roles are not yet drawn differently; conversation bubbles and the inspector panel come with 1.6/1.7 (the data and `pg residents inspect` exist now).
 
@@ -20,11 +20,11 @@ The repository is public (D-047), so GitHub Actions minutes are free again. Loca
 
 ## Mods menu: not built yet (for the polish pass, you asked to note these)
 
-The Mods screen (D-060, D-061) is a first stage. Missing, to do in the UI polish pass or sooner if needed: the base game's size and file count in its tile; authorship, description, website and licence fields (the manifest has none yet, so they need a manifest change first); a pack's own settings page (the manifest already declares pack settings); enabling a pack's dependencies for you (today a missing dependency triggers the fallback to the base game); updating an installed pack in place, with the version change shown; a pack list per world (which packs a world was made with, and a warning when they differ); showing why a pack failed with a "copy error" button and the line number; search and sort for long lists; drag to reorder load order; a compatibility badge (API version, engine version); screenshots or an icon per pack; a confirmation before Remove; and keyboard handling for the unrolled tile's checkboxes (covered by the AccessKit pass).
+The Mods screen (D-060, D-061) is a first stage. Missing, to do in 1.8b (the UI layout pass) or sooner if needed: the base game's size and file count in its tile; authorship, description, website and licence fields (the manifest has none yet, so they need a manifest change first); a pack's own settings page (the manifest already declares pack settings); enabling a pack's dependencies for you (today a missing dependency triggers the fallback to the base game); updating an installed pack in place, with the version change shown; a pack list per world (which packs a world was made with, and a warning when they differ); showing why a pack failed with a "copy error" button and the line number; search and sort for long lists; drag to reorder load order; a compatibility badge (API version, engine version); screenshots or an icon per pack; a confirmation before Remove; and keyboard handling for the unrolled tile's checkboxes (covered by the AccessKit pass).
 
 ## Remaining 1.7 work, in the order we will do it
 
-(Layout pass round 1 is done (D-063): Mods tile fix, Saved worlds tiles, full-width groups. Round 2: New world is regrouped (D-064; preview slot, pack-list frame, settings boxes, bottom buttons; another pass expected). Next rounds need your direction per screen: AI options, pause menu, HUD, journal, console, inspector. Steps 1 to 6 are done. A UI layout pass over every screen is wanted before AccessKit: Options, Saved worlds, New world, AI options, inspector, journal, console, pause and HUD, in the style of the new Mods tiles. Direction from you needed per screen.)
+(Steps 1 to 6 are done. The UI layout pass is now milestone 1.8b in `docs/PLAN.md`; its progress is in Current focus above.)
 
 1. ~~**S-069 social report and S-067 console extras**~~ done (D-054) (easy, small, no state changes): the report is the tuning aid for the next step; the console extras are model and shell only.
 2. ~~**Social refinement batch: S-056 personality, S-057 per-turn tone and line bands, S-054 remember-when callbacks**~~ done (D-055) (medium; changes saved state, so one re-pin for all three, tuned with the social report).
@@ -42,7 +42,7 @@ Refinement noted: S-072 smooth zoom and pan (later pass).
 2. ~~1.4b Process and safety net~~ done (D-049): `pg pins`, `pg schema`, `pg milestone`, `pg bench`, cheaper CI, property tests, plateau soak.
 3. ~~1.5 AI lines~~ done (D-050); S-054 and S-057 moved to 1.6/1.7. **Done early in 1.6 (D-051):** generated lines are recorded into the history and recalled from the memories. **Next:** 1.6 native renderer (checkpoint for you): S-069 social report first; the renderer must call `set_dialogue_focus` and draw bubbles from `DialogueService::lines`.
 4. 1.6 Native renderer (checkpoint): S-069 social report first; render benchmark targets.
-5. 1.7 (S-056, S-058 observation and possession modes only, S-067), 1.8 (S-061, bench suite coverage, S-064), 1.9 gate (S-070 digest golden in `pg check --full`).
+5. 1.7 (S-056, S-058 observation and possession modes only, S-067) and 1.8 are done and tagged; 1.8b UI layout pass; then S-061, bench suite coverage, S-064; 1.9 gate (S-070 digest golden in `pg check --full`).
 6. Later: S-055 (Stage 2), S-053 (Stage 3), S-060 only when easy.
 
 Modes (D-048): observation mode includes possession and is all the product does today; player mode (a world-creation toggle locking the player to one pawn, blocking observation and possession) comes with possession in Stage 4.
