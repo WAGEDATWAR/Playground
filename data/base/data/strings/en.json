@@ -333,5 +333,12 @@
   "ui.mods.details": "Version {version}, {id}, {files} files, {size}, hash {hash}",
   "ui.mods.details_short": "Version {version}, {id}, hash {hash}",
   "ui.inspect.pack_effects": "What content packs are doing",
-  "ui.inspect.effect": "{point}: {value} (by {packs})"
+  "ui.inspect.effect": "{point}: {value} (by {packs})",
+  "ui.new.preview": "World preview (coming later)",
+  "ui.new.packs.title": "Content packs",
+  "ui.new.packs.note": "This world uses the base game and the packs enabled under Mods. Choosing packs for each world separately is not available yet.",
+  "ui.new.packs.choose": "Choose packs",
+  "ui.new.group.world": "World",
+  "ui.new.group.residents": "Residents",
+  "ui.new.group.content": "Content"
 }

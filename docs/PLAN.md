@@ -89,7 +89,7 @@ Decisions D-047 and D-048. Play modes: *observation mode* (includes possession) 
 | **1.7 (step 4b)** | Journal persistence: the town journal stored in the world state (schema 4), so it survives saving and loading and is part of replays and hashes |
 | **1.8** (profile pass) | S-061 conversation scale check, `pg bench` grows to cover every system, S-064 save size watch in the gate report |
 | **1.9** (Stage 1 gate) | S-070 story digests, with the digest golden part of `pg check --full` and `pg pins` |
-| **UI layout pass (D-061, D-063)** | Round 1 done; further rounds per screen with your direction. S-038 AccessKit is Stage 11 |
+| **UI layout pass (D-061, D-063)** | Round 1 done; New world done (D-064, expect another pass); further rounds per screen with your direction. S-038 AccessKit is Stage 11 |
 | **Stage 2** | S-055 friends seek each other out |
 | **Stage 3** | S-053 gossip and second-hand memories |
 | **Opportunistic** | S-060 local Linux check (very low priority; only when easy) |

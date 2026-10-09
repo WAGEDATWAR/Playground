@@ -85,6 +85,19 @@ pub enum Widget {
     },
     /// Widgets laid out side by side.
     Row(Vec<Widget>),
+    /// Two columns side by side, the left narrower; each follows vertically.
+    Columns {
+        left: Vec<Widget>,
+        right: Vec<Widget>,
+    },
+    /// An empty framed slot of a given height (points) with a caption: room kept for something that comes
+    /// later (the world preview).
+    Placeholder {
+        label: String,
+        height: u32,
+    },
+    /// Buttons side by side, centred, all one width, with space between (a screen's bottom buttons).
+    ButtonBar(Vec<Widget>),
     /// A section that scrolls inside a bounded height (points); its contents follow vertically.
     Scroll {
         max_height: u32,
@@ -153,9 +166,15 @@ impl Widget {
         f(self);
         match self {
             Widget::Row(c)
+            | Widget::ButtonBar(c)
             | Widget::Group { children: c, .. }
             | Widget::Scroll { children: c, .. } => {
                 for w in c {
+                    w.visit(f);
+                }
+            }
+            Widget::Columns { left, right } => {
+                for w in left.iter().chain(right) {
                     w.visit(f);
                 }
             }
@@ -169,6 +188,10 @@ impl Widget {
 pub struct Tree {
     pub title: String,
     pub widgets: Vec<Widget>,
+    /// Widgets pinned to the bottom of the screen, under the scrolling body (the screen's main buttons).
+    pub footer: Vec<Widget>,
+    /// How wide the screen's column is, in points; 0 is the narrow default.
+    pub width: u32,
 }
 
 impl Tree {
@@ -176,13 +199,22 @@ impl Tree {
         Tree {
             title: title.into(),
             widgets,
+            footer: Vec::new(),
+            width: 0,
         }
+    }
+
+    /// Pins `footer` to the bottom of the screen and makes the column `width` points wide.
+    pub fn with_footer(mut self, width: u32, footer: Vec<Widget>) -> Tree {
+        self.width = width;
+        self.footer = footer;
+        self
     }
 
     /// Every widget in reading order, containers included.
     pub fn walk(&self) -> Vec<&Widget> {
         let mut out = Vec::new();
-        for w in &self.widgets {
+        for w in self.widgets.iter().chain(&self.footer) {
             w.visit(&mut |x| out.push(x));
         }
         out
@@ -229,6 +261,12 @@ impl Tree {
         let _ = writeln!(out, "[{}]", self.title);
         for w in &self.widgets {
             snapshot_widget(&mut out, w, 1, focus);
+        }
+        if !self.footer.is_empty() {
+            let _ = writeln!(out, "  footer:");
+            for w in &self.footer {
+                snapshot_widget(&mut out, w, 2, focus);
+            }
         }
         out
     }
@@ -355,6 +393,26 @@ fn snapshot_widget(out: &mut String, w: &Widget, depth: usize, focus: Option<&st
         }
         Widget::Row(c) => {
             let _ = writeln!(out, "{pad}row:");
+            for x in c {
+                snapshot_widget(out, x, depth + 1, focus);
+            }
+        }
+        Widget::Columns { left, right } => {
+            let _ = writeln!(out, "{pad}columns:");
+            let _ = writeln!(out, "{pad}  left:");
+            for x in left {
+                snapshot_widget(out, x, depth + 2, focus);
+            }
+            let _ = writeln!(out, "{pad}  right:");
+            for x in right {
+                snapshot_widget(out, x, depth + 2, focus);
+            }
+        }
+        Widget::Placeholder { label, height } => {
+            let _ = writeln!(out, "{pad}[{label}] (empty slot, {height} high)");
+        }
+        Widget::ButtonBar(c) => {
+            let _ = writeln!(out, "{pad}buttons:");
             for x in c {
                 snapshot_widget(out, x, depth + 1, focus);
             }

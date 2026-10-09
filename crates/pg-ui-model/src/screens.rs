@@ -80,71 +80,107 @@ fn main_menu(worlds: &[WorldEntry], t: Text) -> Tree {
     )
 }
 
+/// The New world screen: a preview slot and the per-world pack list on the left, the settings in category
+/// boxes on the right, and Create / Back pinned side by side at the bottom.
 fn new_world(f: &NewWorldForm, t: Text) -> Tree {
-    let mut w = vec![
-        Widget::Heading(t("ui.new.title", &[])),
-        Widget::TextField {
-            id: "new.name".into(),
-            label: t("ui.new.name", &[]),
-            value: f.name.clone(),
-            secret: false,
-            hint: t("ui.new.name_hint", &[]),
+    let size_options = MapSize::ALL
+        .iter()
+        .map(|s| {
+            let (w, h) = s.tiles();
+            (
+                s.id().to_owned(),
+                t(
+                    &format!("ui.new.size.{}", s.id()),
+                    &[("w", &w.to_string()), ("h", &h.to_string())],
+                ),
+            )
+        })
+        .collect();
+    let group = |title: &str, children: Vec<Widget>| Widget::Group {
+        title: t(title, &[]),
+        children,
+    };
+    let left = vec![
+        Widget::Placeholder {
+            label: t("ui.new.preview", &[]),
+            height: 240,
         },
-        Widget::TextField {
-            id: "new.seed".into(),
-            label: t("ui.new.seed", &[]),
-            value: f.seed.clone(),
-            secret: false,
-            hint: t("ui.new.seed_hint", &[]),
-        },
-        Widget::Choice {
-            id: "new.size".into(),
-            label: t("ui.new.size", &[]),
-            options: MapSize::ALL
-                .iter()
-                .map(|s| {
-                    let (w, h) = s.tiles();
-                    (
-                        s.id().to_owned(),
-                        t(
-                            &format!("ui.new.size.{}", s.id()),
-                            &[("w", &w.to_string()), ("h", &h.to_string())],
-                        ),
-                    )
-                })
-                .collect(),
-            value: f.size.id().to_owned(),
-        },
-        Widget::Slider {
-            id: "new.residents".into(),
-            label: t("ui.new.residents", &[]),
-            min: 0,
-            max: 50,
-            value: f.residents,
-        },
-        Widget::Slider {
-            id: "new.water".into(),
-            label: t("ui.new.water", &[]),
-            min: 0,
-            max: 50,
-            value: f.water,
-        },
-        Widget::Choice {
-            id: "new.tone".into(),
-            label: t("ui.new.tone", &[]),
-            options: ["cozy", "standard", "mature"]
-                .iter()
-                .map(|v| ((*v).to_owned(), t(&format!("ui.new.tone.{v}"), &[])))
-                .collect(),
-            value: f.tone.clone(),
-        },
+        group(
+            "ui.new.packs.title",
+            vec![
+                Widget::Note(t("ui.new.packs.note", &[])),
+                Widget::disabled_button("new.packs", t("ui.new.packs.choose", &[])),
+            ],
+        ),
     ];
+    let right = vec![
+        group(
+            "ui.new.group.world",
+            vec![
+                Widget::TextField {
+                    id: "new.name".into(),
+                    label: t("ui.new.name", &[]),
+                    value: f.name.clone(),
+                    secret: false,
+                    hint: t("ui.new.name_hint", &[]),
+                },
+                Widget::TextField {
+                    id: "new.seed".into(),
+                    label: t("ui.new.seed", &[]),
+                    value: f.seed.clone(),
+                    secret: false,
+                    hint: t("ui.new.seed_hint", &[]),
+                },
+                Widget::Choice {
+                    id: "new.size".into(),
+                    label: t("ui.new.size", &[]),
+                    options: size_options,
+                    value: f.size.id().to_owned(),
+                },
+                Widget::Slider {
+                    id: "new.water".into(),
+                    label: t("ui.new.water", &[]),
+                    min: 0,
+                    max: 50,
+                    value: f.water,
+                },
+            ],
+        ),
+        group(
+            "ui.new.group.residents",
+            vec![Widget::Slider {
+                id: "new.residents".into(),
+                label: t("ui.new.residents", &[]),
+                min: 0,
+                max: 50,
+                value: f.residents,
+            }],
+        ),
+        group(
+            "ui.new.group.content",
+            vec![Widget::Choice {
+                id: "new.tone".into(),
+                label: t("ui.new.tone", &[]),
+                options: ["cozy", "standard", "mature"]
+                    .iter()
+                    .map(|v| ((*v).to_owned(), t(&format!("ui.new.tone.{v}"), &[])))
+                    .collect(),
+                value: f.tone.clone(),
+            }],
+        ),
+    ];
+    let mut w = vec![Widget::Heading(t("ui.new.title", &[]))];
     if let Some(e) = f.error {
         w.push(Widget::Label(t(e, &[])));
     }
-    w.push(Widget::button("new.create", t("ui.new.create", &[])));
-    w.push(Widget::button("new.back", t("ui.back", &[])));
-    Tree::new(t("ui.new.title", &[]), w)
+    w.push(Widget::Columns { left, right });
+    Tree::new(t("ui.new.title", &[]), w).with_footer(
+        960,
+        vec![Widget::ButtonBar(vec![
+            Widget::button("new.create", t("ui.new.create", &[])),
+            Widget::button("new.back", t("ui.back", &[])),
+        ])],
+    )
 }
 
 fn saved_worlds(worlds: &[WorldEntry], f: &SavedForm, t: Text) -> Tree {

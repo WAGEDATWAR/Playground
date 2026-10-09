@@ -386,9 +386,31 @@ impl App {
                                     .rect_filled(rect, 0.0, Color32::from_black_alpha(175));
                             }
                         }
+                        let width = if tree.width == 0 {
+                            420.0
+                        } else {
+                            tree.width as f32
+                        };
+                        if !tree.footer.is_empty() {
+                            // The screen's main buttons stay at the bottom, under the scrolling body.
+                            egui::Panel::bottom("screen-footer")
+                                .frame(Frame::new().inner_margin(egui::Margin::symmetric(12, 12)))
+                                .show(ui, |ui| {
+                                    centered_column(ui, width, |ui| {
+                                        let drawn = draw_widgets(
+                                            ui,
+                                            &tree.footer,
+                                            focus.as_deref(),
+                                            &self.tracker,
+                                            &mut images,
+                                        );
+                                        events.extend(drawn.events);
+                                    });
+                                });
+                        }
                         egui::ScrollArea::vertical().show(ui, |ui| {
                             ui.add_space(36.0);
-                            centered_column(ui, 420.0, |ui| {
+                            centered_column(ui, width, |ui| {
                                 let drawn: Drawn = draw_tree(
                                     ui,
                                     &tree,

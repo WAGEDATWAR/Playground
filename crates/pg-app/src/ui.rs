@@ -253,6 +253,24 @@ fn ring(ui: &egui::Ui, r: &egui::Response, id: &str, focus: Option<&str>) {
     }
 }
 
+fn draw_button(
+    ui: &mut egui::Ui,
+    id: &str,
+    label: &str,
+    enabled: bool,
+    width: f32,
+    focus: Option<&str>,
+    d: &mut Drawn,
+) {
+    let b = egui::Button::new(RichText::new(label).size(17.0)).min_size(egui::vec2(width, 34.0));
+    let r = ui.add_enabled(enabled, b);
+    ring(ui, &r, id, focus);
+    if r.clicked() {
+        d.events.push(UiEvent::Click(id.to_owned()));
+    }
+    d.rects.insert(id.to_owned(), r.rect);
+}
+
 /// `compact`: inside a row, where buttons take their natural width instead of filling the column.
 fn draw_widget(
     ui: &mut egui::Ui,
@@ -283,14 +301,7 @@ fn draw_widget(
             } else {
                 ui.available_width().min(420.0)
             };
-            let b = egui::Button::new(RichText::new(label).size(17.0))
-                .min_size(egui::vec2(width, 34.0));
-            let r = ui.add_enabled(*enabled, b);
-            ring(ui, &r, id, focus);
-            if r.clicked() {
-                d.events.push(UiEvent::Click(id.clone()));
-            }
-            d.rects.insert(id.clone(), r.rect);
+            draw_button(ui, id, label, *enabled, width, focus, d);
         }
         Widget::TextField {
             id,
@@ -446,6 +457,68 @@ fn draw_widget(
                         ui.add(egui::Label::new(t).wrap());
                     }
                 });
+        }
+        Widget::Columns { left, right } => {
+            // The left column takes two fifths of the room, the right the rest.
+            let gap = 16.0;
+            let total = ui.available_width();
+            let lw = ((total - gap) * 0.4).floor().max(0.0);
+            let rw = (total - gap - lw).max(0.0);
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = gap;
+                for (w, kids) in [(lw, left), (rw, right)] {
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(w, 0.0),
+                        Layout::top_down(Align::Min),
+                        |ui| {
+                            ui.set_width(w);
+                            for c in kids {
+                                draw_widget(ui, c, focus, focus_moved, false, images, d);
+                            }
+                        },
+                    );
+                }
+            });
+        }
+        Widget::Placeholder { label, height } => {
+            let (rect, _) = ui.allocate_exact_size(
+                egui::vec2(ui.available_width(), *height as f32),
+                egui::Sense::hover(),
+            );
+            let faint = ui.visuals().weak_text_color();
+            ui.painter()
+                .rect_filled(rect, 4.0, ui.visuals().extreme_bg_color);
+            ui.painter().rect_stroke(
+                rect,
+                4.0,
+                Stroke::new(1.0, faint.gamma_multiply(0.6)),
+                egui::StrokeKind::Inside,
+            );
+            ui.painter().text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                label,
+                egui::FontId::proportional(14.0),
+                faint,
+            );
+        }
+        Widget::ButtonBar(children) => {
+            // One width for every button, centred, with space between.
+            let (bw, gap) = (200.0, 16.0);
+            let n = children.len() as f32;
+            let used = n * bw + (n - 1.0).max(0.0) * gap;
+            let pad = ((ui.available_width() - used) / 2.0).max(0.0);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = gap;
+                ui.add_space(pad);
+                for c in children {
+                    if let Widget::Button { id, label, enabled } = c {
+                        draw_button(ui, id, label, *enabled, bw, focus, d);
+                    } else {
+                        draw_widget(ui, c, focus, focus_moved, true, images, d);
+                    }
+                }
+            });
         }
         Widget::Row(children) => {
             ui.horizontal_wrapped(|ui| {

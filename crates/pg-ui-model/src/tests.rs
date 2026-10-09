@@ -204,7 +204,7 @@ fn keyboard_only_new_world_flow_creates_a_world() {
     let mut m = boot(Vec::new(), None);
     assert!(press(&mut m, Key::Enter).is_empty());
     assert!(matches!(m.screen(), Screen::NewWorld(_)));
-    // Name field, seed field, size, residents, water, tone, create, back.
+    // Name field, seed field, size, water, residents, tone, then the bottom buttons: create, back.
     assert_eq!(m.focus(), Some("new.name"));
     m.update(UiEvent::Text("new.name".into(), "  Maple Creek ".into()));
     m.update(UiEvent::Text("new.seed".into(), "abc".into()));
@@ -213,12 +213,12 @@ fn keyboard_only_new_world_flow_creates_a_world() {
     assert_eq!(m.focus(), Some("new.size"));
     press(&mut m, Key::Right); // small -> medium
     press(&mut m, Key::Tab);
+    assert_eq!(m.focus(), Some("new.water"));
+    press(&mut m, Key::Tab);
     assert_eq!(m.focus(), Some("new.residents"));
     for _ in 0..5 {
         press(&mut m, Key::Right);
     }
-    press(&mut m, Key::Tab);
-    assert_eq!(m.focus(), Some("new.water"));
     press(&mut m, Key::Tab);
     assert_eq!(m.focus(), Some("new.tone"));
     press(&mut m, Key::Tab);
@@ -1400,4 +1400,22 @@ fn the_mods_screen_lists_packs_as_tiles_that_unroll_and_turns_its_controls_into_
     click(&mut m, "main.mods");
     click(&mut m, "mods.back");
     assert!(matches!(m.screen(), Screen::MainMenu));
+}
+
+#[test]
+fn new_world_is_two_columns_with_its_buttons_pinned_at_the_bottom() {
+    let mut m = boot(Vec::new(), None);
+    press(&mut m, Key::Enter);
+    let tree = m.tree(&show);
+    assert!(tree.width > 420, "a wide screen");
+    // Preview slot and pack list on the left, settings in boxes on the right.
+    let snap = tree.snapshot(None);
+    assert!(snap.contains("columns:"), "{snap}");
+    assert!(snap.contains("empty slot"), "{snap}");
+    assert!(snap.contains("== ui.new.packs.title =="), "{snap}");
+    assert!(snap.contains("== ui.new.group.world =="), "{snap}");
+    // Create and Back are side by side in the footer, not in the body.
+    assert!(matches!(tree.footer.as_slice(), [Widget::ButtonBar(b)] if b.len() == 2));
+    assert!(tree.widgets.iter().all(|w| w.id() != Some("new.create")));
+    assert!(tree.find("new.create").is_some() && tree.find("new.back").is_some());
 }

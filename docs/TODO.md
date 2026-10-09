@@ -24,7 +24,7 @@ The Mods screen (D-060, D-061) is a first stage. Missing, to do in the UI polish
 
 ## Remaining 1.7 work, in the order we will do it
 
-(Layout pass round 1 is done (D-063): Mods tile fix, Saved worlds tiles, full-width groups. Next rounds need your direction per screen: New world, AI options, pause menu, HUD, journal, console, inspector. Steps 1 to 6 are done. A UI layout pass over every screen is wanted before AccessKit: Options, Saved worlds, New world, AI options, inspector, journal, console, pause and HUD, in the style of the new Mods tiles. Direction from you needed per screen.)
+(Layout pass round 1 is done (D-063): Mods tile fix, Saved worlds tiles, full-width groups. Round 2: New world is regrouped (D-064; preview slot, pack-list frame, settings boxes, bottom buttons; another pass expected). Next rounds need your direction per screen: AI options, pause menu, HUD, journal, console, inspector. Steps 1 to 6 are done. A UI layout pass over every screen is wanted before AccessKit: Options, Saved worlds, New world, AI options, inspector, journal, console, pause and HUD, in the style of the new Mods tiles. Direction from you needed per screen.)
 
 1. ~~**S-069 social report and S-067 console extras**~~ done (D-054) (easy, small, no state changes): the report is the tuning aid for the next step; the console extras are model and shell only.
 2. ~~**Social refinement batch: S-056 personality, S-057 per-turn tone and line bands, S-054 remember-when callbacks**~~ done (D-055) (medium; changes saved state, so one re-pin for all three, tuned with the social report).
