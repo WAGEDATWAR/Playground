@@ -458,6 +458,50 @@ fn draw_widget(
                     }
                 });
         }
+        Widget::Stack(children) => {
+            for c in children {
+                draw_widget(ui, c, focus, focus_moved, compact, images, d);
+            }
+        }
+        Widget::Bordered { border, inner } => {
+            use pg_ui_model::widget::{BorderStyle, BorderTone};
+            let base = ui.visuals().widgets.inactive.fg_stroke.color;
+            let color = match border.tone {
+                BorderTone::Soft => base.gamma_multiply(0.35),
+                BorderTone::Normal => base.gamma_multiply(0.6),
+                BorderTone::Strong => base,
+            };
+            let width = border.width as f32;
+            let solid = border.style == BorderStyle::Solid;
+            let out = egui::Frame::new()
+                .stroke(if solid {
+                    Stroke::new(width, color)
+                } else {
+                    Stroke::NONE
+                })
+                .corner_radius(6)
+                .inner_margin(egui::Margin::same(10))
+                .show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
+                    draw_widget(ui, inner, focus, focus_moved, compact, images, d);
+                });
+            if border.style == BorderStyle::Dashed {
+                let r = out.response.rect;
+                let corners = [
+                    r.left_top(),
+                    r.right_top(),
+                    r.right_bottom(),
+                    r.left_bottom(),
+                    r.left_top(),
+                ];
+                ui.painter().add(egui::Shape::dashed_line(
+                    &corners,
+                    Stroke::new(width, color),
+                    6.0,
+                    4.0,
+                ));
+            }
+        }
         Widget::Columns { left, right } => {
             // The left column takes two fifths of the room, the right the rest.
             let gap = 16.0;

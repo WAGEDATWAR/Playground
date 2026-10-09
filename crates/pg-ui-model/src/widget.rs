@@ -85,6 +85,13 @@ pub enum Widget {
     },
     /// Widgets laid out side by side.
     Row(Vec<Widget>),
+    /// Widgets one under the other with nothing drawn around them (a plain vertical container).
+    Stack(Vec<Widget>),
+    /// Any widget inside a border of its own (style, width, tone), independent of the widget's own look.
+    Bordered {
+        border: Border,
+        inner: Box<Widget>,
+    },
     /// Two columns side by side, the left narrower; each follows vertically.
     Columns {
         left: Vec<Widget>,
@@ -108,6 +115,54 @@ pub enum Widget {
         title: String,
         children: Vec<Widget>,
     },
+}
+
+/// How a border is drawn. The model says what kind; the shell picks the colours from the theme.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BorderStyle {
+    None,
+    Solid,
+    Dashed,
+}
+
+/// How strongly a border stands out against the background.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BorderTone {
+    Soft,
+    Normal,
+    Strong,
+}
+
+/// A border around a widget, tuned apart from the widget it surrounds: style, width in points and tone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Border {
+    pub style: BorderStyle,
+    pub width: u32,
+    pub tone: BorderTone,
+}
+
+impl Border {
+    pub const fn solid(width: u32, tone: BorderTone) -> Border {
+        Border {
+            style: BorderStyle::Solid,
+            width,
+            tone,
+        }
+    }
+
+    pub const fn dashed(width: u32, tone: BorderTone) -> Border {
+        Border {
+            style: BorderStyle::Dashed,
+            width,
+            tone,
+        }
+    }
+
+    pub const NONE: Border = Border {
+        style: BorderStyle::None,
+        width: 0,
+        tone: BorderTone::Normal,
+    };
 }
 
 /// One choice in a drawer.
@@ -167,6 +222,7 @@ impl Widget {
         match self {
             Widget::Row(c)
             | Widget::ButtonBar(c)
+            | Widget::Stack(c)
             | Widget::Group { children: c, .. }
             | Widget::Scroll { children: c, .. } => {
                 for w in c {
@@ -178,6 +234,7 @@ impl Widget {
                     w.visit(f);
                 }
             }
+            Widget::Bordered { inner, .. } => inner.visit(f),
             _ => {}
         }
     }
@@ -410,6 +467,19 @@ fn snapshot_widget(out: &mut String, w: &Widget, depth: usize, focus: Option<&st
         }
         Widget::Placeholder { label, height } => {
             let _ = writeln!(out, "{pad}[{label}] (empty slot, {height} high)");
+        }
+        Widget::Stack(c) => {
+            for x in c {
+                snapshot_widget(out, x, depth, focus);
+            }
+        }
+        Widget::Bordered { border, inner } => {
+            let _ = writeln!(
+                out,
+                "{pad}border ({:?} {} {:?}):",
+                border.style, border.width, border.tone
+            );
+            snapshot_widget(out, inner, depth + 1, focus);
         }
         Widget::ButtonBar(c) => {
             let _ = writeln!(out, "{pad}buttons:");

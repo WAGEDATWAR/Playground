@@ -1419,3 +1419,17 @@ fn new_world_is_two_columns_with_its_buttons_pinned_at_the_bottom() {
     assert!(tree.widgets.iter().all(|w| w.id() != Some("new.create")));
     assert!(tree.find("new.create").is_some() && tree.find("new.back").is_some());
 }
+
+#[test]
+fn the_settings_column_has_a_border_of_its_own_around_its_category_boxes() {
+    let mut m = boot(Vec::new(), None);
+    press(&mut m, Key::Enter);
+    let snap = m.tree(&show).snapshot(None);
+    let outer = snap
+        .find("border (Solid 2 Strong)")
+        .expect("a column border");
+    let boxes = snap
+        .find("== ui.new.group.world ==")
+        .expect("a category box");
+    assert!(outer < boxes, "{snap}");
+}

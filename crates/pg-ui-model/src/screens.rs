@@ -7,7 +7,7 @@
 use crate::app::{AiForm, AppModel, ConnUi, LoginUi, NewWorldForm, SavedForm, Screen};
 use crate::layout::{Align, DrawerLayout};
 use crate::types::*;
-use crate::widget::{DrawerItem, Tree, Widget};
+use crate::widget::{Border, BorderTone, DrawerItem, Tree, Widget};
 use pg_host::Secret;
 
 fn hhmm(minute_of_day: u32) -> String {
@@ -113,7 +113,7 @@ fn new_world(f: &NewWorldForm, t: Text) -> Tree {
             ],
         ),
     ];
-    let right = vec![
+    let settings = vec![
         group(
             "ui.new.group.world",
             vec![
@@ -169,6 +169,11 @@ fn new_world(f: &NewWorldForm, t: Text) -> Tree {
             }],
         ),
     ];
+    // The settings column has a border of its own; the category boxes inside keep their own, apart from it.
+    let right = vec![Widget::Bordered {
+        border: Border::solid(2, BorderTone::Strong),
+        inner: Box::new(Widget::Stack(settings)),
+    }];
     let mut w = vec![Widget::Heading(t("ui.new.title", &[]))];
     if let Some(e) = f.error {
         w.push(Widget::Label(t(e, &[])));
