@@ -112,6 +112,7 @@ pub fn tree(v: &ResidentView, t: Text, dev: bool) -> Tree {
         None => t("ui.inspect.doing", &[("activity", &v.activity)]),
     }));
     w.push(Widget::Group {
+        border: crate::widget::Border::GROUP,
         title: t("ui.inspect.needs", &[]),
         children: v
             .needs
@@ -123,6 +124,7 @@ pub fn tree(v: &ResidentView, t: Text, dev: bool) -> Tree {
             .collect(),
     });
     w.push(Widget::Group {
+        border: crate::widget::Border::GROUP,
         title: t("ui.inspect.memories", &[]),
         children: if v.memories.is_empty() {
             vec![Widget::Note(t("ui.inspect.none", &[]))]
@@ -145,6 +147,7 @@ pub fn tree(v: &ResidentView, t: Text, dev: bool) -> Tree {
         },
     });
     w.push(Widget::Group {
+        border: crate::widget::Border::GROUP,
         title: t("ui.inspect.relationships", &[]),
         children: if v.relationships.is_empty() {
             vec![Widget::Note(t("ui.inspect.none", &[]))]
@@ -207,6 +210,7 @@ pub fn tree(v: &ResidentView, t: Text, dev: bool) -> Tree {
     }
     if dev && !v.pack_effects.is_empty() {
         w.push(Widget::Group {
+            border: crate::widget::Border::GROUP,
             title: t("ui.inspect.pack_effects", &[]),
             children: v
                 .pack_effects
@@ -226,6 +230,7 @@ pub fn tree(v: &ResidentView, t: Text, dev: bool) -> Tree {
         });
     }
     w.push(Widget::Group {
+        border: crate::widget::Border::GROUP,
         title: t("ui.inspect.conversations", &[]),
         children: talks,
     });

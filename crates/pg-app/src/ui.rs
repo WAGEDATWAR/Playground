@@ -9,7 +9,7 @@ use egui::{Align, Color32, Id, Key as EKey, Layout, Modifiers, RichText, Stroke}
 use pg_host::console::Severity;
 use pg_ui_model::layout::{self, DrawerLayout};
 use pg_ui_model::types::{Key, UiEvent};
-use pg_ui_model::widget::{DrawerItem, Tree, Widget};
+use pg_ui_model::widget::{Border, BorderStyle, BorderTone, Corners, DrawerItem, Tree, Widget};
 use std::collections::BTreeMap;
 
 /// What one drawn tree produced.
@@ -464,43 +464,9 @@ fn draw_widget(
             }
         }
         Widget::Bordered { border, inner } => {
-            use pg_ui_model::widget::{BorderStyle, BorderTone};
-            let base = ui.visuals().widgets.inactive.fg_stroke.color;
-            let color = match border.tone {
-                BorderTone::Soft => base.gamma_multiply(0.35),
-                BorderTone::Normal => base.gamma_multiply(0.6),
-                BorderTone::Strong => base,
-            };
-            let width = border.width as f32;
-            let solid = border.style == BorderStyle::Solid;
-            let out = egui::Frame::new()
-                .stroke(if solid {
-                    Stroke::new(width, color)
-                } else {
-                    Stroke::NONE
-                })
-                .corner_radius(6)
-                .inner_margin(egui::Margin::same(10))
-                .show(ui, |ui| {
-                    ui.set_min_width(ui.available_width());
-                    draw_widget(ui, inner, focus, focus_moved, compact, images, d);
-                });
-            if border.style == BorderStyle::Dashed {
-                let r = out.response.rect;
-                let corners = [
-                    r.left_top(),
-                    r.right_top(),
-                    r.right_bottom(),
-                    r.left_bottom(),
-                    r.left_top(),
-                ];
-                ui.painter().add(egui::Shape::dashed_line(
-                    &corners,
-                    Stroke::new(width, color),
-                    6.0,
-                    4.0,
-                ));
-            }
+            framed(ui, border, 10, |ui| {
+                draw_widget(ui, inner, focus, focus_moved, compact, images, d);
+            });
         }
         Widget::Columns { left, right } => {
             // The left column takes two fifths of the room, the right the rest.
@@ -589,11 +555,13 @@ fn draw_widget(
                     }
                 });
         }
-        Widget::Group { title, children } => {
+        Widget::Group {
+            title,
+            border,
+            children,
+        } => {
             ui.add_space(6.0);
-            ui.group(|ui| {
-                // Every group is as wide as the room it is in, so a screen's groups line up.
-                ui.set_min_width(ui.available_width());
+            framed(ui, border, 6, |ui| {
                 if !title.is_empty() {
                     ui.label(RichText::new(title).size(18.0).strong());
                 }
@@ -602,6 +570,66 @@ fn draw_widget(
                 }
             });
         }
+    }
+}
+
+/// Draws `add` inside a frame with `border` (style, width, tone, corners) and `margin` points of room. The
+/// frame is as wide as the room it is in, so boxes on one screen line up. A border of `None` keeps the room
+/// but draws nothing.
+fn framed(ui: &mut egui::Ui, border: &Border, margin: i8, add: impl FnOnce(&mut egui::Ui)) {
+    let base = ui.visuals().widgets.noninteractive.bg_stroke.color;
+    let strong = ui.visuals().widgets.inactive.fg_stroke.color;
+    let color = match border.tone {
+        BorderTone::Soft => base.gamma_multiply(0.5),
+        BorderTone::Normal => base,
+        BorderTone::Strong => strong,
+    };
+    let width = border.width as f32;
+    let radius: u8 = match border.corners {
+        Corners::Rounded => 6,
+        Corners::Square => 0,
+    };
+    let stroke = Stroke::new(width, color);
+    let out = egui::Frame::new()
+        .stroke(if border.style == BorderStyle::Solid {
+            stroke
+        } else {
+            Stroke::NONE
+        })
+        .corner_radius(radius)
+        .inner_margin(egui::Margin::same(margin))
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            add(ui);
+        });
+    if border.style == BorderStyle::Dashed {
+        let r = out.response.rect;
+        let points = if radius == 0 {
+            vec![
+                r.left_top(),
+                r.right_top(),
+                r.right_bottom(),
+                r.left_bottom(),
+                r.left_top(),
+            ]
+        } else {
+            // Rounded corners are approximated by cutting each corner a little.
+            let k = f32::from(radius) * 0.6;
+            let (l, t, rt, b) = (r.left(), r.top(), r.right(), r.bottom());
+            vec![
+                egui::pos2(l + k, t),
+                egui::pos2(rt - k, t),
+                egui::pos2(rt, t + k),
+                egui::pos2(rt, b - k),
+                egui::pos2(rt - k, b),
+                egui::pos2(l + k, b),
+                egui::pos2(l, b - k),
+                egui::pos2(l, t + k),
+                egui::pos2(l + k, t),
+            ]
+        };
+        ui.painter()
+            .add(egui::Shape::dashed_line(&points, stroke, 6.0, 4.0));
     }
 }
 

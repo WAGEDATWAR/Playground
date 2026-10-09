@@ -113,6 +113,8 @@ pub enum Widget {
     /// A group with a title (an empty title draws no heading); its contents follow vertically.
     Group {
         title: String,
+        /// The group's border; [`Border::NONE`] draws none (the room is kept, so nothing shifts).
+        border: Border,
         children: Vec<Widget>,
     },
 }
@@ -133,12 +135,21 @@ pub enum BorderTone {
     Strong,
 }
 
-/// A border around a widget, tuned apart from the widget it surrounds: style, width in points and tone.
+/// Whether a border's corners are rounded or perfectly square.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Corners {
+    Rounded,
+    Square,
+}
+
+/// A border around a widget, tuned apart from the widget it surrounds: style, width in points, tone and
+/// corners.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Border {
     pub style: BorderStyle,
     pub width: u32,
     pub tone: BorderTone,
+    pub corners: Corners,
 }
 
 impl Border {
@@ -147,6 +158,7 @@ impl Border {
             style: BorderStyle::Solid,
             width,
             tone,
+            corners: Corners::Rounded,
         }
     }
 
@@ -155,14 +167,31 @@ impl Border {
             style: BorderStyle::Dashed,
             width,
             tone,
+            corners: Corners::Rounded,
         }
+    }
+
+    /// The same border with perfectly square corners.
+    pub const fn square(mut self) -> Border {
+        self.corners = Corners::Square;
+        self
+    }
+
+    /// The same border with rounded corners.
+    pub const fn rounded(mut self) -> Border {
+        self.corners = Corners::Rounded;
+        self
     }
 
     pub const NONE: Border = Border {
         style: BorderStyle::None,
         width: 0,
         tone: BorderTone::Normal,
+        corners: Corners::Rounded,
     };
+
+    /// What a group has unless a screen says otherwise: a thin, normal, rounded line.
+    pub const GROUP: Border = Border::solid(1, BorderTone::Normal);
 }
 
 /// One choice in a drawer.
@@ -476,8 +505,15 @@ fn snapshot_widget(out: &mut String, w: &Widget, depth: usize, focus: Option<&st
         Widget::Bordered { border, inner } => {
             let _ = writeln!(
                 out,
-                "{pad}border ({:?} {} {:?}):",
-                border.style, border.width, border.tone
+                "{pad}border ({:?} {} {:?}{}):",
+                border.style,
+                border.width,
+                border.tone,
+                if border.corners == Corners::Square {
+                    " square"
+                } else {
+                    ""
+                }
             );
             snapshot_widget(out, inner, depth + 1, focus);
         }
@@ -496,8 +532,20 @@ fn snapshot_widget(out: &mut String, w: &Widget, depth: usize, focus: Option<&st
                 snapshot_widget(out, x, depth + 1, focus);
             }
         }
-        Widget::Group { title, children } => {
-            let _ = writeln!(out, "{pad}== {title} ==");
+        Widget::Group {
+            title,
+            border,
+            children,
+        } => {
+            if *border == Border::GROUP {
+                let _ = writeln!(out, "{pad}== {title} ==");
+            } else {
+                let _ = writeln!(
+                    out,
+                    "{pad}== {title} == [{:?} {} {:?} {:?}]",
+                    border.style, border.width, border.tone, border.corners
+                );
+            }
             for x in children {
                 snapshot_widget(out, x, depth + 1, focus);
             }
@@ -519,6 +567,7 @@ mod tests {
                     Widget::disabled_button("b", "B"),
                 ]),
                 Widget::Group {
+                    border: crate::widget::Border::GROUP,
                     title: "G".into(),
                     children: vec![
                         Widget::Toggle {
@@ -557,5 +606,38 @@ mod tests {
             "{s}"
         );
         assert!(!s.contains("secret"), "{s}");
+    }
+}
+
+#[cfg(test)]
+mod border_tests {
+    use super::*;
+
+    #[test]
+    fn a_group_border_can_be_removed_or_squared_and_the_snapshot_says_so() {
+        let g = |border| Widget::Group {
+            title: "G".into(),
+            border,
+            children: vec![Widget::Label("x".into())],
+        };
+        let t = Tree::new(
+            "T",
+            vec![
+                g(Border::GROUP),
+                g(Border::NONE),
+                g(Border::solid(2, BorderTone::Strong).square()),
+                Widget::Bordered {
+                    border: Border::dashed(1, BorderTone::Soft).square(),
+                    inner: Box::new(Widget::Label("y".into())),
+                },
+            ],
+        );
+        let s = t.snapshot(None);
+        assert!(s.contains("== G ==\n"), "{s}");
+        assert!(s.contains("== G == [None 0 Normal Rounded]"), "{s}");
+        assert!(s.contains("== G == [Solid 2 Strong Square]"), "{s}");
+        assert!(s.contains("border (Dashed 1 Soft square):"), "{s}");
+        assert_eq!(Border::GROUP.corners, Corners::Rounded);
+        assert_eq!(Border::NONE.style, BorderStyle::None);
     }
 }

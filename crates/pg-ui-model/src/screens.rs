@@ -97,6 +97,7 @@ fn new_world(f: &NewWorldForm, t: Text) -> Tree {
         })
         .collect();
     let group = |title: &str, children: Vec<Widget>| Widget::Group {
+        border: crate::widget::Border::GROUP,
         title: t(title, &[]),
         children,
     };
@@ -239,6 +240,7 @@ fn saved_worlds(worlds: &[WorldEntry], f: &SavedForm, t: Text) -> Tree {
             }
         }
         tiles.push(Widget::Group {
+            border: crate::widget::Border::GROUP,
             title: String::new(),
             children: kids,
         });
@@ -314,6 +316,7 @@ fn options(items: &[SettingItem], t: Text) -> Tree {
     groups.sort_by_key(|(g, _)| g == "dev");
     for (g, children) in groups {
         w.push(Widget::Group {
+            border: crate::widget::Border::GROUP,
             title: t(&format!("ui.options.group.{g}"), &[]),
             children,
         });
@@ -1007,6 +1010,7 @@ fn mod_tile(m: &AppModel, p: &crate::types::PackRow, t: Text) -> Widget {
         }
     }
     Widget::Group {
+        border: crate::widget::Border::GROUP,
         title: String::new(),
         children: kids,
     }
