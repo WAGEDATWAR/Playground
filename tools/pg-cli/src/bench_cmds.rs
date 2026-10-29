@@ -81,6 +81,22 @@ const TARGETS: &[Target] = &[
         budget_ms: Some(30_000),
     },
     Target {
+        id: "scale",
+        what: "profile of a 50-resident town for three game days: per-system cost with the real systems (S-061)",
+        args: &[
+            "profile",
+            "--town",
+            "96x72",
+            "--residents",
+            "50",
+            "--content",
+            "data/base",
+            "--days",
+            "3",
+        ],
+        budget_ms: Some(15_000),
+    },
+    Target {
         id: "worldgen",
         what: "town generation, 96x72 with 50 residents",
         args: &[

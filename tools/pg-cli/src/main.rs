@@ -102,7 +102,9 @@ USAGE:
         Run a world on the simulation thread in real time with autosave, optional shadow
         verification and a final save; creates the slot if absent, loads it if present.
     pg profile [--dev-map WxH] [--dev-pawns N] [--days D | --ticks N] [--threads N]
-        Time every system over a headless run (default 200 pawns, one day); prints the table.
+               [--town WxH [--residents N] [--water P] [--content dir]]
+        Time every system over a headless run (default 200 dev pawns, one day); prints the table. With --town the
+        run is a generated town with its real systems (needs, schedules, conversations, memories).
     pg pack lint <dir> [--base dir] [--with dir]...
         Load a pack with the base pack, lint its scripts (API names, capabilities, order-sensitive
         iteration, module-level state) and start it in the script host.

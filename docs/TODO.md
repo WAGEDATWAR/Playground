@@ -4,7 +4,7 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Stage 1: 1.8b, the consolidated UI layout pass, is complete and waiting for your review checkpoint.** Tags: m1.7 and m1.8 are placed (m1.8 accepted). Done in 1.8b so far: Mods tiles, Saved worlds tiles, full-width groups, pack effects in the inspector only in developer mode, New world (D-064) and the border system (D-065: per-widget and per-group borders with style, width, tone, corners and a "between" style). Also done (D-067): pause menu, Options, AI options. D-070: the visual design (`docs/UI-DESIGN.md`, `theme.rs`), approved, and the map-seam fix. Inspector, journal and console windows are done (D-073). HUD strip done (D-074); Mods and Saved worlds redesigned as list and detail (D-076). New world preview, Random seed and pack list are done (D-077); the Mods polish list is done (D-078). 1.8b is ready for your review checkpoint. the Mods items listed below, scroll smoothing. Then, before the Stage 1 gate (1.9): the scale and save-size checks (S-061, S-064) and story digests (S-070). AccessKit is Stage 11.
+**Stage 1: 1.9, the gate, is in progress** (steps in `docs/PLAN.md`; deferrals walked from `docs/DEFERRALS.md`). 1.8b is accepted and tagged m1.8b. Next: step 1 (register review), then S-061, S-064, S-070, the Stage 1 scenarios and soak bounds, the DF-001 decision, `cargo deny` in the local gate, and the gate report. AccessKit is Stage 11 (DF-010).
 
 **Known, scheduled:** the map view still draws generated towns with the painter-based view (the real renderer is 1.6); building roles are not yet drawn differently; conversation bubbles and the inspector panel come with 1.6/1.7 (the data and `pg residents inspect` exist now).
 

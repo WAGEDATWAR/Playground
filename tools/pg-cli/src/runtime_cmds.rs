@@ -36,6 +36,9 @@ const SPEC: Spec<'static> = Spec {
         "autosave-minutes",
         "content",
         "scrub",
+        "town",
+        "residents",
+        "water",
     ],
     switches: &[],
     optional: &[],
@@ -89,8 +92,25 @@ pub fn profile_cmd(args: &[String]) -> Result<ExitCode, String> {
     let p = parse(args, &SPEC)?;
     let seed = p.one("seed").unwrap_or("profile");
     let size = map_size(p.one("dev-map"), (96, 72, 1))?;
-    let pawns = p.parse::<u32>("dev-pawns")?.unwrap_or(200);
     let threads = p.parse::<usize>("threads")?.unwrap_or(1);
+    // `--town WxH [--residents N] [--water P] [--content dir]`: profile a generated town with its real systems
+    // (needs, schedules, conversations, memories) instead of dev pawns.
+    let town = match p.one("town") {
+        Some(t) => {
+            let (w, h, _) = parse_size(t)?;
+            Some((
+                w,
+                h,
+                p.parse::<u32>("water")?.unwrap_or(18),
+                p.parse::<u32>("residents")?.unwrap_or(14),
+            ))
+        }
+        None => None,
+    };
+    let pawns = match town {
+        Some((_, _, _, residents)) => residents,
+        None => p.parse::<u32>("dev-pawns")?.unwrap_or(200),
+    };
     let ticks = match (p.parse::<u64>("days")?, p.parse::<u64>("ticks")?) {
         (Some(d), None) => d * pg_core::time::TICKS_PER_DAY,
         (None, Some(t)) => t,
@@ -98,8 +118,40 @@ pub fn profile_cmd(args: &[String]) -> Result<ExitCode, String> {
         _ => return Err("use either --days or --ticks".into()),
     };
     let prof = Profiler::new();
-    let factory = SimFactory::dev(None, threads).with_profiler(Some(prof.clone()));
-    let mut sim = populated_sim(&factory, seed, size, pawns)?;
+    let content = match town {
+        Some(_) => {
+            let dirs: Vec<String> = p.all("content").into_iter().map(str::to_owned).collect();
+            let dirs = if dirs.is_empty() {
+                vec![crate::shared::DEFAULT_CONTENT_DIR.to_owned()]
+            } else {
+                dirs
+            };
+            Some(load_content(&dirs)?)
+        }
+        None => None,
+    };
+    let factory = SimFactory::dev(content, threads).with_profiler(Some(prof.clone()));
+    let mut sim = match town {
+        Some((w, h, water, residents)) => {
+            let mut sim = factory.new_sim(WorldState::new("Profile Town", seed));
+            sim.submit(
+                0,
+                SimInput::Command {
+                    actor: None,
+                    cmd: Command::GenerateTown {
+                        w,
+                        h,
+                        water,
+                        residents,
+                        tone: "standard".into(),
+                    },
+                },
+            )
+            .map_err(|e| e.to_string())?;
+            sim
+        }
+        None => populated_sim(&factory, seed, size, pawns)?,
+    };
     sim.run_ticks(1).map_err(|e| e.to_string())?; // build the world outside the measured run
     prof.reset();
     let start = Instant::now();
