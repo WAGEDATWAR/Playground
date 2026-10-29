@@ -337,3 +337,17 @@ work never shares a name. A passing `pg milestone` makes one too (`--no-preview`
 and keeps the newest 8. The program finds `data/base` by walking up from where it sits, so it runs from `preview/`
 as it is; it uses your normal Playground data folder for saves and settings (add `--data-dir <folder>` to keep a
 preview's saves apart).
+
+## Story digests
+
+A digest is what a seeded town did, as prose, recorded as a golden so a change in behaviour shows as a few lines to
+read instead of a hash.
+
+```
+pg residents digest --seed digest-a --town 48x36 --residents 14 --days 10 --content data/base
+pg residents digest --check golden/story-digest-small.txt     # compare; prints only the lines that differ
+pg residents digest --update golden/story-digest-small.txt    # accept the change
+```
+
+The goldens (`golden/story-digest-*.txt`) are checked by `pg pins` and `pg check` (the month-long one by
+`pg check --full`). A golden's first line holds its settings, so the file alone says how to regenerate it.

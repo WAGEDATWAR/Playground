@@ -14,10 +14,11 @@ pub fn residents_cmd(args: &[String]) -> Result<ExitCode, String> {
         Some("generate") => generate(&args[1..]),
         Some("inspect") => inspect(&args[1..]),
         Some("report") => report(&args[1..]),
+        Some("digest") => crate::digest_cmds::digest_cmd(&args[1..]),
         Some(other) => Err(format!(
-            "unknown residents command '{other}' (try generate, inspect or report)"
+            "unknown residents command '{other}' (try generate, inspect, report or digest)"
         )),
-        None => Err("residents needs a command: generate, inspect or report".into()),
+        None => Err("residents needs a command: generate, inspect, report or digest".into()),
     }
 }
 

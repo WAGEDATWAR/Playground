@@ -36,6 +36,8 @@ enum Kind {
         slow: bool,
     },
     Town,
+    /// A story digest golden (`pg residents digest`, S-070): prose, so a change can be read, not just seen.
+    Digest(String),
     FixtureV3,
     FixtureV4,
     /// The saved world's shape (`pg schema`): it is sampled from a running town, so a change in behaviour can
@@ -105,6 +107,12 @@ fn pins() -> Vec<Pin> {
         name: "town generator starting hash".into(),
         kind: Kind::Town,
     });
+    for path in crate::check_cmds::digest_goldens() {
+        v.push(Pin {
+            name: format!("story digest: {}", crate::check_cmds::digest_name(&path)),
+            kind: Kind::Digest(path),
+        });
+    }
     v
 }
 
@@ -186,6 +194,10 @@ fn check_one(pin: &Pin) -> (bool, String) {
         Kind::Schema => {
             let (ok, out) = run_self(&["schema", "check"]);
             (ok, last_lines(&out, 1))
+        }
+        Kind::Digest(path) => {
+            let (ok, out) = run_self(&["residents", "digest", "--check", path]);
+            (ok, last_lines(&out, if ok { 1 } else { 12 }))
         }
         Kind::Town => {
             let args = town_args(&town_pin());
@@ -294,6 +306,20 @@ fn update_one(pin: &Pin) -> (bool, String) {
         Kind::Schema => {
             let (ok, out) = run_self(&["schema", "update"]);
             (ok, last_lines(&out, 1))
+        }
+        Kind::Digest(path) => {
+            // Show what changed in words before the file is rewritten (S-059: where did it change).
+            let (_, before) = run_self(&["residents", "digest", "--check", path]);
+            let (ok, out) = run_self(&["residents", "digest", "--update", path]);
+            (
+                ok,
+                format!(
+                    "{}
+    {}",
+                    last_lines(&before, 12),
+                    last_lines(&out, 1)
+                ),
+            )
         }
         Kind::Town => {
             let args = town_args("00000000");

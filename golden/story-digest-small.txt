@@ -1,0 +1,26 @@
+# seed=digest-a town=48x36 residents=14 days=10 content=data/base
+Story digest: seed 'digest-a', a 48x36 town, 14 residents, 10 days. Final state b676c451.
+
+Firsts
+  first conversation: day 0, 00:04 - Imani Ellis and Grace Ellis (small talk, warm)
+  first warming: day 0, 19:14 - Zane Nakamura and Uma Nakamura, Friendly to Friend
+  first rift: none
+  first collapse: none
+
+Who talked most
+  Maya Adler: 102 conversations
+  Imani Ellis: 102 conversations
+  Kai Hartley: 90 conversations
+
+The town: 501 conversations, 39 relationships warmed, 0 soured, 0 collapses.
+  topics: small talk 161, work 105, town news 86, food 82, remember 39, personal 16, complaint 12
+  relationships (84): Close friend 7, Friend 6, Friendly 7, Acquaintance 21, Stranger 43
+  closest pair: Ivan Adler and Lena Adler (1000); coolest: Lena Adler and Zane Nakamura (-20)
+
+From the journal (the most recent notable entries)
+  day 9, 18:50 - Grace Ellis and Elena Hartley are now Friend.
+  day 9, 18:52 - Leo Adler and Imani Ellis are now Friendly.
+  day 9, 18:56 - Ivan Adler and Grace Ellis are now Acquaintance.
+  day 9, 19:00 - Mateo Petrov and Elena Hartley are now Acquaintance.
+  day 9, 19:02 - Tariq Hartley and Kai Hartley are now Close friend.
+  day 9, 19:10 - Leo Adler and Maya Adler are now Close friend.

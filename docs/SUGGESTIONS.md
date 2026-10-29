@@ -165,13 +165,13 @@ All accepted on 2026-10-08 (D-047, D-048), with the notes marked **Decision** be
 
 - **S-069 Social report** · tooling · accepted · `pg sim --social-report`: loneliness histogram, conversations per day, label counts, strongest and weakest pairs, and an ASCII or DOT relationship graph. Tells you in ten seconds whether tuning (cooldown, chance, topic weights) did what you meant, and feeds the inspector's town view in 1.7. · Low. · **Target: before tuning in 1.6.**
 - **S-058 Town journal** · UX · accepted · A player-facing feed of notable events built from the event catalog's severity table (new friendships and rifts, collapses, big memories). The data exists; 1.7's UI can render it, and it is the best way to notice a town when no single resident is in focus. **Decision: available in observation mode and possession mode only, never in player mode (D-048).** · Medium. · **Target: 1.7.**
-- **S-070 Story digests** · testing · accepted · A per-seed readable digest of notable events (first friendship, first rift, first collapse, busiest talker) recorded as a golden. A diff of prose is easier to review than a hash and shows when a change altered behaviour in a way you can feel. **Decision: the digest golden is part of `pg check --full`** (and of `pg pins`, S-051). · Medium. · **Target: Stage 1 gate.**
+- **S-070 Story digests** · testing · done in 1.9 (D-083) · A per-seed readable digest of notable events (first friendship, first rift, first collapse, busiest talker) recorded as a golden. A diff of prose is easier to review than a hash and shows when a change altered behaviour in a way you can feel. **Decision: the digest golden is part of `pg check --full`** (and of `pg pins`, S-051). · Medium. · **Target: Stage 1 gate.**
 
 ### Performance and robustness
 
-- **S-061 Scale check for conversations** · performance · accepted · The pair search is a scan, fine at 14 to 30 residents. Add a 150-resident profile run to `pg check` (budget reported, not failed) and build the 8x8 spatial hash only if the number is bad. · Low. · **Target: 1.8 profile pass.**
+- **S-061 Scale check for conversations** · performance · done in 1.9 (D-081) · The pair search is a scan, fine at 14 to 30 residents. Add a 150-resident profile run to `pg check` (budget reported, not failed) and build the 8x8 spatial hash only if the number is bad. · Low. · **Target: 1.8 profile pass.**
 - **S-052 Soak checks plateau, not ratio** · testing · accepted · The soak's "state may grow 3x from day 5" is blunt now that memories fade over weeks. Compare the last ten days with the ten before instead (small growth means a steady state) and fail on a rising trend. · Low. · **Target: soon.**
-- **S-064 Save size watch** · performance · accepted · Saved state is about 590 KB for 20 residents after 70 days; `pg save create` could report size by table so memory growth is visible. Interning repeated strings is possible later and not needed yet. · Low. · **Target: Stage 1 gate report.**
+- **S-064 Save size watch** · performance · done in 1.9 (D-082) · Saved state is about 590 KB for 20 residents after 70 days; `pg save create` could report size by table so memory growth is visible. Interning repeated strings is possible later and not needed yet. · Low. · **Target: Stage 1 gate report.**
 
 ### Console and tooling
 

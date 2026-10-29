@@ -14,6 +14,29 @@ struct Check {
     needs: Option<&'static str>,
 }
 
+/// The story digest goldens in `golden/`, sorted.
+pub fn digest_goldens() -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir("golden")
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path().to_string_lossy().replace('\\', "/"))
+        .filter(|p| p.contains("story-digest-") && p.ends_with(".txt"))
+        .collect();
+    v.sort();
+    v
+}
+
+/// `golden/story-digest-small.txt` is called `small`.
+pub fn digest_name(path: &str) -> String {
+    path.rsplit('/')
+        .next()
+        .unwrap_or(path)
+        .trim_start_matches("story-digest-")
+        .trim_end_matches(".txt")
+        .to_owned()
+}
+
 fn args(list: &[&str]) -> Vec<String> {
     list.iter().map(|s| (*s).to_owned()).collect()
 }
@@ -341,6 +364,24 @@ pub fn check_cmd(rest: &[String]) -> Result<ExitCode, String> {
             needs: Some("golden/dev-town-3days.json"),
         },
     ];
+    // The story digests (S-070): what a seeded town does, as prose, against a recorded golden. The month-long one
+    // is part of `--full`.
+    for path in digest_goldens() {
+        let slow = path.contains("month");
+        if slow && !full {
+            continue;
+        }
+        checks.push(Check {
+            name: Box::leak(format!("story digest: {}", digest_name(&path)).into_boxed_str()),
+            args: vec![
+                "residents".into(),
+                "digest".into(),
+                "--check".into(),
+                path.clone(),
+            ],
+            needs: Some("data/base"),
+        });
+    }
     if full {
         checks.push(Check {
             name: "30-day soak (pinned hash)",

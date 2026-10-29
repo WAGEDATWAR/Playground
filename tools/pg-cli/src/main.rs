@@ -16,6 +16,7 @@ mod args;
 mod bench_cmds;
 mod check_cmds;
 mod content_cmds;
+mod digest_cmds;
 mod events_cmds;
 mod map_cmds;
 mod milestone_cmds;

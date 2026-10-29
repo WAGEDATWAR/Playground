@@ -1,0 +1,26 @@
+# seed=digest-b town=64x48 residents=20 days=30 content=data/base
+Story digest: seed 'digest-b', a 64x48 town, 20 residents, 30 days. Final state 69b18ab2.
+
+Firsts
+  first conversation: day 0, 00:03 - Hana Underhill and Omar Underhill (personal, warm)
+  first warming: day 0, 00:03 - Hana Underhill and Omar Underhill, Friendly to Friend
+  first rift: none
+  first collapse: day 0, 15:27 - Tess Larsen
+
+Who talked most
+  Wren Young: 225 conversations
+  Olga Young: 218 conversations
+  Elena Larsen: 215 conversations
+
+The town: 1552 conversations, 82 relationships warmed, 0 soured, 15 collapses.
+  topics: small talk 483, work 292, food 254, town news 217, remember 167, personal 98, complaint 41
+  relationships (150): Close friend 20, Friend 5, Friendly 8, Acquaintance 34, Stranger 83
+  closest pair: Jonas Rivera and Tariq Rivera (1000); coolest: Yara Nakamura and Carlos Larsen (-34)
+
+From the journal (the most recent notable entries)
+  day 29, 09:29 - Grace Okafor is in a bad way: Social is critical.
+  day 29, 09:57 - Zane Petrov is in a bad way: Hunger is critical.
+  day 29, 10:45 - Elena Larsen is in a bad way: Hunger is critical.
+  day 29, 10:50 - Sofia Young is in a bad way: Hunger is critical.
+  day 29, 21:51 - Zane Petrov is in a bad way: Energy is critical.
+  day 29, 21:51 - Zane Petrov collapsed from exhaustion.
