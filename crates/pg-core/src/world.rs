@@ -99,7 +99,7 @@ impl Default for WorldSettings {
     }
 }
 
-/// DEFERRED: DF-001 (see docs/DEFERRALS.md).
+/// DEFERRED: DF-007 (see docs/DEFERRALS.md): the determinism tests use this table as their stand-in for drifted state; game worlds never change it.
 /// **Dev scaffolding.** A tiny piece of state mutated by the dev systems and the `DevNudge` command
 /// so replay, hashing and snapshot tests are meaningful before real simulation systems exist.
 /// Removed when the Stage 1 systems land (see `docs/TODO.md`, D-009).

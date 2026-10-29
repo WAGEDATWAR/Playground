@@ -77,9 +77,12 @@ impl Sim {
 
     /// Gives the sim loaded content (needed by commands that create objects).
     pub fn with_content(mut self, content: Arc<ContentSet>) -> Sim {
-        // Content with game data brings the needs and mood systems (replacing the scaffolding probe).
+        // Content with game data brings the needs and mood systems (replacing the scaffolding probe). A game
+        // world then runs the real systems only: the scaffolding day counter, which changed saved state and
+        // emitted a developer event, is taken out (DF-001, D-084).
         if !content.game().is_empty() {
             crate::life::install(&mut self.pipeline, Arc::new(content.game().clone()));
+            self.pipeline.remove_extension("dev.day");
         }
         self.content = Some(content);
         self

@@ -30,13 +30,15 @@
       "days": 30,
       "shadow_threads": 3,
       "max_growth_permille": 3000,
-      "plateau_permille": 300
+      "plateau_permille": 300,
+      "max_memories_per_pawn": 200,
+      "max_journal_entries": 120
     },
     {
       "op": "expect",
       "pawns": 20,
       "day": 30,
-      "hash": "24f74631"
+      "hash": "81861cfa"
     },
     {
       "op": "save",

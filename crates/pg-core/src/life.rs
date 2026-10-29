@@ -476,7 +476,7 @@ pub fn occupation_inputs(
     inputs
 }
 
-/// DEFERRED: DF-001 (see docs/DEFERRALS.md): the scaffolding plan still serves pawns with no occupation.
+/// DEFERRED: DF-007 (see docs/DEFERRALS.md): the scaffolding plan serves developer towns and pawns with no occupation.
 /// The scaffolding plan (duties and leisure) plus a restoring activity for each need that is running low.
 pub struct LifePlanSource {
     data: Arc<GameData>,

@@ -1,0 +1,96 @@
+{
+  "format": "playground-scenario",
+  "version": 1,
+  "name": "Stage 1 gate: a generated town lives on its own for two weeks and keeps its social history",
+  "description": "A seeded 14-resident town made by the generator, with only the base game loaded through the pack loader, runs 14 game days on its own. Every day is re-simulated from its snapshot on another thread count and must agree. The town must have a past (relationships, memories, remembered conversations, journal entries); a save and reload gives the identical state, so that past is intact; a run resumed from a snapshot agrees; and damage to the newest save falls back to the older one with the past still there.",
+  "world": {
+    "name": "Stage 1 Town",
+    "seed": "gate-stage1",
+    "packs": [
+      "data/base"
+    ]
+  },
+  "steps": [
+    {
+      "op": "command",
+      "cmd": {
+        "type": "generate_town",
+        "w": 64,
+        "h": 48,
+        "water": 18,
+        "residents": 14,
+        "tone": "standard"
+      }
+    },
+    {
+      "op": "soak",
+      "days": 14,
+      "shadow_threads": 3,
+      "max_growth_permille": 3000,
+      "plateau_permille": 300,
+      "max_memories_per_pawn": 200,
+      "max_journal_entries": 120
+    },
+    {
+      "op": "expect",
+      "day": 14,
+      "pawns": 14,
+      "relationships_min": 30,
+      "memories_min": 150,
+      "remembered_talks_min": 100,
+      "journal_min": 10
+    },
+    {
+      "op": "reload",
+      "slot": "main"
+    },
+    {
+      "op": "expect",
+      "pawns": 14,
+      "relationships_min": 30,
+      "memories_min": 150,
+      "remembered_talks_min": 100,
+      "journal_min": 10
+    },
+    {
+      "op": "fork",
+      "ticks": 4000
+    },
+    {
+      "op": "export_import"
+    },
+    {
+      "op": "save",
+      "slot": "main",
+      "max_compressed_bytes": 150000
+    },
+    {
+      "op": "run",
+      "ticks": 3000
+    },
+    {
+      "op": "save",
+      "slot": "main"
+    },
+    {
+      "op": "corrupt",
+      "slot": "main",
+      "how": "flip"
+    },
+    {
+      "op": "load",
+      "slot": "main",
+      "expect": "fell_back"
+    },
+    {
+      "op": "expect",
+      "day": 14,
+      "hash": "320089fb",
+      "pawns": 14,
+      "relationships_min": 30,
+      "memories_min": 150,
+      "remembered_talks_min": 100,
+      "journal_min": 10
+    }
+  ]
+}

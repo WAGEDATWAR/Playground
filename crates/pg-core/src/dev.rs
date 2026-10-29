@@ -1,4 +1,4 @@
-//! DEFERRED: DF-001 (see docs/DEFERRALS.md): the whole module is a stub awaiting removal or a test-only home.
+//! DEFERRED: DF-007 (see docs/DEFERRALS.md, D-084): kept on purpose as a developer and test fixture; game worlds with content do not run it.
 //! **Dev scaffolding systems and generators** for milestones 0.2–0.4.
 //!
 //! These give the tick pipeline something deterministic and RNG-dependent to do, so replay, hashing,

@@ -1,0 +1,59 @@
+{
+  "format": "playground-scenario",
+  "version": 1,
+  "name": "Stage 1 gate: sample packs change a generated town, deterministically",
+  "description": "The same kind of generated town with the base game and two cookbook packs (hardy, which hooks into needs, mood and conversation chance, and caffeine, which adds a system) runs a week. Every day is re-simulated on another thread count; the state reloads identically and resumes identically from a snapshot, with every script VM rebuilt. The visible, attributed effect of a hook in the inspector is covered by the runtime tests; this pins that the packs' effect on the world is deterministic and saved.",
+  "world": {
+    "name": "Stage 1 Pack Town",
+    "seed": "gate-stage1-packs",
+    "packs": [
+      "data/base",
+      "packs/cookbook/hardy",
+      "packs/cookbook/caffeine"
+    ]
+  },
+  "steps": [
+    {
+      "op": "command",
+      "cmd": {
+        "type": "generate_town",
+        "w": 64,
+        "h": 48,
+        "water": 18,
+        "residents": 14,
+        "tone": "standard"
+      }
+    },
+    {
+      "op": "soak",
+      "days": 7,
+      "shadow_threads": 2,
+      "max_growth_permille": 3000
+    },
+    {
+      "op": "expect",
+      "pawns": 14,
+      "day": 7,
+      "relationships_min": 20,
+      "memories_min": 80
+    },
+    {
+      "op": "reload",
+      "slot": "main"
+    },
+    {
+      "op": "fork",
+      "ticks": 6000
+    },
+    {
+      "op": "save",
+      "slot": "main"
+    },
+    {
+      "op": "expect",
+      "pawns": 14,
+      "day": 7,
+      "hash": "4261a4de"
+    }
+  ]
+}

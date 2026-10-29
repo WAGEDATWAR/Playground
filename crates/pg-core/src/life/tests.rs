@@ -565,6 +565,18 @@ fn generated(seed: &str) -> Sim {
 }
 
 #[test]
+fn a_game_world_runs_the_real_systems_and_none_of_the_scaffolding() {
+    // DF-001: the scaffolding day counter changed saved state and emitted a developer event; with game data
+    // loaded it is gone, while a world with no content keeps it (the developer tools and tests use that).
+    let mut sim = generated("no-scaffolding");
+    assert!(!sim.pipeline().order().iter().any(|s| s.starts_with("dev.")));
+    sim.run_ticks(crate::time::TICKS_PER_DAY).unwrap();
+    assert_eq!(sim.world().probe.days, 0);
+    let bare = Sim::with_dev_systems(WorldState::new("Bare", "bare"));
+    assert!(bare.pipeline().order().iter().any(|s| s == "dev.day"));
+}
+
+#[test]
 fn occupations_drive_the_days_duties_and_leisure_and_the_habit_stays_in_range() {
     let sim = generated("occupations");
     let w = sim.world();

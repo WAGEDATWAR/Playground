@@ -43,6 +43,21 @@ fn steps(skip_tests: bool) -> Vec<Step> {
             ],
         },
     ];
+    // Dependency advisories, licences and sources, as CI checks them (D-069, DF-050). Skipped with a note when
+    // cargo-deny is not installed, so the gate still runs on a machine without it.
+    if Command::new("cargo")
+        .args(["deny", "--version"])
+        .output()
+        .is_ok_and(|o| o.status.success())
+    {
+        v.push(Step {
+            name: "cargo deny (advisories, licences, sources)",
+            program: "cargo".into(),
+            args: vec!["deny", "check"],
+        });
+    } else {
+        println!("note: cargo-deny is not installed, so the dependency advisory check was skipped (install: cargo install cargo-deny)");
+    }
     if !skip_tests {
         v.push(Step {
             name: "tests",

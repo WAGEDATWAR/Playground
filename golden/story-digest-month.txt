@@ -1,5 +1,5 @@
 # seed=digest-b town=64x48 residents=20 days=30 content=data/base
-Story digest: seed 'digest-b', a 64x48 town, 20 residents, 30 days. Final state 69b18ab2.
+Story digest: seed 'digest-b', a 64x48 town, 20 residents, 30 days. Final state 2c7c7390.
 
 Firsts
   first conversation: day 0, 00:03 - Hana Underhill and Omar Underhill (personal, warm)

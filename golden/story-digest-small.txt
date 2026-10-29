@@ -1,5 +1,5 @@
 # seed=digest-a town=48x36 residents=14 days=10 content=data/base
-Story digest: seed 'digest-a', a 48x36 town, 14 residents, 10 days. Final state b676c451.
+Story digest: seed 'digest-a', a 48x36 town, 14 residents, 10 days. Final state b9a83e39.
 
 Firsts
   first conversation: day 0, 00:04 - Imani Ellis and Grace Ellis (small talk, warm)

@@ -102,14 +102,14 @@ Started 2026-10-29. Each step is small, tested and committed on its own; the gat
 
 | Step | Work | Evidence |
 | --- | --- | --- |
-| 1 | **Register review.** Verify DF-004 (empty pipeline slots), DF-006 (action pieces) and DF-042 (A\* and regions); record what is real, what is a stub; give every `unscheduled` item due at the gate a target or drop it | `docs/DEFERRALS.md` updated; decisions recorded |
-| 2 | **S-061 scale check.** Conversations, memories and path requests at 10, 50, 200 pawns over many days: cost per tick, per-system share, memory and event counts; `pg bench` targets added; bounds recorded | Bench report under `bench/reports/`, numbers in the gate report, a CI-safe bound test |
-| 3 | **S-064 save-size watch.** Save size (and generation count) by pawns and days, including the journal and memories; growth is bounded or the unbounded part is named | Table in the gate report; a test that fails if a 30-day 20-resident save passes a recorded ceiling |
-| 4 | **S-070 story digests.** A short, deterministic text of what happened in a seeded town (who talked, what changed between whom, the strongest and weakest pairs); the digest is a golden in `pg check --full` and `pg pins` | `golden/` digest files, pin check, `pg residents` digest command |
-| 5 | **Stage 1 scenarios.** The roadmap's "Done when" as scenario files: an autonomous 10 to 20 resident town for many days with shadow verification, conversations produced, state and social history intact after save, reload and relaunch, base content through the pack loader, a sample pack's effect visible in the inspector | `scenarios/gate-stage1-*.json` in `pg check` |
-| 6 | **30-day soak with bounds.** The soak gains bounds on memories, events and caches, and a plateau check on the new tables | `scenarios/soak-30-days.json` and the plateau checks |
-| 7 | **DF-001 decision.** Choose: move the dev scaffolding under `cfg(test)` or a feature and re-pin, or keep it as a named test fixture; implement or record | Decision entry; DF-001 closed or rescheduled |
-| 8 | **`cargo deny` in the local gate** (DF-050) | `pg milestone` runs it |
+| 1 | ✅ **Register review.** Verify DF-004 (empty pipeline slots), DF-006 (action pieces) and DF-042 (A\* and regions); record what is real, what is a stub; give every `unscheduled` item due at the gate a target or drop it | `docs/DEFERRALS.md` updated; decisions recorded |
+| 2 | ✅ **S-061 scale check.** Conversations, memories and path requests at 10, 50, 200 pawns over many days: cost per tick, per-system share, memory and event counts; `pg bench` targets added; bounds recorded | Bench report under `bench/reports/`, numbers in the gate report, a CI-safe bound test |
+| 3 | ✅ **S-064 save-size watch.** Save size (and generation count) by pawns and days, including the journal and memories; growth is bounded or the unbounded part is named | Table in the gate report; a test that fails if a 30-day 20-resident save passes a recorded ceiling |
+| 4 | ✅ **S-070 story digests.** A short, deterministic text of what happened in a seeded town (who talked, what changed between whom, the strongest and weakest pairs); the digest is a golden in `pg check --full` and `pg pins` | `golden/` digest files, pin check, `pg residents` digest command |
+| 5 | ✅ **Stage 1 scenarios.** The roadmap's "Done when" as scenario files: an autonomous 10 to 20 resident town for many days with shadow verification, conversations produced, state and social history intact after save, reload and relaunch, base content through the pack loader, a sample pack's effect visible in the inspector | `scenarios/gate-stage1-*.json` in `pg check` |
+| 6 | ✅ **30-day soak with bounds.** The soak gains bounds on memories, events and caches, and a plateau check on the new tables | `scenarios/soak-30-days.json` and the plateau checks |
+| 7 | ✅ **DF-001 decision.** Choose: move the dev scaffolding under `cfg(test)` or a feature and re-pin, or keep it as a named test fixture; implement or record | Decision entry; DF-001 closed or rescheduled |
+| 8 | ✅ **`cargo deny` in the local gate** (DF-050) | `pg milestone` runs it |
 | 9 | **Gate report and checkpoint.** `docs/gates/stage-1.md` clause by clause with commands and results; CI green on all three systems; your review | You accept; tag `m1.9` / Stage 1 |
 
 ## Later phases (outline; detailed when reached)

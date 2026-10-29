@@ -344,6 +344,19 @@ impl Pipeline {
         }
     }
 
+    /// Removes the extension system with this id; returns whether there was one. Built-in slots are never
+    /// removed (they are replaced with `set_builtin`).
+    pub fn remove_extension(&mut self, id: &str) -> bool {
+        let before = self.entries.len();
+        self.entries
+            .retain(|e| e.placement.is_none() || e.system.id() != id);
+        let removed = self.entries.len() != before;
+        if removed {
+            self.rebuild_order();
+        }
+        removed
+    }
+
     /// Registers an extension system next to a built-in slot. Registration order is the pack load order.
     pub fn add_extension(
         &mut self,

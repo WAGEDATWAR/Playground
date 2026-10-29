@@ -322,6 +322,16 @@ pub fn check_cmd(rest: &[String]) -> Result<ExitCode, String> {
             needs: Some("scenarios/gate-stage0-scripts.json"),
         },
         Check {
+            name: "Stage 1 gate: a generated town lives on",
+            args: args(&["scenario", "run", "scenarios/gate-stage1-town.json"]),
+            needs: Some("scenarios/gate-stage1-town.json"),
+        },
+        Check {
+            name: "Stage 1 gate: sample packs in a town",
+            args: args(&["scenario", "run", "scenarios/gate-stage1-packs.json"]),
+            needs: Some("scenarios/gate-stage1-packs.json"),
+        },
+        Check {
             name: "save create",
             args: vec![
                 "save".into(),

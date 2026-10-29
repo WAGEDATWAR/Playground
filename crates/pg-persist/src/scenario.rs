@@ -134,6 +134,10 @@ pub enum Step {
         /// With 20 or more days: the average state size of the last ten days may be at most this many per
         /// mille above the ten days before (a steady state, rather than a fixed ratio, S-052).
         plateau_permille: Option<u64>,
+        /// No resident may ever hold more memories than this, and the journal may never hold more entries than
+        /// the second limit: the bounds on what a long game accumulates (Stage 1 gate).
+        max_memories_per_pawn: Option<usize>,
+        max_journal_entries: Option<usize>,
     },
 }
 
@@ -145,6 +149,12 @@ pub struct Expectation {
     pub day: Option<u64>,
     /// A prefix of the state hash (8 to 64 hex characters): pins the exact state across operating systems.
     pub hash: Option<String>,
+    /// Social history that must exist (at least this many): relationships, memories in all heads, memories that
+    /// hold a recorded conversation, and journal entries. They show a town has a past and that a save kept it.
+    pub relationships_min: Option<usize>,
+    pub memories_min: Option<usize>,
+    pub remembered_talks_min: Option<usize>,
+    pub journal_min: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -254,7 +264,24 @@ fn parse_step(r: Reader<'_>) -> Result<Step, ReadError> {
             })
         }
         "expect" => {
-            r.only(&["op", "pawns", "commitments", "tick", "day", "hash"])?;
+            r.only(&[
+                "op",
+                "pawns",
+                "commitments",
+                "tick",
+                "day",
+                "hash",
+                "relationships_min",
+                "memories_min",
+                "remembered_talks_min",
+                "journal_min",
+            ])?;
+            let min = |key: &str| -> Result<Option<usize>, pg_core::read::ReadError> {
+                match r.maybe(key)? {
+                    Some(v) => Ok(Some(v.reader().usize()?)),
+                    None => Ok(None),
+                }
+            };
             let e = Expectation {
                 pawns: match r.maybe("pawns")? {
                     Some(v) => Some(v.reader().usize()?),
@@ -283,6 +310,10 @@ fn parse_step(r: Reader<'_>) -> Result<Step, ReadError> {
                     }
                     None => None,
                 },
+                relationships_min: min("relationships_min")?,
+                memories_min: min("memories_min")?,
+                remembered_talks_min: min("remembered_talks_min")?,
+                journal_min: min("journal_min")?,
             };
             Ok(Step::Expect(e))
         }
@@ -300,6 +331,8 @@ fn parse_step(r: Reader<'_>) -> Result<Step, ReadError> {
                 "shadow_threads",
                 "max_growth_permille",
                 "plateau_permille",
+                "max_memories_per_pawn",
+                "max_journal_entries",
             ])?;
             Ok(Step::Soak {
                 days: r.child("days")?.reader().u64()?,
@@ -313,6 +346,14 @@ fn parse_step(r: Reader<'_>) -> Result<Step, ReadError> {
                 },
                 plateau_permille: match r.maybe("plateau_permille")? {
                     Some(g) => Some(g.reader().u64()?),
+                    None => None,
+                },
+                max_memories_per_pawn: match r.maybe("max_memories_per_pawn")? {
+                    Some(g) => Some(g.reader().usize()?),
+                    None => None,
+                },
+                max_journal_entries: match r.maybe("max_journal_entries")? {
+                    Some(g) => Some(g.reader().usize()?),
                     None => None,
                 },
             })
@@ -507,11 +548,14 @@ impl Runner<'_> {
                 shadow_threads,
                 max_growth_permille,
                 plateau_permille,
+                max_memories_per_pawn,
+                max_journal_entries,
             } => self.soak(
                 *days,
                 *shadow_threads,
                 *max_growth_permille,
                 *plateau_permille,
+                (*max_memories_per_pawn, *max_journal_entries),
             ),
             Step::Expect(e) => {
                 let w = self.sim.world();
@@ -538,6 +582,24 @@ impl Runner<'_> {
                             "state hash: expected {want}..., found {}",
                             &got[..want.len().min(got.len())]
                         ));
+                    }
+                }
+                let memories: usize = w.pawns.iter().map(|(_, p)| p.memories.len()).sum();
+                let talks: usize = w
+                    .pawns
+                    .iter()
+                    .map(|(_, p)| p.memories.iter().filter(|m| m.talk.is_some()).count())
+                    .sum();
+                for (name, want, got) in [
+                    ("relationships", e.relationships_min, w.relationships.len()),
+                    ("memories", e.memories_min, memories),
+                    ("remembered conversations", e.remembered_talks_min, talks),
+                    ("journal entries", e.journal_min, w.journal.len()),
+                ] {
+                    if let Some(want) = want {
+                        if got < want {
+                            problems.push(format!("{name}: at least {want} expected, found {got}"));
+                        }
                     }
                 }
                 if problems.is_empty() {
@@ -588,8 +650,10 @@ impl Runner<'_> {
         shadow_threads: Option<usize>,
         max_growth_permille: u64,
         plateau_permille: Option<u64>,
+        bounds: (Option<usize>, Option<usize>),
     ) -> Result<String, String> {
         let pawns = self.sim.world().pawns.len();
+        let (mut most_memories, mut most_journal) = (0usize, 0usize);
         let inputs_before = self.sim.applied_inputs().len();
         let mut sizes: Vec<u64> = Vec::new();
         let mut fuel: Vec<u64> = Vec::new();
@@ -612,6 +676,15 @@ impl Runner<'_> {
                 }
             }
             sizes.push(self.sim.world().to_canon().to_canonical_string().len() as u64);
+            let w = self.sim.world();
+            most_memories = most_memories.max(
+                w.pawns
+                    .iter()
+                    .map(|(_, p)| p.memories.len())
+                    .max()
+                    .unwrap_or(0),
+            );
+            most_journal = most_journal.max(w.journal.len());
         }
         let mut notes = vec![format!("{days} day(s)")];
         // Bounded state: after the first days settle, the world may not keep growing.
@@ -658,6 +731,26 @@ impl Runner<'_> {
             return Err(format!(
                 "the input log grew by {} during a run with no inputs",
                 inputs_after.saturating_sub(inputs_before)
+            ));
+        }
+        if let Some(limit) = bounds.0 {
+            if most_memories > limit {
+                return Err(format!(
+                    "a resident held {most_memories} memories, more than the {limit} allowed"
+                ));
+            }
+            notes.push(format!(
+                "at most {most_memories} memories in one head (limit {limit})"
+            ));
+        }
+        if let Some(limit) = bounds.1 {
+            if most_journal > limit {
+                return Err(format!(
+                    "the journal held {most_journal} entries, more than the {limit} allowed"
+                ));
+            }
+            notes.push(format!(
+                "journal at most {most_journal} entries (limit {limit})"
             ));
         }
         if let Some(t) = shadow_threads {
@@ -859,6 +952,36 @@ mod tests {
         ));
         let r = run_text(&text).unwrap();
         assert!(r.ok(), "{:?}", r.outcomes);
+    }
+
+    #[test]
+    fn social_history_minimums_and_the_save_size_ceiling_fail_with_a_reason() {
+        // A dev town has no relationships, memories or journal, so any minimum of one fails and says which.
+        for field in [
+            "relationships_min",
+            "memories_min",
+            "remembered_talks_min",
+            "journal_min",
+        ] {
+            let text = scenario(&format!(r#"{BUILD}{{"op":"expect","{field}":1}}"#));
+            let r = run_text(&text).unwrap();
+            assert!(!r.ok(), "{field}");
+            let why = format!("{:?}", r.outcomes);
+            assert!(why.contains("at least 1 expected, found 0"), "{why}");
+        }
+        // A minimum of zero always holds.
+        let ok = run_text(&scenario(&format!(
+            r#"{BUILD}{{"op":"expect","relationships_min":0,"journal_min":0}}"#
+        )))
+        .unwrap();
+        assert!(ok.ok());
+        // A save larger than the ceiling fails the step.
+        let big = run_text(&scenario(&format!(
+            r#"{BUILD}{{"op":"save","slot":"a","max_compressed_bytes":10}}"#
+        )))
+        .unwrap();
+        assert!(!big.ok());
+        assert!(format!("{:?}", big.outcomes).contains("save-size watch"));
     }
 
     #[test]
