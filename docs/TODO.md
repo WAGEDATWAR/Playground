@@ -4,7 +4,7 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Stage 1: 1.8b, the consolidated UI layout pass, is in progress.** Tags: m1.7 and m1.8 are placed (m1.8 accepted). Done in 1.8b so far: Mods tiles, Saved worlds tiles, full-width groups, pack effects in the inspector only in developer mode, New world (D-064) and the border system (D-065: per-widget and per-group borders with style, width, tone, corners and a "between" style). Also done (D-067): pause menu, Options, AI options. D-070: the visual design (`docs/UI-DESIGN.md`, `theme.rs`) and the map-seam fix; its direction is yours to approve, so look at it before the rest of 1.8b builds on it. Still in 1.8b, easiest to hardest: journal, console and inspector windows, HUD, a second New world pass, the Mods items listed below, scroll smoothing. Then, before the Stage 1 gate (1.9): the scale and save-size checks (S-061, S-064) and story digests (S-070). AccessKit is Stage 11.
+**Stage 1: 1.8b, the consolidated UI layout pass, is in progress.** Tags: m1.7 and m1.8 are placed (m1.8 accepted). Done in 1.8b so far: Mods tiles, Saved worlds tiles, full-width groups, pack effects in the inspector only in developer mode, New world (D-064) and the border system (D-065: per-widget and per-group borders with style, width, tone, corners and a "between" style). Also done (D-067): pause menu, Options, AI options. D-070: the visual design (`docs/UI-DESIGN.md`, `theme.rs`), approved, and the map-seam fix. Still in 1.8b, easiest to hardest: journal, console and inspector windows, HUD, a second New world pass, the Mods items listed below, scroll smoothing. Then, before the Stage 1 gate (1.9): the scale and save-size checks (S-061, S-064) and story digests (S-070). AccessKit is Stage 11.
 
 **Known, scheduled:** the map view still draws generated towns with the painter-based view (the real renderer is 1.6); building roles are not yet drawn differently; conversation bubbles and the inspector panel come with 1.6/1.7 (the data and `pg residents inspect` exist now).
 
@@ -34,7 +34,7 @@ The Mods screen (D-060, D-061) is a first stage. Missing, to do in 1.8b (the UI 
 5. ~~**S-037 native dialogs with `rfd`**~~ done (D-059; please click Export and Import once on your machine) (medium; new dependency and licence check, per-OS behaviour; import, export and pack installation).
 6. ~~**Mods screen**~~ done (D-060; please try Install a pack... once with the real folder dialog) (largest; list, enable and disable, capability approval, errors, safe-mode launch; needs the enabled set saved and the loader to honour it).
 7. **S-038 AccessKit** MOVED to Stage 11 accessibility (D-063) (small to enable, long to verify: last, once every screen's widget tree is final, then checked on the three systems).
-Refinement noted: S-072 smooth zoom and pan (later pass).
+S-072 smooth zoom and pan is done (D-072): please try it in a preview build and say if it still feels choppy; the time constants are in `crates/pg-app/src/game_view.rs` (0.07 s zoom, 0.22 s glide).
 
 ## Next up
 

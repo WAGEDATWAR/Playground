@@ -4,6 +4,27 @@
 pub const MIN_ZOOM: f32 = 2.0;
 pub const MAX_ZOOM: f32 = 96.0;
 
+/// One frame of easing from `current` toward `target`: exponential, so it takes the same time at any frame rate.
+/// `tau` is the time constant in seconds (about a third of it is covered in `tau`). Positive values only; the
+/// ratio is eased, so zooming in and out feels the same. Arrives exactly once within half a percent.
+pub fn ease_zoom(current: f32, target: f32, dt: f32, tau: f32) -> f32 {
+    if current <= 0.0 || target <= 0.0 || (current - target).abs() <= target * 0.005 {
+        return target;
+    }
+    let a = 1.0 - (-dt.max(0.0) / tau.max(1e-4)).exp();
+    current * (target / current).powf(a)
+}
+
+/// One frame of momentum: the speed (pixels a second) after `dt` seconds of friction, and the distance moved.
+/// Below `stop` pixels a second the motion ends.
+pub fn glide(speed: f32, dt: f32, tau: f32, stop: f32) -> (f32, f32) {
+    if speed.abs() < stop {
+        return (0.0, 0.0);
+    }
+    let next = speed * (-dt.max(0.0) / tau.max(1e-4)).exp();
+    (next, speed * dt.max(0.0))
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Camera {
     /// The tile coordinate at the middle of the view (fractional).
@@ -66,6 +87,13 @@ impl Camera {
         self.cy += before.1 - after.1;
     }
 
+    /// Moves the view so the tile `world` sits at the screen position `(sx, sy)` at the current zoom (used to keep
+    /// the tile under the cursor fixed while the zoom eases).
+    pub fn anchor(&mut self, sx: f32, sy: f32, world: (f32, f32), view_w: f32, view_h: f32) {
+        self.cx = world.0 - (sx - view_w / 2.0) / self.zoom;
+        self.cy = world.1 - (sy - view_h / 2.0) / self.zoom;
+    }
+
     /// Keeps the centre inside the map, so the map cannot be dragged out of sight.
     pub fn clamp_to(&mut self, map_w: i32, map_h: i32) {
         self.cx = self.cx.clamp(0.0, map_w.max(1) as f32);
@@ -76,6 +104,61 @@ impl Camera {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn easing_closes_in_on_the_target_and_arrives() {
+        let mut z = 16.0;
+        let mut frames = 0;
+        while z != 32.0 && frames < 200 {
+            let next = ease_zoom(z, 32.0, 1.0 / 60.0, 0.07);
+            assert!(next >= z && next <= 32.0, "never overshoots: {z} -> {next}");
+            z = next;
+            frames += 1;
+        }
+        assert_eq!(z, 32.0);
+        assert!(
+            frames > 5 && frames < 60,
+            "a short glide, not a jump: {frames}"
+        );
+        // Zooming out is the mirror image.
+        assert!(ease_zoom(32.0, 16.0, 1.0 / 60.0, 0.07) < 32.0);
+        // The same time passes whatever the frame rate.
+        let (mut a, mut b) = (16.0, 16.0);
+        for _ in 0..12 {
+            a = ease_zoom(a, 32.0, 1.0 / 120.0, 0.07);
+        }
+        for _ in 0..6 {
+            b = ease_zoom(b, 32.0, 1.0 / 60.0, 0.07);
+        }
+        assert!((a - b).abs() < 0.05, "{a} vs {b}");
+    }
+
+    #[test]
+    fn momentum_decays_and_stops() {
+        let (mut v, mut dist) = (800.0, 0.0);
+        for _ in 0..600 {
+            let (nv, d) = glide(v, 1.0 / 60.0, 0.22, 5.0);
+            v = nv;
+            dist += d;
+        }
+        assert_eq!(v, 0.0);
+        assert!(dist > 100.0 && dist < 400.0, "{dist}");
+        assert_eq!(glide(3.0, 0.016, 0.22, 5.0), (0.0, 0.0));
+    }
+
+    #[test]
+    fn anchoring_keeps_a_tile_under_the_cursor() {
+        let mut c = Camera {
+            cx: 10.0,
+            cy: 10.0,
+            zoom: 16.0,
+        };
+        let world = c.to_world(300.0, 200.0, 800.0, 600.0);
+        c.zoom = 40.0;
+        c.anchor(300.0, 200.0, world, 800.0, 600.0);
+        let back = c.to_screen(world.0, world.1, 800.0, 600.0);
+        assert!((back.0 - 300.0).abs() < 1e-3 && (back.1 - 200.0).abs() < 1e-3);
+    }
 
     #[test]
     fn fit_shows_the_whole_map_centred() {

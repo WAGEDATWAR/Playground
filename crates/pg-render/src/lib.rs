@@ -13,8 +13,10 @@ pub mod sprite;
 pub mod tiles;
 
 pub use atlas::{Atlas, Uv};
-pub use camera::Camera;
+pub use camera::{ease_zoom, glide, Camera, MAX_ZOOM, MIN_ZOOM};
 pub use interp::{Interpolator, Placed};
-pub use scene::{build_scene, pick_pawn, snap_zoom, snapped, PawnDraw, Quad, Scene, Terrain};
+pub use scene::{
+    build_scene, build_scene_at, pick_pawn, snap_zoom, snapped, PawnDraw, Quad, Scene, Terrain,
+};
 pub use sprite::{Appearance, Facing, SpriteKey, TileKind};
 pub use tiles::{tile_rects, Rect, Rgb, TileSource};

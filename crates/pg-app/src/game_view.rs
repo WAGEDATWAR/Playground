@@ -12,8 +12,9 @@ use pg_core::id::EntityId;
 use pg_core::map::{Dir4, MapData, Tile, FLOOR, GRASS, ROAD, SAND, SIDEWALK, SURFACE_NONE, WATER};
 use pg_render::gpu::GpuScene;
 use pg_render::{
-    build_scene, pick_pawn, snap_zoom, snapped, tile_rects, Atlas, Camera, Facing, Interpolator,
-    PawnDraw, Quad, Rgb, Terrain, TileKind, TileSource,
+    build_scene, build_scene_at, ease_zoom, glide, pick_pawn, snap_zoom, snapped, tile_rects,
+    Atlas, Camera, Facing, Interpolator, PawnDraw, Quad, Rgb, Terrain, TileKind, TileSource,
+    MAX_ZOOM, MIN_ZOOM,
 };
 use pg_runtime::snapshot::RenderSnapshot;
 use pg_ui_model::palette::{pawn_color, tile_color};
@@ -140,6 +141,14 @@ const SCROLL_PER_STEP: f32 = 40.0;
 pub struct GameView {
     scroll: f32,
     camera: Camera,
+    /// The zoom the wheel has asked for; the camera's zoom eases toward it.
+    target_zoom: f32,
+    /// The screen position and map tile the zoom is anchored on (the point under the cursor).
+    anchor: Option<(f32, f32, (f32, f32))>,
+    /// Pan momentum after a drag is let go, in pixels a second.
+    velocity: (f32, f32),
+    /// The camera is easing or gliding this frame, so it is drawn at its exact zoom.
+    animating: bool,
     fitted: Option<EntityId>,
     /// The player moved the camera: stop re-framing the map as the window changes.
     moved: bool,
@@ -159,6 +168,10 @@ impl Default for GameView {
         GameView {
             scroll: 0.0,
             camera: Camera::default(),
+            target_zoom: Camera::default().zoom,
+            anchor: None,
+            velocity: (0.0, 0.0),
+            animating: false,
             fitted: None,
             moved: false,
             gpu: false,
@@ -255,11 +268,33 @@ impl GameView {
             self.camera = Camera::fit(map.width(), map.height(), vw, vh);
             self.fitted = Some(map.id);
         }
-        // Drag to pan; the wheel steps the zoom (whole multiples of the art size once zoomed in).
+        let dt = ui.input(|i| i.stable_dt).clamp(0.001, 0.1);
+        if self.fitted == Some(map.id) && !self.moved {
+            self.target_zoom = self.camera.zoom;
+        }
+        // Drag to pan, and keep gliding a little after it is let go. The wheel steps the zoom (whole multiples
+        // of the art size once zoomed in); the camera eases toward the step, keeping the tile under the cursor
+        // where it is, and snaps to the exact step when it arrives.
+        let mut animating = false;
         if response.dragged() {
             let d = response.drag_delta();
             self.camera.pan_pixels(d.x, d.y);
             self.moved = true;
+            // A smoothed speed, so a flick carries on.
+            let (vx, vy) = (d.x / dt, d.y / dt);
+            self.velocity = (
+                self.velocity.0 * 0.6 + vx * 0.4,
+                self.velocity.1 * 0.6 + vy * 0.4,
+            );
+            self.anchor = None;
+        } else {
+            let (sx, dx) = glide(self.velocity.0, dt, 0.22, 8.0);
+            let (sy, dy) = glide(self.velocity.1, dt, 0.22, 8.0);
+            self.velocity = (sx, sy);
+            if dx != 0.0 || dy != 0.0 {
+                self.camera.pan_pixels(dx, dy);
+                animating = true;
+            }
         }
         if let Some(hover) = response.hover_pos() {
             // egui spreads one wheel notch over several frames; collect it and take one zoom step per notch
@@ -268,8 +303,8 @@ impl GameView {
             while self.scroll.abs() >= SCROLL_PER_STEP {
                 let up = self.scroll > 0.0;
                 self.scroll -= SCROLL_PER_STEP.copysign(self.scroll);
-                let z = self.camera.zoom;
-                let target = if up {
+                let z = self.target_zoom;
+                let step = if up {
                     if z < 16.0 {
                         (z * 1.25).min(16.0)
                     } else {
@@ -280,18 +315,28 @@ impl GameView {
                 } else {
                     snap_zoom(z) - 16.0
                 };
-                self.camera.zoom_at(
-                    hover.x - rect.min.x,
-                    hover.y - rect.min.y,
-                    target / z,
-                    vw,
-                    vh,
-                );
-                self.camera.zoom = snap_zoom(self.camera.zoom);
+                self.target_zoom = step.clamp(MIN_ZOOM, MAX_ZOOM);
+                let (sx, sy) = (hover.x - rect.min.x, hover.y - rect.min.y);
+                self.anchor = Some((sx, sy, self.camera.to_world(sx, sy, vw, vh)));
+                self.velocity = (0.0, 0.0);
                 self.moved = true;
             }
         } else {
             self.scroll = 0.0;
+        }
+        if (self.camera.zoom - self.target_zoom).abs() > f32::EPSILON {
+            self.camera.zoom = ease_zoom(self.camera.zoom, self.target_zoom, dt, 0.07);
+            if let Some((sx, sy, world)) = self.anchor {
+                self.camera.anchor(sx, sy, world, vw, vh);
+            }
+            animating = self.camera.zoom != self.target_zoom;
+            if !animating {
+                self.anchor = None;
+            }
+        }
+        self.animating = animating;
+        if animating {
+            ui.ctx().request_repaint();
         }
         self.camera.clamp_to(map.width(), map.height());
         self.track(snap);
@@ -338,9 +383,14 @@ impl GameView {
         }
 
         let painter = painter.with_clip_rect(rect);
-        let cam = snapped(&self.camera);
+        // At rest the zoom is snapped to whole multiples of the art; while easing it is drawn exactly.
+        let cam = if self.animating {
+            self.camera
+        } else {
+            snapped(&self.camera)
+        };
         if self.gpu {
-            let scene = build_scene(&cam, vw, vh, &MapTerrain(map), &pawns, &self.atlas);
+            let scene = build_scene_at(&cam, vw, vh, &MapTerrain(map), &pawns, &self.atlas);
             self.stats = RenderStats {
                 quads: scene.quads.len(),
                 visible_tiles: scene.visible_tiles,

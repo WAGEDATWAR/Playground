@@ -83,7 +83,20 @@ pub fn build_scene(
     pawns: &[PawnDraw],
     atlas: &Atlas,
 ) -> Scene {
-    let cam = snapped(cam);
+    build_scene_at(&snapped(cam), view_w, view_h, terrain, pawns, atlas)
+}
+
+/// Like [`build_scene`], but draws at the camera's zoom exactly, even when it is not a whole multiple of the art
+/// size. Used while the zoom is easing between two steps; at rest the zoom snaps again.
+pub fn build_scene_at(
+    cam: &Camera,
+    view_w: f32,
+    view_h: f32,
+    terrain: &dyn Terrain,
+    pawns: &[PawnDraw],
+    atlas: &Atlas,
+) -> Scene {
+    let cam = *cam;
     let px = cam.zoom;
     let whole = (px - px.round()).abs() < 1e-3;
     let snap = |v: f32| if whole { v.round() } else { v };
