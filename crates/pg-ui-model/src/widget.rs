@@ -18,6 +18,11 @@ pub enum Widget {
     Label(String),
     /// A line of smaller, secondary text.
     Note(String),
+    /// A small read-only chip of status text.
+    Badge {
+        label: String,
+        tone: BadgeTone,
+    },
     Spacer,
     Button {
         id: WidgetId,
@@ -120,6 +125,15 @@ pub enum Widget {
         border: Border,
         children: Vec<Widget>,
     },
+}
+
+/// How a badge stands out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BadgeTone {
+    /// A quiet chip of information (the time, the resident count).
+    Neutral,
+    /// Something that needs noticing (Paused).
+    Accent,
 }
 
 /// How a border is drawn. The model says what kind; the shell picks the colours from the theme.
@@ -398,6 +412,13 @@ fn snapshot_widget(out: &mut String, w: &Widget, depth: usize, focus: Option<&st
             let _ = writeln!(out, "{pad}({t})");
         }
         Widget::Spacer => {}
+        Widget::Badge { label, tone } => {
+            let _ = writeln!(
+                out,
+                "{pad}[{label}]{}",
+                if *tone == BadgeTone::Accent { "!" } else { "" }
+            );
+        }
         Widget::Button { id, label, enabled } => {
             let _ = writeln!(
                 out,
@@ -683,5 +704,31 @@ mod border_tests {
         .separator()
         .is_none());
         assert_eq!(Border::NONE.style, BorderStyle::None);
+    }
+}
+
+#[cfg(test)]
+mod badge_tests {
+    use super::*;
+
+    #[test]
+    fn badges_are_read_only_and_an_accent_badge_is_marked_in_the_snapshot() {
+        let t = Tree::new(
+            "T",
+            vec![Widget::Row(vec![
+                Widget::Badge {
+                    label: "Day 1".into(),
+                    tone: BadgeTone::Neutral,
+                },
+                Widget::Badge {
+                    label: "Paused".into(),
+                    tone: BadgeTone::Accent,
+                },
+            ])],
+        );
+        let s = t.snapshot(None);
+        assert!(s.contains("[Day 1]\n"), "{s}");
+        assert!(s.contains("[Paused]!"), "{s}");
+        assert!(t.focus_order().is_empty());
     }
 }

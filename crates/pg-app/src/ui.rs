@@ -10,7 +10,9 @@ use egui::{Align, Color32, Id, Key as EKey, Layout, Modifiers, RichText, Stroke}
 use pg_host::console::Severity;
 use pg_ui_model::layout::{self, DrawerLayout};
 use pg_ui_model::types::{Key, UiEvent};
-use pg_ui_model::widget::{Border, BorderStyle, BorderTone, Corners, DrawerItem, Tree, Widget};
+use pg_ui_model::widget::{
+    BadgeTone, Border, BorderStyle, BorderTone, Corners, DrawerItem, Tree, Widget,
+};
 use std::collections::BTreeMap;
 
 /// What one drawn tree produced.
@@ -333,11 +335,25 @@ fn draw_widget(
         Widget::Spacer => {
             ui.add_space(14.0);
         }
+        Widget::Badge { label, tone } => {
+            // A small read-only pill: a quiet control colour, or amber when it needs noticing.
+            let (fill, text) = match tone {
+                BadgeTone::Neutral => (theme::CONTROL, theme::TEXT),
+                BadgeTone::Accent => (theme::ACCENT, theme::ON_ACCENT),
+            };
+            egui::Frame::new()
+                .fill(fill)
+                .corner_radius(theme::R_CARD)
+                .inner_margin(egui::Margin::symmetric(9, 3))
+                .show(ui, |ui| {
+                    ui.label(RichText::new(label).size(theme::T_NOTE + 1.0).color(text));
+                });
+        }
         Widget::Button { id, label, enabled } => {
             let width = if compact {
                 0.0
             } else {
-                ui.available_width().min(420.0)
+                ui.available_width().min(720.0)
             };
             draw_button(ui, id, label, *enabled, false, width, focus, d);
         }
@@ -346,7 +362,7 @@ fn draw_widget(
                 let width = if compact {
                     0.0
                 } else {
-                    ui.available_width().min(420.0)
+                    ui.available_width().min(720.0)
                 };
                 draw_button(ui, id, label, *enabled, true, width, focus, d);
             } else {
@@ -616,15 +632,24 @@ fn draw_widget(
             let h = (*max_height as f32)
                 .min(ui.ctx().content_rect().height() * 0.6)
                 .max(120.0);
-            egui::ScrollArea::vertical()
-                .min_scrolled_height(h)
+            // The area is as tall as its content up to the bounded height, then it scrolls. The content's height
+            // from the last frame is remembered (the first frame assumes the full height).
+            let key = ui.next_auto_id();
+            let last = ui
+                .data(|m| m.get_temp::<f32>(key))
+                .unwrap_or(h)
+                .clamp(40.0, h);
+            let out = egui::ScrollArea::vertical()
+                .id_salt(key)
+                .min_scrolled_height(last)
                 .max_height(h)
-                .auto_shrink([false, false])
+                .auto_shrink([false, true])
                 .show(ui, |ui| {
                     for c in children {
                         draw_widget(ui, c, focus, focus_moved, compact, images, d);
                     }
                 });
+            ui.data_mut(|m| m.insert_temp(key, out.content_size.y));
         }
         Widget::Group {
             title,

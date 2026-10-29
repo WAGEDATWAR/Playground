@@ -7,7 +7,7 @@
 use crate::app::{AiForm, AppModel, ConnUi, LoginUi, NewWorldForm, SavedForm, Screen};
 use crate::layout::{Align, DrawerLayout};
 use crate::types::*;
-use crate::widget::{Border, BorderTone, DrawerItem, Tree, Widget};
+use crate::widget::{BadgeTone, Border, BorderTone, DrawerItem, Tree, Widget};
 use pg_host::Secret;
 
 fn hhmm(minute_of_day: u32) -> String {
@@ -260,11 +260,17 @@ fn saved_worlds(worlds: &[WorldEntry], f: &SavedForm, t: Text) -> Tree {
             children: tiles,
         });
     }
-    if !f.confirm_delete {
-        w.push(Widget::button("saved.import", t("ui.saved.import", &[])));
-        w.push(Widget::button("saved.back", t("ui.back", &[])));
+    let tree = Tree::new(t("ui.saved.title", &[]), w);
+    if f.confirm_delete {
+        return tree.with_footer(640, Vec::new());
     }
-    Tree::new(t("ui.saved.title", &[]), w)
+    tree.with_footer(
+        640,
+        vec![Widget::ButtonBar(vec![
+            Widget::button("saved.import", t("ui.saved.import", &[])),
+            Widget::button("saved.back", t("ui.back", &[])),
+        ])],
+    )
 }
 
 /// The generated Options screen (suggestion S-025): one widget per registered device setting.
@@ -501,19 +507,27 @@ pub const SPEEDS: [&str; 4] = ["1x", "3x", "9x", "27x"];
 
 pub(crate) fn hud_parts(m: &AppModel, t: Text) -> HudParts {
     let h = m.hud();
+    // The world's name, then small status chips: the time, the residents, and a Paused tag when stopped.
+    let badge = |label: String, tone| Widget::Badge { label, tone };
     let mut row = vec![
         Widget::Label(h.world_name.clone()),
-        Widget::Label(t(
-            "ui.hud.time",
-            &[
-                ("day", &h.day.to_string()),
-                ("time", &hhmm(h.minute_of_day)),
-            ],
-        )),
-        Widget::Label(t("ui.hud.residents", &[("count", &h.pawns.to_string())])),
+        badge(
+            t(
+                "ui.hud.time",
+                &[
+                    ("day", &h.day.to_string()),
+                    ("time", &hhmm(h.minute_of_day)),
+                ],
+            ),
+            BadgeTone::Neutral,
+        ),
+        badge(
+            t("ui.hud.residents", &[("count", &h.pawns.to_string())]),
+            BadgeTone::Neutral,
+        ),
     ];
     if !h.running {
-        row.push(Widget::Label(t("ui.hud.paused", &[])));
+        row.push(badge(t("ui.hud.paused", &[]), BadgeTone::Accent));
     }
     let mut top = vec![Widget::Row(row)];
     if !h.status.is_empty() {
@@ -1100,15 +1114,17 @@ fn mods(m: &AppModel, t: Text) -> Tree {
         label: t("ui.mods.safe", &[]),
         value: v.safe_mode,
     });
-    w.push(Widget::Row(vec![
-        Widget::button("mods.install", t("ui.mods.install", &[])),
-        Widget::button("mods.reveal", t("ui.mods.reveal", &[])),
-    ]));
     if !v.folder.is_empty() {
         w.push(Widget::Note(t("ui.mods.folder", &[("folder", &v.folder)])));
     }
-    w.push(Widget::button("mods.back", t("ui.mods.back", &[])));
-    Tree::new(t("ui.mods.title", &[]), w)
+    Tree::new(t("ui.mods.title", &[]), w).with_footer(
+        720,
+        vec![Widget::ButtonBar(vec![
+            Widget::button("mods.install", t("ui.mods.install", &[])),
+            Widget::button("mods.reveal", t("ui.mods.reveal", &[])),
+            Widget::button("mods.back", t("ui.mods.back", &[])),
+        ])],
+    )
 }
 
 pub(crate) fn choose(m: &mut AppModel, id: &str, v: &str) -> Vec<AppEffect> {
