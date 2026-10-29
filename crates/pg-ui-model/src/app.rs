@@ -127,8 +127,10 @@ pub struct AppModel {
     overlay: Overlay,
     console: ConsoleModel,
     mods: crate::types::ModsView,
-    /// Mod tiles that are unrolled on the Mods screen (by pack id, or folder for an invalid one).
-    mods_open: std::collections::BTreeSet<String>,
+    /// The pack chosen in the Mods list (its id, or its folder for an invalid one).
+    mods_selected: Option<String>,
+    /// The folder of a pack whose removal is waiting for a yes.
+    mods_confirm: Option<String>,
     /// The town journal window is open.
     journal_open: bool,
     /// How the world is being played; the journal is for observation and possession modes only.
@@ -162,7 +164,8 @@ impl AppModel {
             overlay: Overlay::default(),
             console: ConsoleModel::default(),
             mods: crate::types::ModsView::default(),
-            mods_open: std::collections::BTreeSet::new(),
+            mods_selected: None,
+            mods_confirm: None,
             journal_open: false,
             mode: crate::journal::Mode::Observation,
         }
@@ -192,14 +195,21 @@ impl AppModel {
         &self.mods
     }
 
-    pub fn mod_tile_open(&self, key: &str) -> bool {
-        self.mods_open.contains(key)
+    pub fn mods_selected(&self) -> Option<&str> {
+        self.mods_selected.as_deref()
     }
 
-    pub(crate) fn toggle_mod_tile(&mut self, key: &str) {
-        if !self.mods_open.remove(key) {
-            self.mods_open.insert(key.to_owned());
-        }
+    pub fn mods_confirm(&self) -> Option<&str> {
+        self.mods_confirm.as_deref()
+    }
+
+    pub(crate) fn select_mod(&mut self, key: &str) {
+        self.mods_selected = Some(key.to_owned());
+        self.mods_confirm = None;
+    }
+
+    pub(crate) fn set_mods_confirm(&mut self, folder: Option<String>) {
+        self.mods_confirm = folder;
     }
 
     /// Whether the journal window should be drawn.

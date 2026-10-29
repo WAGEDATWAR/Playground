@@ -7,7 +7,7 @@
 use crate::app::{AiForm, AppModel, ConnUi, LoginUi, NewWorldForm, SavedForm, Screen};
 use crate::layout::{Align, DrawerLayout};
 use crate::types::*;
-use crate::widget::{BadgeTone, Border, BorderTone, DrawerItem, Tree, Widget};
+use crate::widget::{BadgeTone, Border, BorderTone, DrawerItem, Tree, Widget, FILL};
 use pg_host::Secret;
 
 fn hhmm(minute_of_day: u32) -> String {
@@ -195,82 +195,145 @@ fn new_world(f: &NewWorldForm, t: Text) -> Tree {
     )
 }
 
+/// The Saved worlds screen: the worlds as a list on the left, and everything about the chosen one (its picture,
+/// facts and what can be done with it) in a pane on the right. The newest world is chosen when the screen opens.
 fn saved_worlds(worlds: &[WorldEntry], f: &SavedForm, t: Text) -> Tree {
-    let mut w = vec![Widget::Heading(t("ui.saved.title", &[]))];
-    if worlds.is_empty() {
-        w.push(Widget::Label(t("ui.saved.empty", &[])));
-    }
-    // One tile per world in a bounded, scrolling list (like the Mods screen): the name and state on the first
-    // line; the chosen world's tile opens to show its picture, details and what can be done with it.
-    let mut tiles = Vec::new();
-    for e in worlds {
-        let mut label = t(
-            "ui.saved.row",
-            &[
-                ("name", &e.name),
-                ("day", &e.day.to_string()),
-                ("residents", &e.population.to_string()),
-            ],
-        );
-        if e.damaged {
-            label.push_str(&t("ui.saved.damaged_suffix", &[]));
-        }
-        let mut kids = vec![Widget::button(&format!("saved.row.{}", e.id), label)];
-        if f.selected.as_deref() == Some(e.id.as_str()) {
-            if let Some(name) = &e.thumbnail {
-                kids.push(Widget::Thumbnail { name: name.clone() });
+    let chosen = chosen_world(worlds, f.selected.as_deref());
+    let rows: Vec<Widget> = worlds
+        .iter()
+        .map(|e| {
+            let mut badges = Vec::new();
+            if e.damaged {
+                badges.push((t("ui.saved.badge.damaged", &[]), BadgeTone::Bad));
             }
-            kids.push(Widget::Note(t(
-                "ui.saved.details",
-                &[
-                    ("saved", &e.saved),
-                    ("packs", &e.packs.join(", ")),
-                    ("ticks", &e.play_ticks.to_string()),
-                ],
-            )));
+            Widget::ListRow {
+                id: format!("saved.row.{}", e.id),
+                title: e.name.clone(),
+                subtitle: t(
+                    "ui.saved.row_sub",
+                    &[
+                        ("day", &e.day.to_string()),
+                        ("residents", &e.population.to_string()),
+                    ],
+                ),
+                badges,
+                selected: chosen.is_some_and(|c| c.id == e.id),
+            }
+        })
+        .collect();
+    let left = if rows.is_empty() {
+        vec![Widget::Note(t("ui.saved.empty", &[]))]
+    } else {
+        vec![Widget::Scroll {
+            max_height: FILL,
+            children: rows,
+        }]
+    };
+    let between = |title: String, children: Vec<Widget>| Widget::Group {
+        border: Border::between(1, BorderTone::Normal),
+        title,
+        children,
+    };
+    let mut sections = Vec::new();
+    if let Some(e) = chosen {
+        let mut head = vec![Widget::Heading(e.name.clone())];
+        let mut badges = vec![
+            Widget::Badge {
+                label: t("ui.saved.badge.day", &[("day", &e.day.to_string())]),
+                tone: BadgeTone::Neutral,
+            },
+            Widget::Badge {
+                label: t(
+                    "ui.saved.badge.residents",
+                    &[("count", &e.population.to_string())],
+                ),
+                tone: BadgeTone::Neutral,
+            },
+        ];
+        if e.damaged {
+            badges.push(Widget::Badge {
+                label: t("ui.saved.badge.damaged", &[]),
+                tone: BadgeTone::Bad,
+            });
+        }
+        head.push(Widget::Row(badges));
+        if let Some(name) = &e.thumbnail {
+            head.push(Widget::Thumbnail { name: name.clone() });
+        }
+        sections.push(between(String::new(), head));
+        sections.push(between(
+            t("ui.saved.group.details", &[]),
+            vec![Widget::Facts(vec![
+                (t("ui.saved.fact.saved", &[]), e.saved.clone()),
+                (
+                    t("ui.saved.fact.played", &[]),
+                    t("ui.saved.played", &[("ticks", &e.play_ticks.to_string())]),
+                ),
+                (t("ui.saved.fact.packs", &[]), e.packs.join(", ")),
+            ])],
+        ));
+        sections.push(between(
+            String::new(),
             if f.confirm_delete {
-                kids.push(Widget::Label(t(
-                    "ui.saved.confirm_delete",
-                    &[("name", &e.name)],
-                )));
-                kids.push(Widget::Row(vec![
-                    Widget::button("saved.confirm_yes", t("ui.saved.delete_yes", &[])),
-                    Widget::button("saved.cancel", t("ui.cancel", &[])),
-                ]));
+                vec![
+                    Widget::Label(t("ui.saved.confirm_delete", &[("name", &e.name)])),
+                    Widget::Row(vec![
+                        Widget::button("saved.confirm_yes", t("ui.saved.delete_yes", &[])),
+                        Widget::button("saved.cancel", t("ui.cancel", &[])),
+                    ]),
+                ]
             } else {
-                kids.push(Widget::Row(vec![
+                vec![Widget::Row(vec![
                     Widget::Primary(Box::new(Widget::button(
                         "saved.load",
                         t("ui.saved.load", &[]),
                     ))),
                     Widget::button("saved.export", t("ui.saved.export", &[])),
                     Widget::button("saved.delete", t("ui.saved.delete", &[])),
-                ]));
-            }
-        }
-        tiles.push(Widget::Group {
-            border: crate::widget::Border::GROUP,
-            title: String::new(),
-            children: kids,
-        });
+                ])]
+            },
+        ));
+    } else {
+        sections.push(between(
+            String::new(),
+            vec![Widget::Note(t("ui.saved.none_chosen", &[]))],
+        ));
     }
-    if !tiles.is_empty() {
-        w.push(Widget::Scroll {
-            max_height: 420,
-            children: tiles,
-        });
-    }
-    let tree = Tree::new(t("ui.saved.title", &[]), w);
-    if f.confirm_delete {
-        return tree.with_footer(640, Vec::new());
-    }
-    tree.with_footer(
-        640,
+    Tree::new(
+        t("ui.saved.title", &[]),
+        vec![
+            Widget::Heading(t("ui.saved.title", &[])),
+            Widget::Columns {
+                left,
+                right: vec![detail_pane(sections)],
+            },
+        ],
+    )
+    .with_footer(
+        1100,
         vec![Widget::ButtonBar(vec![
             Widget::button("saved.import", t("ui.saved.import", &[])),
             Widget::button("saved.back", t("ui.back", &[])),
         ])],
     )
+}
+
+/// The chosen world: the one picked, else the newest that is not damaged, else the first.
+fn chosen_world<'a>(worlds: &'a [WorldEntry], picked: Option<&str>) -> Option<&'a WorldEntry> {
+    picked
+        .and_then(|id| worlds.iter().find(|w| w.id == id))
+        .or_else(|| continue_target(worlds))
+}
+
+/// A bordered pane that holds a detail view: its sections scroll inside the border when they are too tall.
+fn detail_pane(sections: Vec<Widget>) -> Widget {
+    Widget::Bordered {
+        border: Border::solid(2, BorderTone::Strong),
+        inner: Box::new(Widget::Scroll {
+            max_height: FILL,
+            children: vec![Widget::Stack(sections)],
+        }),
+    }
 }
 
 /// The generated Options screen (suggestion S-025): one widget per registered device setting.
@@ -744,6 +807,9 @@ fn new_create(m: &mut AppModel) -> Vec<AppEffect> {
 }
 
 fn saved_activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
+    // The world chosen when nothing was picked is the newest, so Load works as soon as the screen opens.
+    let default = continue_target(m.worlds()).map(|w| w.id.clone());
+    let known: Vec<String> = m.worlds().iter().map(|w| w.id.clone()).collect();
     let Screen::SavedWorlds(f) = m.screen_mut() else {
         return Vec::new();
     };
@@ -752,7 +818,11 @@ fn saved_activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
         f.confirm_delete = false;
         return Vec::new();
     }
-    let selected = f.selected.clone();
+    let selected = f
+        .selected
+        .clone()
+        .filter(|id| known.contains(id))
+        .or(default);
     match (id, selected) {
         ("saved.load", Some(w)) => vec![AppEffect::LoadWorld(w)],
         ("saved.export", Some(w)) => vec![AppEffect::ExportWorld(w)],
@@ -907,8 +977,8 @@ fn mods_activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
         "mods.install" => vec![AppEffect::InstallPack],
         "mods.reveal" => vec![AppEffect::RevealPacks],
         other => {
-            if let Some(key) = other.strip_prefix("mods.tile.") {
-                m.toggle_mod_tile(key);
+            if let Some(key) = other.strip_prefix("mods.row.") {
+                m.select_mod(key);
                 return Vec::new();
             }
             if let Some(pack) = other.strip_prefix("mods.enable.") {
@@ -939,10 +1009,19 @@ fn mods_activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
                     _ => Vec::new(),
                 };
             }
-            match other.strip_prefix("mods.remove.") {
-                Some(folder) => vec![AppEffect::RemovePack(folder.to_owned())],
-                None => Vec::new(),
+            if let Some(folder) = other.strip_prefix("mods.remove_yes.") {
+                m.set_mods_confirm(None);
+                return vec![AppEffect::RemovePack(folder.to_owned())];
             }
+            if other == "mods.remove_cancel" {
+                m.set_mods_confirm(None);
+                return Vec::new();
+            }
+            if let Some(folder) = other.strip_prefix("mods.remove.") {
+                // Removing deletes the pack's folder, so it asks first.
+                m.set_mods_confirm(Some(folder.to_owned()));
+            }
+            Vec::new()
         }
     }
 }
@@ -958,116 +1037,185 @@ fn size_text(bytes: u64) -> String {
     }
 }
 
-/// One pack as a tile: rolled up it shows the name, a problem mark, what the pack affects and an On/Off
-/// button; unrolled it adds the pack's details, its capability approvals and its own buttons.
-fn mod_tile(m: &AppModel, p: &crate::types::PackRow, t: Text) -> Widget {
-    let key = if p.id.is_empty() { &p.folder } else { &p.id };
-    let open = m.mod_tile_open(key);
+fn pack_key(p: &crate::types::PackRow) -> &str {
+    if p.id.is_empty() {
+        &p.folder
+    } else {
+        &p.id
+    }
+}
+
+/// The packs in the order the list shows them: the base game first, then installed packs by name, and the ones
+/// that could not be loaded last.
+fn ordered_packs(m: &AppModel) -> Vec<&crate::types::PackRow> {
+    let mut v: Vec<&crate::types::PackRow> = m.mods().packs.iter().collect();
+    v.sort_by_key(|p| (!p.base, p.error.is_some(), p.name.to_lowercase()));
+    v
+}
+
+/// The chosen pack: the one picked, else the first installed pack that loads, else the first in the list.
+fn chosen_pack(m: &AppModel) -> Option<&crate::types::PackRow> {
+    let packs = ordered_packs(m);
+    m.mods_selected()
+        .and_then(|k| packs.iter().copied().find(|p| pack_key(p) == k))
+        .or_else(|| packs.iter().copied().find(|p| !p.base && p.error.is_none()))
+        .or_else(|| packs.first().copied())
+}
+
+/// One pack as a list row: its name, version and what it affects, and badges for how it stands.
+fn mod_row(p: &crate::types::PackRow, chosen: bool, t: Text) -> Widget {
     let needs_approval = p.enabled
         && p.capabilities
             .iter()
             .any(|c| c.needs_approval && !c.approved);
-    // The first line is the same shape whatever state the pack is in: the name, the On/Off button, then a mark
-    // if something needs attention (so the button never moves when a mark appears). What the pack affects is
-    // the second line.
-    let mut header = vec![Widget::button(
-        &format!("mods.tile.{key}"),
-        format!("{} {}", if open { "-" } else { "+" }, p.name),
-    )];
-    if !p.base && p.error.is_none() {
-        header.push(Widget::button(
-            &format!("mods.enable.{}", p.id),
-            t(
-                if p.enabled {
-                    "ui.mods.on"
-                } else {
-                    "ui.mods.off"
-                },
-                &[],
-            ),
-        ));
-    }
-    if p.error.is_some() {
-        header.push(Widget::Label(t("ui.mods.error_mark", &[])));
-    } else if needs_approval {
-        header.push(Widget::Label(t("ui.mods.approval_mark", &[])));
-    }
-    let affects = if p.base {
-        Some(t("ui.mods.base_short", &[]))
-    } else if p.error.is_none() {
-        let what = p
+    let mut badges = Vec::new();
+    let subtitle = if p.base {
+        badges.push((t("ui.mods.badge.base", &[]), BadgeTone::Neutral));
+        t("ui.mods.base_short", &[])
+    } else if p.error.is_some() {
+        badges.push((t("ui.mods.badge.error", &[]), BadgeTone::Bad));
+        t("ui.mods.unreadable", &[])
+    } else {
+        badges.push(if p.enabled {
+            (t("ui.mods.on", &[]), BadgeTone::Info)
+        } else {
+            (t("ui.mods.off", &[]), BadgeTone::Neutral)
+        });
+        if needs_approval {
+            badges.push((t("ui.mods.badge.approval", &[]), BadgeTone::Accent));
+        }
+        let affects = p
             .capabilities
             .iter()
             .map(|c| c.name.as_str())
             .collect::<Vec<_>>()
             .join(", ");
-        Some(t("ui.mods.affects", &[("what", &what)]))
-    } else {
-        None
+        t(
+            "ui.mods.row_sub",
+            &[("version", &p.version), ("what", &affects)],
+        )
     };
-    let mut kids = vec![Widget::Row(header)];
-    if let Some(a) = affects {
-        kids.push(Widget::Note(a));
+    Widget::ListRow {
+        id: format!("mods.row.{}", pack_key(p)),
+        title: p.name.clone(),
+        subtitle,
+        badges,
+        selected: chosen,
     }
-    if open {
-        if let Some(e) = &p.error {
-            kids.push(Widget::Label(t("ui.mods.invalid", &[])));
-            kids.push(Widget::Note(e.chars().take(300).collect()));
+}
+
+/// Everything about the chosen pack, as sections for the detail pane.
+fn mod_detail(m: &AppModel, p: &crate::types::PackRow, t: Text) -> Vec<Widget> {
+    let between = |title: String, children: Vec<Widget>| Widget::Group {
+        border: Border::between(1, BorderTone::Normal),
+        title,
+        children,
+    };
+    let badge = |label: String, tone| Widget::Badge { label, tone };
+    // Header: the name and how the pack stands.
+    let mut chips = Vec::new();
+    if p.base {
+        chips.push(badge(t("ui.mods.badge.base", &[]), BadgeTone::Neutral));
+    } else if p.error.is_some() {
+        chips.push(badge(t("ui.mods.badge.error", &[]), BadgeTone::Bad));
+    } else {
+        chips.push(badge(
+            t("ui.mods.version", &[("version", &p.version)]),
+            BadgeTone::Neutral,
+        ));
+        chips.push(if p.enabled {
+            badge(t("ui.mods.on", &[]), BadgeTone::Info)
         } else {
-            let hash: String = p.hash.chars().take(12).collect();
-            let details = if p.files > 0 {
-                t(
-                    "ui.mods.details",
-                    &[
-                        ("version", &p.version),
-                        ("id", &p.id),
-                        ("files", &p.files.to_string()),
-                        ("size", &size_text(p.size_bytes)),
-                        ("hash", &hash),
-                    ],
-                )
-            } else {
-                t(
-                    "ui.mods.details_short",
-                    &[("version", &p.version), ("id", &p.id), ("hash", &hash)],
-                )
-            };
-            kids.push(Widget::Note(details));
-            if !p.base {
-                let state = match (p.loaded, p.enabled) {
-                    (true, true) => "ui.mods.state.loaded",
-                    (true, false) => "ui.mods.state.unload",
-                    (false, true) => "ui.mods.state.pending",
-                    (false, false) => "ui.mods.state.off",
-                };
-                kids.push(Widget::Label(t(state, &[])));
-            }
-            if !p.depends.is_empty() {
-                kids.push(Widget::Note(t(
-                    "ui.mods.depends",
-                    &[("packs", &p.depends.join(", "))],
-                )));
-            }
-            for c in &p.capabilities {
-                let what = t(&format!("ui.mods.cap.{}", c.name.replace('-', "_")), &[]);
-                if c.needs_approval {
-                    kids.push(Widget::Toggle {
-                        id: format!("mods.cap.{}.{}", p.id, c.name),
-                        label: t("ui.mods.allow", &[("what", &what)]),
-                        value: c.approved,
-                    });
-                } else {
-                    kids.push(Widget::Note(t("ui.mods.asks", &[("what", &what)])));
-                }
-            }
+            badge(t("ui.mods.off", &[]), BadgeTone::Neutral)
+        });
+        if p.enabled
+            && p.capabilities
+                .iter()
+                .any(|c| c.needs_approval && !c.approved)
+        {
+            chips.push(badge(t("ui.mods.badge.approval", &[]), BadgeTone::Accent));
         }
+    }
+    let mut out = vec![between(
+        String::new(),
+        vec![Widget::Heading(p.name.clone()), Widget::Row(chips)],
+    )];
+    if let Some(e) = &p.error {
+        out.push(between(
+            t("ui.mods.group.problem", &[]),
+            vec![
+                Widget::Label(t("ui.mods.invalid", &[])),
+                Widget::Note(e.chars().take(300).collect()),
+            ],
+        ));
+    } else {
+        let mut facts = Vec::new();
+        if !p.id.is_empty() {
+            facts.push((t("ui.mods.fact.id", &[]), p.id.clone()));
+        }
+        facts.push((t("ui.mods.fact.version", &[]), p.version.clone()));
+        if p.files > 0 {
+            facts.push((t("ui.mods.fact.files", &[]), p.files.to_string()));
+            facts.push((t("ui.mods.fact.size", &[]), size_text(p.size_bytes)));
+        }
+        facts.push((
+            t("ui.mods.fact.hash", &[]),
+            p.hash.chars().take(12).collect(),
+        ));
         if !p.base {
-            let mut buttons = vec![Widget::button(
-                &format!("mods.remove.{}", p.folder),
-                t("ui.mods.remove", &[]),
-            )];
+            let state = match (p.loaded, p.enabled) {
+                (true, true) => "ui.mods.state.loaded",
+                (true, false) => "ui.mods.state.unload",
+                (false, true) => "ui.mods.state.pending",
+                (false, false) => "ui.mods.state.off",
+            };
+            facts.push((t("ui.mods.fact.status", &[]), t(state, &[])));
+        }
+        if !p.depends.is_empty() {
+            facts.push((t("ui.mods.fact.needs", &[]), p.depends.join(", ")));
+        }
+        out.push(between(
+            t("ui.mods.group.details", &[]),
+            vec![Widget::Facts(facts)],
+        ));
+        if !p.capabilities.is_empty() {
+            let rows = p
+                .capabilities
+                .iter()
+                .map(|c| {
+                    let what = t(&format!("ui.mods.cap.{}", c.name.replace('-', "_")), &[]);
+                    if c.needs_approval {
+                        Widget::Toggle {
+                            id: format!("mods.cap.{}.{}", p.id, c.name),
+                            label: t("ui.mods.allow", &[("what", &what)]),
+                            value: c.approved,
+                        }
+                    } else {
+                        Widget::Note(t("ui.mods.asks", &[("what", &what)]))
+                    }
+                })
+                .collect();
+            out.push(between(t("ui.mods.group.permissions", &[]), rows));
+        }
+    }
+    if !p.base {
+        let mut actions = Vec::new();
+        if m.mods_confirm() == Some(p.folder.as_str()) {
+            actions.push(Widget::Label(t(
+                "ui.mods.confirm_remove",
+                &[("name", &p.name)],
+            )));
+            actions.push(Widget::Row(vec![
+                Widget::button(
+                    &format!("mods.remove_yes.{}", p.folder),
+                    t("ui.mods.remove_yes", &[]),
+                ),
+                Widget::button("mods.remove_cancel", t("ui.cancel", &[])),
+            ]));
+        } else {
+            let mut buttons = Vec::new();
             if p.error.is_none() {
-                buttons.push(Widget::button(
+                let toggle = Widget::button(
                     &format!("mods.enable.{}", p.id),
                     t(
                         if p.enabled {
@@ -1077,48 +1225,76 @@ fn mod_tile(m: &AppModel, p: &crate::types::PackRow, t: Text) -> Widget {
                         },
                         &[],
                     ),
-                ));
+                );
+                // Turning a pack on is the main thing to do with one that is off.
+                buttons.push(if p.enabled {
+                    toggle
+                } else {
+                    Widget::Primary(Box::new(toggle))
+                });
             }
             buttons.push(Widget::button(
-                &format!("mods.open.{key}"),
+                &format!("mods.open.{}", pack_key(p)),
                 t("ui.mods.open", &[]),
             ));
-            kids.push(Widget::Row(buttons));
+            buttons.push(Widget::button(
+                &format!("mods.remove.{}", p.folder),
+                t("ui.mods.remove", &[]),
+            ));
+            actions.push(Widget::Row(buttons));
         }
+        out.push(between(String::new(), actions));
     }
-    Widget::Group {
-        border: crate::widget::Border::GROUP,
-        title: String::new(),
-        children: kids,
-    }
+    out
 }
 
-/// The Mods screen: a bounded, scrolling list of every pack as an unrollable tile, then the switches and
-/// buttons that belong to the whole screen. A first-stage layout; the tiles have room for more later.
+/// The Mods screen: every pack as a list row on the left, with the safe-mode switch under it; the chosen pack's
+/// facts, permissions and actions in a pane on the right. Install, the packs folder and Back are pinned below.
 fn mods(m: &AppModel, t: Text) -> Tree {
     let v = m.mods();
+    let chosen = chosen_pack(m);
     let mut w = vec![Widget::Heading(t("ui.mods.title", &[]))];
     w.push(Widget::Note(t("ui.mods.intro", &[])));
     if v.restart_needed {
-        w.push(Widget::Label(t("ui.mods.restart", &[])));
+        w.push(Widget::Row(vec![Widget::Badge {
+            label: t("ui.mods.restart", &[]),
+            tone: BadgeTone::Accent,
+        }]));
     }
     for n in &v.notes {
         w.push(Widget::Note(n.clone()));
     }
-    w.push(Widget::Scroll {
-        max_height: 420,
-        children: v.packs.iter().map(|p| mod_tile(m, p, t)).collect(),
-    });
-    w.push(Widget::Toggle {
+    let rows: Vec<Widget> = ordered_packs(m)
+        .into_iter()
+        .map(|p| mod_row(p, chosen.is_some_and(|c| pack_key(c) == pack_key(p)), t))
+        .collect();
+    let mut left = vec![Widget::Scroll {
+        max_height: FILL,
+        children: rows,
+    }];
+    let mut options = vec![Widget::Toggle {
         id: "mods.safe".into(),
         label: t("ui.mods.safe", &[]),
         value: v.safe_mode,
-    });
+    }];
     if !v.folder.is_empty() {
-        w.push(Widget::Note(t("ui.mods.folder", &[("folder", &v.folder)])));
+        options.push(Widget::Note(t("ui.mods.folder", &[("folder", &v.folder)])));
     }
+    left.push(Widget::Group {
+        border: Border::GROUP,
+        title: String::new(),
+        children: options,
+    });
+    let right = match chosen {
+        Some(p) => vec![detail_pane(mod_detail(m, p, t))],
+        None => vec![detail_pane(vec![Widget::Note(t(
+            "ui.mods.none_chosen",
+            &[],
+        ))])],
+    };
+    w.push(Widget::Columns { left, right });
     Tree::new(t("ui.mods.title", &[]), w).with_footer(
-        720,
+        1100,
         vec![Widget::ButtonBar(vec![
             Widget::button("mods.install", t("ui.mods.install", &[])),
             Widget::button("mods.reveal", t("ui.mods.reveal", &[])),

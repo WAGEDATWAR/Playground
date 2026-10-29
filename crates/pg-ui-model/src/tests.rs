@@ -260,7 +260,7 @@ fn new_world_validates_names_and_seeds_and_escape_goes_back() {
 }
 
 #[test]
-fn saved_worlds_select_load_export_delete_import() {
+fn saved_worlds_choose_load_export_delete_import() {
     let mut m = boot(
         vec![world("a", "Alpha", 1, false), world("b", "Beta", 4, true)],
         None,
@@ -269,24 +269,29 @@ fn saved_worlds_select_load_export_delete_import() {
     assert_eq!(fx, vec![AppEffect::ListWorlds]);
     let s = snap(&m);
     assert!(
-        s.contains("ui.saved.damaged_suffix"),
-        "damaged slots are marked: {s}"
+        s.contains("[ui.saved.badge.damaged]!"),
+        "damaged slots carry a badge: {s}"
     );
     assert!(
-        !s.contains("<saved.load>") && !s.contains("<saved.delete>"),
-        "no actions until a world is selected (a tile opens when it is chosen): {s}"
+        s.contains("scroll (up to 10000)") && s.contains("columns:"),
+        "worlds are a list beside a detail pane: {s}"
     );
-    assert!(
-        s.contains("scroll (up to 420)"),
-        "worlds are a bounded list: {s}"
-    );
-    assert!(click(&mut m, "saved.load").is_empty());
-    click(&mut m, "saved.row.a");
-    assert!(snap(&m).contains("ui.saved.details"));
+    // The newest world that is not damaged is chosen as soon as the screen opens, so Load works at once.
+    assert!(s.contains("* Alpha"), "{s}");
     assert_eq!(
         click(&mut m, "saved.load"),
         vec![AppEffect::LoadWorld("a".into())]
     );
+    // Choosing another row shows that world in the pane.
+    click(&mut m, "saved.row.b");
+    let s = snap(&m);
+    assert!(s.contains("* Beta") && !s.contains("* Alpha"), "{s}");
+    assert!(s.contains("ui.saved.fact.packs:"), "{s}");
+    assert_eq!(
+        click(&mut m, "saved.load"),
+        vec![AppEffect::LoadWorld("b".into())]
+    );
+    click(&mut m, "saved.row.a");
     assert_eq!(
         click(&mut m, "saved.export"),
         vec![AppEffect::ExportWorld("a".into())]
@@ -304,6 +309,7 @@ fn saved_worlds_select_load_export_delete_import() {
     );
     m.update(UiEvent::WorldsListed(vec![world("b", "Beta", 4, true)]));
     assert!(!snap(&m).contains("Alpha"));
+    assert!(snap(&m).contains("* Beta"), "the one left is chosen");
     assert_eq!(click(&mut m, "saved.import"), vec![AppEffect::ImportWorld]);
     assert_eq!(
         m.update(UiEvent::Imported("Gamma".into())),
@@ -1260,7 +1266,7 @@ fn pack_row(
 }
 
 #[test]
-fn the_mods_screen_lists_packs_as_tiles_that_unroll_and_turns_its_controls_into_effects() {
+fn the_mods_screen_is_a_pack_list_beside_a_detail_pane_and_turns_its_controls_into_effects() {
     let mut m = boot(Vec::new(), None);
     assert_eq!(click(&mut m, "main.mods"), vec![AppEffect::ListMods]);
     assert!(matches!(m.screen(), Screen::Mods));
@@ -1290,58 +1296,45 @@ fn the_mods_screen_lists_packs_as_tiles_that_unroll_and_turns_its_controls_into_
         )
     };
     m.update(UiEvent::ModsLoaded(crate::types::ModsView {
-        packs: vec![base, caffeine, broken],
+        packs: vec![broken, caffeine, base],
         safe_mode: false,
         notes: vec!["'x' was left out: it needs your approval.".into()],
         restart_needed: true,
         folder: "C:/data/packs".into(),
     }));
-    // Rolled up: a bounded scrolling list; each tile shows its name, what it affects and an On/Off button.
-    let rolled = m.tree(&show).snapshot(m.focus());
+    // The list: the base game first, installed packs next, packs that failed last; each row has its badges.
+    let s = m.tree(&show).snapshot(m.focus());
     for want in [
-        "scroll (up to 420)",
-        "<mods.tile.caffeine>",
-        "<mods.tile.base>",
-        "<mods.tile.broken>",
-        "ui.mods.affects{what=data, systems}",
-        "<mods.enable.caffeine>",
-        "ui.mods.on",
-        "ui.mods.error_mark",
-        "ui.mods.approval_mark",
-        "ui.mods.base_short",
+        "scroll (up to 10000)",
+        "columns:",
+        "<mods.row.base>",
+        "<mods.row.caffeine>",
+        "<mods.row.broken>",
+        "[ui.mods.badge.base]",
+        "[ui.mods.on]!",
+        "[ui.mods.badge.approval]!",
+        "[ui.mods.badge.error]!",
+        "ui.mods.row_sub{version=0.1.0,what=data, systems}",
+        "[ui.mods.restart]!",
         "<mods.safe>",
         "<mods.install>",
-        "ui.mods.restart",
         "needs your approval",
     ] {
-        assert!(
-            rolled.contains(want),
-            "missing {want:?} in
-{rolled}"
-        );
+        assert!(s.contains(want), "missing {want:?} in\n{s}");
     }
-    for hidden in [
-        "<mods.cap.caffeine.systems>",
-        "<mods.remove.caffeine>",
-        "<mods.open.caffeine>",
-        "hash 012345678",
-    ] {
-        assert!(
-            !rolled.contains(hidden),
-            "{hidden:?} should be inside the unrolled tile:
-{rolled}"
-        );
-    }
+    let at = |k: &str| s.find(k).unwrap_or(usize::MAX);
     assert!(
-        !rolled.contains("<mods.enable.base>"),
-        "the base game cannot be switched off"
+        at("<mods.row.base>") < at("<mods.row.caffeine>")
+            && at("<mods.row.caffeine>") < at("<mods.row.broken>"),
+        "{s}"
     );
-    // Unrolled: details, approvals as checkboxes, and the pack's own buttons at the bottom.
-    assert!(click(&mut m, "mods.tile.caffeine").is_empty());
-    assert!(m.mod_tile_open("caffeine"));
-    let open = m.tree(&show).snapshot(m.focus());
+    // The first installed pack is chosen at once, and the pane shows its facts, permissions and actions.
     for want in [
-        "ui.mods.details{version=0.1.0,id=caffeine,files=12,size=3.4 KB,hash=0123456789ab}",
+        "* Pack caffeine",
+        "ui.mods.fact.id: caffeine",
+        "ui.mods.fact.files: 12",
+        "ui.mods.fact.size: 3.4 KB",
+        "ui.mods.fact.hash: 0123456789ab",
         "ui.mods.state.pending",
         "<mods.cap.caffeine.systems>",
         "ui.mods.asks{what=ui.mods.cap.data}",
@@ -1349,22 +1342,24 @@ fn the_mods_screen_lists_packs_as_tiles_that_unroll_and_turns_its_controls_into_
         "ui.mods.disable",
         "<mods.open.caffeine>",
     ] {
-        assert!(
-            open.contains(want),
-            "missing {want:?} in
-{open}"
-        );
+        assert!(s.contains(want), "missing {want:?} in\n{s}");
     }
     assert!(
-        !open.contains("<mods.cap.caffeine.data>"),
+        !s.contains("<mods.cap.caffeine.data>"),
         "plain data needs no approval"
     );
-    // The same tile again rolls it up; an invalid pack's tile shows why it failed.
-    click(&mut m, "mods.tile.caffeine");
-    assert!(!m.mod_tile_open("caffeine"));
-    click(&mut m, "mods.tile.broken");
+    // The base game cannot be switched off or removed; a pack that failed shows why.
+    click(&mut m, "mods.row.base");
+    let base_view = m.tree(&show).snapshot(None);
+    assert!(
+        !base_view.contains("<mods.enable.base>") && !base_view.contains("<mods.remove."),
+        "{base_view}"
+    );
+    assert!(click(&mut m, "mods.enable.base").is_empty());
+    click(&mut m, "mods.row.broken");
     assert!(m.tree(&show).snapshot(None).contains("bad json"));
-    // Controls become effects. The On/Off button flips the pack's state.
+    // Controls become effects. The Enable / Disable button flips the pack's state.
+    click(&mut m, "mods.row.caffeine");
     assert_eq!(
         click(&mut m, "mods.enable.caffeine"),
         vec![AppEffect::SetPackEnabled {
@@ -1372,7 +1367,6 @@ fn the_mods_screen_lists_packs_as_tiles_that_unroll_and_turns_its_controls_into_
             on: false
         }]
     );
-    assert!(click(&mut m, "mods.enable.base").is_empty());
     assert_eq!(
         m.update(UiEvent::Toggle("mods.cap.caffeine.systems".into(), true)),
         vec![AppEffect::ApproveCapability {
@@ -1387,8 +1381,17 @@ fn the_mods_screen_lists_packs_as_tiles_that_unroll_and_turns_its_controls_into_
     );
     assert_eq!(click(&mut m, "mods.install"), vec![AppEffect::InstallPack]);
     assert_eq!(click(&mut m, "mods.reveal"), vec![AppEffect::RevealPacks]);
+    // Removing deletes the folder, so it asks first; Cancel keeps the pack.
+    assert!(click(&mut m, "mods.remove.caffeine").is_empty());
+    assert!(m
+        .tree(&show)
+        .snapshot(None)
+        .contains("ui.mods.confirm_remove{name=Pack caffeine}"));
+    assert!(click(&mut m, "mods.remove_cancel").is_empty());
+    assert!(!m.tree(&show).snapshot(None).contains("confirm_remove"));
+    click(&mut m, "mods.remove.caffeine");
     assert_eq!(
-        click(&mut m, "mods.remove.caffeine"),
+        click(&mut m, "mods.remove_yes.caffeine"),
         vec![AppEffect::RemovePack("caffeine".into())]
     );
     assert_eq!(

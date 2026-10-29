@@ -282,7 +282,7 @@ fn the_pause_menu_leaves_the_world_and_lists_it() {
     assert_eq!(d.model.worlds().len(), 1, "the list was refreshed");
     d.click("main.saved");
     let t = d.text();
-    assert!(t.contains("New Town: day 0, 14 residents"), "{t}");
+    assert!(t.contains("New Town - Day 0, 14 residents"), "{t}");
     no_missing_strings(&t);
 }
 
@@ -982,7 +982,7 @@ fn the_mods_screen_installs_enables_approves_and_removes_a_pack() {
         .iter()
         .any(|c| c.name == "systems" && c.needs_approval && !c.approved));
     // Enabled but not approved: it will not load, and the screen says why only after approval changes.
-    d.click("mods.tile.caffeine");
+    d.click("mods.row.caffeine");
     d.click("mods.enable.caffeine");
     assert!(
         !d.model.mods().restart_needed,
@@ -1009,9 +1009,7 @@ fn the_mods_screen_installs_enables_approves_and_removes_a_pack() {
         "it will load at the next start"
     );
     assert!(
-        d.text().contains("next time the game starts")
-            || d.text().contains("ui.mods.restart")
-            || d.text().contains("Your changes take effect"),
+        d.text().contains("Restart to apply your changes"),
         "{}",
         d.text()
     );
@@ -1026,6 +1024,7 @@ fn the_mods_screen_installs_enables_approves_and_removes_a_pack() {
     assert!(d.model.mods().safe_mode);
     // Removing deletes the folder and forgets the choices.
     d.click("mods.remove.caffeine");
+    d.click("mods.remove_yes.caffeine");
     assert!(d.model.mods().packs.iter().all(|p| p.id != "caffeine"));
     assert!(!data.join("packs/caffeine").exists());
     let saved = String::from_utf8(m.storage.read("mods.json").unwrap().unwrap()).unwrap();

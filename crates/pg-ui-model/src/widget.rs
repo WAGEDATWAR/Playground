@@ -23,6 +23,17 @@ pub enum Widget {
         label: String,
         tone: BadgeTone,
     },
+    /// One row of a list: a title, a smaller line under it, status badges at the right, and whether it is the
+    /// chosen row. Clicking it chooses it.
+    ListRow {
+        id: WidgetId,
+        title: String,
+        subtitle: String,
+        badges: Vec<(String, BadgeTone)>,
+        selected: bool,
+    },
+    /// Labels and values in two aligned columns (the facts about the chosen item).
+    Facts(Vec<(String, String)>),
     Spacer,
     Button {
         id: WidgetId,
@@ -132,9 +143,17 @@ pub enum Widget {
 pub enum BadgeTone {
     /// A quiet chip of information (the time, the resident count).
     Neutral,
-    /// Something that needs noticing (Paused).
+    /// Something that needs noticing (Paused, Needs approval).
     Accent,
+    /// Information that is on (a pack is On).
+    Info,
+    /// Something wrong (an error, a damaged save).
+    Bad,
 }
+
+/// A scroll area with this `max_height` or more fills the height the window has left, instead of a fixed number
+/// of points (a list beside a detail pane).
+pub const FILL: u32 = 10_000;
 
 /// How a border is drawn. The model says what kind; the shell picks the colours from the theme.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -262,6 +281,7 @@ impl Widget {
     pub fn id(&self) -> Option<&str> {
         match self {
             Widget::Button { id, .. }
+            | Widget::ListRow { id, .. }
             | Widget::TextField { id, .. }
             | Widget::Toggle { id, .. }
             | Widget::Choice { id, .. }
@@ -276,7 +296,8 @@ impl Widget {
     pub fn focusable(&self) -> bool {
         match self {
             Widget::Button { enabled, .. } => *enabled,
-            Widget::TextField { .. }
+            Widget::ListRow { .. }
+            | Widget::TextField { .. }
             | Widget::Toggle { .. }
             | Widget::Choice { .. }
             | Widget::Slider { .. }
@@ -412,11 +433,39 @@ fn snapshot_widget(out: &mut String, w: &Widget, depth: usize, focus: Option<&st
             let _ = writeln!(out, "{pad}({t})");
         }
         Widget::Spacer => {}
+        Widget::ListRow {
+            id,
+            title,
+            subtitle,
+            badges,
+            selected,
+        } => {
+            let marks: String = badges
+                .iter()
+                .map(|(b, tone)| {
+                    format!(
+                        " [{b}]{}",
+                        if *tone == BadgeTone::Neutral { "" } else { "!" }
+                    )
+                })
+                .collect();
+            let _ = writeln!(
+                out,
+                "{pad}{}{}{title} - {subtitle}{marks} <{id}>",
+                mark(id),
+                if *selected { "* " } else { "  " }
+            );
+        }
+        Widget::Facts(rows) => {
+            for (k, v) in rows {
+                let _ = writeln!(out, "{pad}{k}: {v}");
+            }
+        }
         Widget::Badge { label, tone } => {
             let _ = writeln!(
                 out,
                 "{pad}[{label}]{}",
-                if *tone == BadgeTone::Accent { "!" } else { "" }
+                if *tone == BadgeTone::Neutral { "" } else { "!" }
             );
         }
         Widget::Button { id, label, enabled } => {

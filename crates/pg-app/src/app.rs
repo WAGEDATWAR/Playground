@@ -174,8 +174,7 @@ impl App {
             "mods" => click(self, "main.mods"),
             "mods-open" => {
                 click(self, "main.mods");
-                click(self, "mods.tile.caffeine");
-                click(self, "mods.tile.birthdays");
+                click(self, "mods.row.caffeine");
             }
             "journal" => {
                 start_world(self);

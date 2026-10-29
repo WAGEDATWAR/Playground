@@ -11,7 +11,7 @@ use pg_host::console::Severity;
 use pg_ui_model::layout::{self, DrawerLayout};
 use pg_ui_model::types::{Key, UiEvent};
 use pg_ui_model::widget::{
-    BadgeTone, Border, BorderStyle, BorderTone, Corners, DrawerItem, Tree, Widget,
+    BadgeTone, Border, BorderStyle, BorderTone, Corners, DrawerItem, Tree, Widget, FILL,
 };
 use std::collections::BTreeMap;
 
@@ -336,17 +336,37 @@ fn draw_widget(
             ui.add_space(14.0);
         }
         Widget::Badge { label, tone } => {
-            // A small read-only pill: a quiet control colour, or amber when it needs noticing.
-            let (fill, text) = match tone {
-                BadgeTone::Neutral => (theme::CONTROL, theme::TEXT),
-                BadgeTone::Accent => (theme::ACCENT, theme::ON_ACCENT),
-            };
+            // A small read-only pill.
+            let (fill, text) = badge_colors(*tone);
             egui::Frame::new()
                 .fill(fill)
                 .corner_radius(theme::R_CARD)
                 .inner_margin(egui::Margin::symmetric(9, 3))
                 .show(ui, |ui| {
                     ui.label(RichText::new(label).size(theme::T_NOTE + 1.0).color(text));
+                });
+        }
+        Widget::ListRow {
+            id,
+            title,
+            subtitle,
+            badges,
+            selected,
+        } => draw_list_row(ui, id, title, subtitle, badges, *selected, focus, d),
+        Widget::Facts(rows) => {
+            egui::Grid::new(ui.next_auto_id())
+                .num_columns(2)
+                .spacing([18.0, 7.0])
+                .show(ui, |ui| {
+                    for (k, v) in rows {
+                        ui.label(
+                            RichText::new(k)
+                                .size(theme::T_NOTE + 1.0)
+                                .color(theme::TEXT_MUTED),
+                        );
+                        ui.add(egui::Label::new(RichText::new(v).size(theme::T_BODY - 1.0)).wrap());
+                        ui.end_row();
+                    }
                 });
         }
         Widget::Button { id, label, enabled } => {
@@ -466,7 +486,9 @@ fn draw_widget(
         }
         Widget::Thumbnail { name } => {
             if let Some((id, size)) = images(name) {
-                ui.image(egui::load::SizedTexture::new(id, size));
+                // A whole multiple of the picture's size (up to twice) that fits, so it stays sharp.
+                let k = (ui.available_width() / size.x).floor().clamp(1.0, 2.0);
+                ui.image(egui::load::SizedTexture::new(id, size * k));
             }
         }
         Widget::Progress { label, permille } => {
@@ -629,9 +651,13 @@ fn draw_widget(
             children,
         } => {
             // A bounded region: as tall as asked (or as tall as the room allows, never under a few rows).
-            let h = (*max_height as f32)
-                .min(ui.ctx().content_rect().height() * 0.6)
-                .max(120.0);
+            let window_h = ui.ctx().content_rect().height();
+            let h = if *max_height >= FILL {
+                // Fill what the window has left under the heading and above the bottom bar.
+                (window_h - 250.0).max(160.0)
+            } else {
+                (*max_height as f32).min(window_h * 0.6).max(120.0)
+            };
             // The area is as tall as its content up to the bounded height, then it scrolls. The content's height
             // from the last frame is remembered (the first frame assumes the full height).
             let key = ui.next_auto_id();
@@ -675,6 +701,108 @@ fn draw_widget(
             });
         }
     }
+}
+
+/// Fill and text colours of a badge.
+fn badge_colors(tone: BadgeTone) -> (Color32, Color32) {
+    match tone {
+        BadgeTone::Neutral => (theme::HAIRLINE, theme::TEXT),
+        BadgeTone::Accent => (theme::ACCENT, theme::ON_ACCENT),
+        BadgeTone::Info => (theme::INFO, theme::TEXT),
+        BadgeTone::Bad => (theme::BAD, theme::ON_ACCENT),
+    }
+}
+
+/// One list row: a title, a smaller line under it, badges at the right; the chosen row is lifted and has an
+/// amber bar on its left edge.
+#[allow(clippy::too_many_arguments)]
+fn draw_list_row(
+    ui: &mut egui::Ui,
+    id: &str,
+    title: &str,
+    subtitle: &str,
+    badges: &[(String, BadgeTone)],
+    selected: bool,
+    focus: Option<&str>,
+    d: &mut Drawn,
+) {
+    let (rect, r) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 56.0), egui::Sense::click());
+    let fill = if selected {
+        theme::CONTROL_ACTIVE
+    } else if r.hovered() {
+        theme::CONTROL_HOVER
+    } else {
+        theme::CONTROL
+    };
+    let painter = ui.painter().with_clip_rect(rect);
+    let radius = egui::CornerRadius::same(theme::R_CONTROL);
+    painter.rect_filled(rect, radius, fill);
+    painter.rect_stroke(
+        rect,
+        radius,
+        Stroke::new(
+            1.0,
+            if selected {
+                theme::EDGE
+            } else {
+                theme::HAIRLINE
+            },
+        ),
+        egui::StrokeKind::Inside,
+    );
+    if selected {
+        let bar = egui::Rect::from_min_size(rect.min, egui::vec2(4.0, rect.height()));
+        painter.rect_filled(
+            bar,
+            egui::CornerRadius {
+                nw: theme::R_CONTROL,
+                sw: theme::R_CONTROL,
+                ne: 0,
+                se: 0,
+            },
+            theme::ACCENT,
+        );
+    }
+    // Badges from the right edge inwards.
+    let mut right = rect.right() - 10.0;
+    for (label, tone) in badges.iter().rev() {
+        let galley = painter.layout_no_wrap(
+            label.clone(),
+            egui::FontId::proportional(theme::T_NOTE),
+            badge_colors(*tone).1,
+        );
+        let pill = egui::Rect::from_center_size(
+            egui::pos2(right - (galley.size().x + 16.0) / 2.0, rect.center().y),
+            egui::vec2(galley.size().x + 16.0, 22.0),
+        );
+        painter.rect_filled(pill, theme::R_CARD, badge_colors(*tone).0);
+        painter.galley(
+            egui::pos2(pill.left() + 8.0, pill.center().y - galley.size().y / 2.0),
+            galley,
+            theme::TEXT,
+        );
+        right = pill.left() - 6.0;
+    }
+    painter.text(
+        egui::pos2(rect.left() + 16.0, rect.top() + 9.0),
+        egui::Align2::LEFT_TOP,
+        title,
+        egui::FontId::proportional(theme::T_BODY + 1.0),
+        theme::TEXT,
+    );
+    painter.text(
+        egui::pos2(rect.left() + 16.0, rect.top() + 32.0),
+        egui::Align2::LEFT_TOP,
+        subtitle,
+        egui::FontId::proportional(theme::T_NOTE),
+        theme::TEXT_MUTED,
+    );
+    ring(ui, &r, id, focus);
+    if r.clicked() {
+        d.events.push(UiEvent::Click(id.to_owned()));
+    }
+    d.rects.insert(id.to_owned(), rect);
 }
 
 /// A line between a widget and the one above it, for widgets whose border only separates neighbours.
