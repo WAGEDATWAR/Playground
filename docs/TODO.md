@@ -4,7 +4,7 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Stage 1: 1.9, the gate, is in progress** (steps in `docs/PLAN.md`; deferrals walked from `docs/DEFERRALS.md`). 1.8b is accepted and tagged m1.8b. Next: step 1 (register review), then S-061, S-064, S-070, the Stage 1 scenarios and soak bounds, the DF-001 decision, `cargo deny` in the local gate, and the gate report. AccessKit is Stage 11 (DF-010).
+**Stage 1 is closed** (1.9 accepted 2026-10-29, tagged `m1.9`; report `docs/gates/stage-1.md`). **Stage 2 groundwork is done** (D-085): `docs/PLAN.md` Phase 2 has a proposed milestone table 2.0 to 2.8, what the survey found, and four questions. **Waiting on you:** the order, the re-pin policy, the checkpoints and the DF-012/014/019 targets (defaults are listed); then 2.0 (action system pieces, DF-006) starts. AccessKit is Stage 11 (DF-010).
 
 **Known, scheduled:** the map view still draws generated towns with the painter-based view (the real renderer is 1.6); building roles are not yet drawn differently; conversation bubbles and the inspector panel come with 1.6/1.7 (the data and `pg residents inspect` exist now).
 
