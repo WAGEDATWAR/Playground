@@ -99,6 +99,8 @@ pub enum Step {
     },
     Save {
         slot: String,
+        /// The most the compressed save may take (the save-size watch, S-064); the step fails above it.
+        max_compressed_bytes: Option<u64>,
     },
     Load {
         slot: String,
@@ -204,8 +206,14 @@ fn parse_step(r: Reader<'_>) -> Result<Step, ReadError> {
             }
         }
         "save" => {
-            r.only(&["op", "slot"])?;
-            Ok(Step::Save { slot: slot(&r)? })
+            r.only(&["op", "slot", "max_compressed_bytes"])?;
+            Ok(Step::Save {
+                slot: slot(&r)?,
+                max_compressed_bytes: match r.maybe("max_compressed_bytes")? {
+                    Some(b) => Some(b.reader().u64()?),
+                    None => None,
+                },
+            })
         }
         "load" => {
             r.only(&["op", "slot", "expect"])?;
@@ -457,14 +465,14 @@ impl Runner<'_> {
                 self.sim.run_ticks(*ticks).map_err(|e| e.to_string())?;
                 Ok(format!("tick {}", self.sim.world().clock.tick()))
             }
-            Step::Save { slot } => {
-                let r = self.save(slot)?;
-                Ok(r)
-            }
+            Step::Save {
+                slot,
+                max_compressed_bytes,
+            } => self.save(slot, *max_compressed_bytes),
             Step::Load { slot, expect } => self.load(slot, expect.as_deref()),
             Step::Reload { slot } => {
                 let before = self.sim.world().state_hash();
-                self.save(slot)?;
+                self.save(slot, None)?;
                 let msg = self.load(slot, Some("clean"))?;
                 let after = self.sim.world().state_hash();
                 if before != after {
@@ -664,7 +672,7 @@ impl Runner<'_> {
         slot.to_owned()
     }
 
-    fn save(&mut self, slot: &str) -> Result<String, String> {
+    fn save(&mut self, slot: &str, max_compressed: Option<u64>) -> Result<String, String> {
         if !self.sim.snapshot().pending.is_empty() {
             return Err("cannot save while inputs are queued for future ticks".to_owned());
         }
@@ -672,6 +680,14 @@ impl Runner<'_> {
         let r = store
             .save(&Self::slot_id(slot), self.sim.world(), &[], "scenario")
             .map_err(|e| e.to_string())?;
+        if let Some(max) = max_compressed {
+            if u64::try_from(r.compressed_bytes).unwrap_or(u64::MAX) > max {
+                return Err(format!(
+                    "the save takes {} bytes, more than the {max} the scenario allows (save-size watch)",
+                    r.compressed_bytes
+                ));
+            }
+        }
         Ok(format!(
             "generation {} ({} -> {} bytes)",
             r.generation, r.uncompressed_bytes, r.compressed_bytes

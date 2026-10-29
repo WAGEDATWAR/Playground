@@ -16,7 +16,14 @@
   "steps": [
     {
       "op": "command",
-      "cmd": { "type": "generate_town", "w": 64, "h": 48, "water": 18, "residents": 20, "tone": "standard" }
+      "cmd": {
+        "type": "generate_town",
+        "w": 64,
+        "h": 48,
+        "water": 18,
+        "residents": 20,
+        "tone": "standard"
+      }
     },
     {
       "op": "soak",
@@ -30,6 +37,11 @@
       "pawns": 20,
       "day": 30,
       "hash": "24f74631"
+    },
+    {
+      "op": "save",
+      "slot": "size-watch",
+      "max_compressed_bytes": 250000
     },
     {
       "op": "reload",
