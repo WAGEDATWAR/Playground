@@ -486,8 +486,12 @@ fn draw_widget(
         }
         Widget::Thumbnail { name } => {
             if let Some((id, size)) = images(name) {
-                // A whole multiple of the picture's size (up to twice) that fits, so it stays sharp.
-                let k = (ui.available_width() / size.x).floor().clamp(1.0, 2.0);
+                // The largest whole multiple of the picture's size that fits the room (and a sensible height), so
+                // small pixel pictures stay sharp.
+                let k = (ui.available_width() / size.x)
+                    .min(300.0 / size.y)
+                    .floor()
+                    .clamp(1.0, 8.0);
                 ui.image(egui::load::SizedTexture::new(id, size * k));
             }
         }

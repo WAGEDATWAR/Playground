@@ -42,6 +42,28 @@ pub struct NewWorldForm {
     pub tone: String,
     /// String-table key of the validation problem, if any.
     pub error: Option<&'static str>,
+    /// The sample town's picture, once one has been made for these settings.
+    pub preview: Option<String>,
+    /// A new sample town is being made.
+    pub preview_busy: bool,
+}
+
+impl NewWorldForm {
+    /// The effect that makes a sample town for the current settings. With no seed typed, the sample uses a fixed
+    /// one (the real town gets a random seed when it is created).
+    pub fn preview_effect(&self) -> crate::types::AppEffect {
+        crate::types::AppEffect::PreviewWorld {
+            seed: if self.seed.trim().is_empty() {
+                "sample".to_owned()
+            } else {
+                self.seed.trim().to_owned()
+            },
+            size: self.size,
+            residents: u32::try_from(self.residents).unwrap_or(0),
+            water: u32::try_from(self.water).unwrap_or(0),
+            tone: self.tone.clone(),
+        }
+    }
 }
 
 impl Default for NewWorldForm {
@@ -54,6 +76,8 @@ impl Default for NewWorldForm {
             water: 18,
             tone: "standard".to_owned(),
             error: None,
+            preview: None,
+            preview_busy: false,
         }
     }
 }
@@ -498,6 +522,22 @@ impl AppModel {
                 self.mods = v;
                 Vec::new()
             }
+            UiEvent::PreviewReady { name } => {
+                if let Screen::NewWorld(f) = self.screen_mut() {
+                    f.preview = Some(name);
+                    f.preview_busy = false;
+                }
+                Vec::new()
+            }
+            UiEvent::SeedSuggested(seed) => {
+                if let Screen::NewWorld(f) = self.screen_mut() {
+                    f.seed = seed;
+                    f.error = None;
+                    f.preview_busy = true;
+                    return vec![f.preview_effect()];
+                }
+                Vec::new()
+            }
             UiEvent::LoginPrompt { code, url } => {
                 if let Screen::AiOptions(f) = &mut self.screen {
                     f.login = LoginUi::Prompt { code, url };
@@ -803,6 +843,12 @@ impl AppModel {
 
     pub(crate) fn go_to(&mut self, s: Screen) {
         self.go(s);
+    }
+
+    /// Puts keyboard focus on a widget of the current screen (when it is there), instead of the first one.
+    pub(crate) fn focus_on(&mut self, id: &str) {
+        self.focus = Some(id.to_owned());
+        self.fix_focus();
     }
 
     pub(crate) fn go_back(&mut self) {

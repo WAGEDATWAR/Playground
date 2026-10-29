@@ -329,8 +329,8 @@
   "ui.inspect.effect": "{point}: {value} (by {packs})",
   "ui.new.preview": "World preview (coming later)",
   "ui.new.packs.title": "Content packs",
-  "ui.new.packs.note": "This world uses the base game and the packs enabled under Mods. Choosing packs for each world separately is not available yet.",
-  "ui.new.packs.choose": "Choose packs",
+  "ui.new.packs.note": "This world uses these packs: the base game and the packs enabled under Mods. Changes there need a restart. Choosing packs for each world separately comes later.",
+  "ui.new.packs.choose": "Manage packs...",
   "ui.new.group.world": "World",
   "ui.new.group.residents": "Residents",
   "ui.new.group.content": "Content",
@@ -366,5 +366,9 @@
   "ui.mods.fact.needs": "Needs",
   "ui.mods.confirm_remove": "Remove \"{name}\"? This deletes its folder.",
   "ui.mods.remove_yes": "Yes, remove it",
-  "ui.mods.none_chosen": "Choose a pack from the list to see it here."
+  "ui.mods.none_chosen": "Choose a pack from the list to see it here.",
+  "ui.new.preview_note": "A sample of this town: {w} by {h} tiles, {residents} residents.",
+  "ui.new.preview_sample": "A sample town (with no seed, a random one is made): {w} by {h} tiles, {residents} residents.",
+  "ui.new.preview_busy": "Making a sample town...",
+  "ui.new.randomize": "Random seed"
 }

@@ -75,6 +75,14 @@ struct ActiveWorld {
     session: Session,
 }
 
+/// A finished sample town for the New world screen.
+struct PreviewImage {
+    name: String,
+    w: u32,
+    h: u32,
+    rgb: Vec<u8>,
+}
+
 pub struct AppController {
     svc: AppServices,
     content: Option<Arc<ContentSet>>,
@@ -101,6 +109,12 @@ pub struct AppController {
     dialogue: crate::dialogue::DialogueHook,
     /// What happened when the packs were chosen at launch (packs left out and why).
     mods_notes: Vec<String>,
+    /// The newest sample-town request for the New world screen; older results are dropped.
+    preview_seq: Arc<std::sync::atomic::AtomicU64>,
+    /// The latest finished sample town: its picture's name, size and pixels.
+    preview_slot: Arc<std::sync::Mutex<Option<PreviewImage>>>,
+    /// Makes each random seed different even within one clock reading.
+    seed_counter: u64,
     /// The resident the inspector looks at, shared with the simulation loop.
     focus: Arc<std::sync::Mutex<Option<pg_core::id::EntityId>>>,
 }
@@ -176,6 +190,9 @@ impl AppController {
         let c = AppController {
             dialogue,
             mods_notes: Vec::new(),
+            preview_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            preview_slot: Arc::new(std::sync::Mutex::new(None)),
+            seed_counter: 0,
             focus: Arc::new(std::sync::Mutex::new(None)),
             svc,
             content,
@@ -412,10 +429,53 @@ impl AppController {
     }
 
     pub fn thumbnail_image(&self, name: &str) -> Option<(u32, u32, Vec<u8>)> {
+        if name.starts_with("preview/") {
+            let slot = self.preview_slot.lock().ok()?;
+            return slot
+                .as_ref()
+                .filter(|p| p.name == name)
+                .map(|p| (p.w, p.h, p.rgb.clone()));
+        }
         if !name.starts_with("worlds/") || name.contains("..") {
             return None;
         }
         crate::thumbnail::decode_png_rgb(&self.thumbnail(name)?)
+    }
+
+    /// Starts making a sample town on another thread. Only the newest request's result is kept.
+    fn start_preview(
+        &mut self,
+        seed: String,
+        size: MapSize,
+        residents: u32,
+        water: u32,
+        tone: String,
+    ) {
+        use std::sync::atomic::Ordering;
+        let Some(content) = self.content.clone() else {
+            return;
+        };
+        let seq = self.preview_seq.fetch_add(1, Ordering::SeqCst) + 1;
+        let latest = Arc::clone(&self.preview_seq);
+        let slot = Arc::clone(&self.preview_slot);
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let made =
+                crate::preview::build(&content, &seed, size.tiles(), residents, water, &tone);
+            if latest.load(Ordering::SeqCst) != seq {
+                return;
+            }
+            if let (Some((w, h, rgb)), Ok(mut s)) = (made, slot.lock()) {
+                let name = format!("preview/{seq}");
+                *s = Some(PreviewImage {
+                    name: name.clone(),
+                    w,
+                    h,
+                    rgb,
+                });
+                let _ = tx.send(UiEvent::PreviewReady { name });
+            }
+        });
     }
 
     fn unique_world_id(&self, name: &str) -> String {
@@ -626,6 +686,26 @@ impl AppController {
     fn perform_inner(&mut self, effect: AppEffect) -> Vec<UiEvent> {
         match effect {
             AppEffect::ListWorlds => vec![UiEvent::WorldsListed(self.list_worlds())],
+            AppEffect::PreviewWorld {
+                seed,
+                size,
+                residents,
+                water,
+                tone,
+            } => {
+                self.start_preview(seed, size, residents, water, tone);
+                Vec::new()
+            }
+            AppEffect::RandomSeed => {
+                self.seed_counter += 1;
+                let text = format!("{}#{}", self.svc.clock.wall_clock_iso(), self.seed_counter);
+                // Eight hex digits: short enough to read out or type, different every press.
+                let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+                for b in text.bytes() {
+                    h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+                }
+                vec![UiEvent::SeedSuggested(format!("{:08x}", h >> 32))]
+            }
             AppEffect::CreateWorld {
                 name,
                 seed,

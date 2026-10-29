@@ -144,6 +144,12 @@ pub fn decode_png_rgb(png: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
 /// A picture of the world's first map (with its pawns), at most [`MAX_WIDTH`] by [`MAX_HEIGHT`] pixels,
 /// or `None` when the world has no map.
 pub fn thumbnail_png(world: &WorldState) -> Option<Vec<u8>> {
+    let (w, h, rgb) = thumbnail_rgb(world)?;
+    Some(encode_png(w, h, &rgb))
+}
+
+/// The same picture as `(width, height, rgb bytes)`, without the PNG wrapping.
+pub fn thumbnail_rgb(world: &WorldState) -> Option<(u32, u32, Vec<u8>)> {
     let (_, map) = world.maps.iter().next()?;
     let (mw, mh) = (map.width().max(1) as u32, map.height().max(1) as u32);
     // The largest whole picture that fits, keeping the map's proportions.
@@ -180,7 +186,7 @@ pub fn thumbnail_png(world: &WorldState) -> Option<Vec<u8>> {
             p.copy_from_slice(&pawn_color(id));
         }
     }
-    Some(encode_png(w, h, &rgb))
+    Some((w, h, rgb))
 }
 
 #[cfg(test)]

@@ -203,13 +203,21 @@ fn the_main_menu_snapshot_is_stable() {
 #[test]
 fn keyboard_only_new_world_flow_creates_a_world() {
     let mut m = boot(Vec::new(), None);
-    assert!(press(&mut m, Key::Enter).is_empty());
+    // Opening the screen asks for the pack list and a first sample town.
+    let opened = press(&mut m, Key::Enter);
+    assert!(matches!(opened.first(), Some(AppEffect::ListMods)));
+    assert!(matches!(
+        opened.get(1),
+        Some(AppEffect::PreviewWorld { .. })
+    ));
     assert!(matches!(m.screen(), Screen::NewWorld(_)));
-    // Name field, seed field, size, water, residents, tone, then the bottom buttons: create, back.
+    // Name field, seed field, Random seed, size, water, residents, tone, then the bottom buttons: create, back.
     assert_eq!(m.focus(), Some("new.name"));
     m.update(UiEvent::Text("new.name".into(), "  Maple Creek ".into()));
     m.update(UiEvent::Text("new.seed".into(), "abc".into()));
     press(&mut m, Key::Tab);
+    press(&mut m, Key::Tab);
+    assert_eq!(m.focus(), Some("new.randomize"));
     press(&mut m, Key::Tab);
     assert_eq!(m.focus(), Some("new.size"));
     press(&mut m, Key::Right); // small -> medium
@@ -1466,4 +1474,75 @@ fn options_ai_options_and_pause_use_the_layout_pass_pieces() {
             .sum::<usize>(),
         3
     );
+}
+
+#[test]
+fn new_world_shows_a_sample_town_that_follows_the_settings_and_lists_its_packs() {
+    let mut m = boot(Vec::new(), None);
+    let fx = click(&mut m, "main.new");
+    assert_eq!(fx.len(), 2);
+    // Until the first sample is ready there is a placeholder and a "making" note.
+    let s = snap(&m);
+    assert!(
+        s.contains("empty slot") && s.contains("ui.new.preview_busy"),
+        "{s}"
+    );
+    // The sample arrives: its picture replaces the placeholder.
+    m.update(UiEvent::PreviewReady {
+        name: "preview/1".into(),
+    });
+    let s = snap(&m);
+    assert!(
+        s.contains("(picture preview/1)") && !s.contains("empty slot"),
+        "{s}"
+    );
+    assert!(s.contains("ui.new.preview_sample{"), "no seed typed: {s}");
+    // Every setting that shapes the town asks for a new sample (and says one is on its way).
+    for fx in [
+        m.update(UiEvent::Text("new.seed".into(), "maple".into())),
+        m.update(UiEvent::Slide("new.water".into(), 30)),
+        m.update(UiEvent::Slide("new.residents".into(), 9)),
+        m.update(UiEvent::Choose("new.size".into(), "medium".into())),
+        m.update(UiEvent::Choose("new.tone".into(), "cozy".into())),
+    ] {
+        assert!(
+            matches!(fx.as_slice(), [AppEffect::PreviewWorld { .. }]),
+            "{fx:?}"
+        );
+    }
+    let last = m.update(UiEvent::Slide("new.water".into(), 12));
+    assert_eq!(
+        last,
+        vec![AppEffect::PreviewWorld {
+            seed: "maple".into(),
+            size: MapSize::Medium,
+            residents: 9,
+            water: 12,
+            tone: "cozy".into(),
+        }]
+    );
+    assert!(snap(&m).contains("ui.new.preview_busy"));
+    // The name does not change the town, so it asks for nothing.
+    assert!(m
+        .update(UiEvent::Text("new.name".into(), "Maple".into()))
+        .is_empty());
+    // Random seed asks the app for one; the answer fills the field and makes a new sample.
+    assert_eq!(click(&mut m, "new.randomize"), vec![AppEffect::RandomSeed]);
+    let fx = m.update(UiEvent::SeedSuggested("1a2b3c4d".into()));
+    assert!(matches!(fx.as_slice(), [AppEffect::PreviewWorld { seed, .. }] if seed == "1a2b3c4d"));
+    // The pack list shows what is loaded; Manage packs opens the Mods screen.
+    let base = crate::types::PackRow {
+        base: true,
+        enabled: true,
+        loaded: true,
+        folder: String::new(),
+        ..pack_row("base", true, true, &[])
+    };
+    m.update(UiEvent::ModsLoaded(crate::types::ModsView {
+        packs: vec![base],
+        ..crate::types::ModsView::default()
+    }));
+    assert!(snap(&m).contains("Pack base: 0.1.0"), "{}", snap(&m));
+    assert_eq!(click(&mut m, "new.packs"), vec![AppEffect::ListMods]);
+    assert!(matches!(m.screen(), Screen::Mods));
 }

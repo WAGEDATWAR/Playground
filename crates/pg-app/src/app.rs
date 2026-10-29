@@ -278,6 +278,10 @@ impl App {
         let image_cache = &mut self.images;
         let image_ctx = ctx.clone();
         let mut images = |name: &str| {
+            // Only the newest sample-town picture is kept.
+            if name.starts_with("preview/") && !image_cache.contains_key(name) {
+                image_cache.retain(|k, _| !k.starts_with("preview/"));
+            }
             let entry = image_cache.entry(name.to_owned()).or_insert_with(|| {
                 controller.thumbnail_image(name).map(|(w, h, rgb)| {
                     image_ctx.load_texture(
@@ -287,7 +291,7 @@ impl App {
                     )
                 })
             });
-            entry.as_ref().map(|t| (t.id(), t.size_vec2() * 3.0))
+            entry.as_ref().map(|t| (t.id(), t.size_vec2()))
         };
 
         let mut events: Vec<UiEvent> = Vec::new();

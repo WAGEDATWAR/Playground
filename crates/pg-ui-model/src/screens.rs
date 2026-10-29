@@ -43,7 +43,7 @@ pub(crate) fn build(m: &AppModel, t: Text) -> Tree {
             ],
         ),
         Screen::MainMenu => main_menu(st.worlds, t),
-        Screen::NewWorld(f) => new_world(f, t),
+        Screen::NewWorld(f) => new_world(m, f, t),
         Screen::SavedWorlds(f) => saved_worlds(st.worlds, f, t),
         Screen::Options => options(st.settings, t),
         Screen::AiOptions(f) => ai_options(st.ai, f, t),
@@ -82,7 +82,7 @@ fn main_menu(worlds: &[WorldEntry], t: Text) -> Tree {
 
 /// The New world screen: a preview slot and the per-world pack list on the left, the settings in category
 /// boxes on the right, and Create / Back pinned side by side at the bottom.
-fn new_world(f: &NewWorldForm, t: Text) -> Tree {
+fn new_world(m: &AppModel, f: &NewWorldForm, t: Text) -> Tree {
     let size_options = MapSize::ALL
         .iter()
         .map(|s| {
@@ -102,21 +102,49 @@ fn new_world(f: &NewWorldForm, t: Text) -> Tree {
         title: t(title, &[]),
         children,
     };
-    let left = vec![
-        Widget::Placeholder {
+    // The sample town: a picture of what these settings make (the placeholder until the first one is ready).
+    let mut left = vec![match &f.preview {
+        Some(name) => Widget::Thumbnail { name: name.clone() },
+        None => Widget::Placeholder {
             label: t("ui.new.preview", &[]),
             height: 240,
         },
-        // The pack list keeps a full box of its own.
-        Widget::Group {
-            border: Border::GROUP,
-            title: t("ui.new.packs.title", &[]),
-            children: vec![
-                Widget::Note(t("ui.new.packs.note", &[])),
-                Widget::disabled_button("new.packs", t("ui.new.packs.choose", &[])),
-            ],
+    }];
+    let (tw, th) = f.size.tiles();
+    left.push(Widget::Note(t(
+        if f.preview_busy {
+            "ui.new.preview_busy"
+        } else if f.seed.trim().is_empty() {
+            "ui.new.preview_sample"
+        } else {
+            "ui.new.preview_note"
         },
-    ];
+        &[
+            ("w", &tw.to_string()),
+            ("h", &th.to_string()),
+            ("residents", &f.residents.to_string()),
+        ],
+    )));
+    // The packs this world will use: the base game and whatever is enabled under Mods. Choosing packs for each
+    // world separately comes later; for now Manage packs opens the Mods screen.
+    let mut packs: Vec<Widget> = Vec::new();
+    let loaded: Vec<(String, String)> = m
+        .mods()
+        .packs
+        .iter()
+        .filter(|p| p.loaded)
+        .map(|p| (p.name.clone(), p.version.clone()))
+        .collect();
+    if !loaded.is_empty() {
+        packs.push(Widget::Facts(loaded));
+    }
+    packs.push(Widget::Note(t("ui.new.packs.note", &[])));
+    packs.push(Widget::button("new.packs", t("ui.new.packs.choose", &[])));
+    left.push(Widget::Group {
+        border: Border::GROUP,
+        title: t("ui.new.packs.title", &[]),
+        children: packs,
+    });
     let settings = vec![
         group(
             "ui.new.group.world",
@@ -135,6 +163,10 @@ fn new_world(f: &NewWorldForm, t: Text) -> Tree {
                     secret: false,
                     hint: t("ui.new.seed_hint", &[]),
                 },
+                Widget::Row(vec![Widget::button(
+                    "new.randomize",
+                    t("ui.new.randomize", &[]),
+                )]),
                 Widget::Choice {
                     id: "new.size".into(),
                     label: t("ui.new.size", &[]),
@@ -713,8 +745,16 @@ pub(crate) fn activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
             None => Vec::new(),
         },
         ("main", "main.new") => {
-            m.go_to(Screen::NewWorld(NewWorldForm::default()));
-            Vec::new()
+            let f = NewWorldForm {
+                preview_busy: true,
+                ..NewWorldForm::default()
+            };
+            let preview = f.preview_effect();
+            m.go_to(Screen::NewWorld(f));
+            // Typing starts at the name, not at the pack button that comes first on the left.
+            m.focus_on("new.name");
+            // The packs this world will use come from the Mods list; the sample town is made in the background.
+            vec![AppEffect::ListMods, preview]
         }
         ("main", "main.saved") => {
             m.go_to(Screen::SavedWorlds(SavedForm::default()));
@@ -743,6 +783,11 @@ pub(crate) fn activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
             Vec::new()
         }
         ("new", "new.create") => new_create(m),
+        ("new", "new.randomize") => vec![AppEffect::RandomSeed],
+        ("new", "new.packs") => {
+            m.go_to(Screen::Mods);
+            vec![AppEffect::ListMods]
+        }
         ("saved", _) => saved_activate(m, id),
         ("options", "options.ai") => {
             let f = m.new_ai_form();
@@ -925,6 +970,8 @@ pub(crate) fn text(m: &mut AppModel, id: &str, s: String) -> Vec<AppEffect> {
             if let Screen::NewWorld(f) = m.screen_mut() {
                 f.seed = s.chars().take(80).collect();
                 f.error = None;
+                f.preview_busy = true;
+                return vec![f.preview_effect()];
             }
             Vec::new()
         }
@@ -1308,6 +1355,8 @@ pub(crate) fn choose(m: &mut AppModel, id: &str, v: &str) -> Vec<AppEffect> {
         ("new", "new.size") => {
             if let (Screen::NewWorld(f), Some(size)) = (m.screen_mut(), MapSize::from_id(v)) {
                 f.size = size;
+                f.preview_busy = true;
+                return vec![f.preview_effect()];
             }
             Vec::new()
         }
@@ -1315,6 +1364,8 @@ pub(crate) fn choose(m: &mut AppModel, id: &str, v: &str) -> Vec<AppEffect> {
             if let Screen::NewWorld(f) = m.screen_mut() {
                 if ["cozy", "standard", "mature"].contains(&v) {
                     f.tone = v.to_owned();
+                    f.preview_busy = true;
+                    return vec![f.preview_effect()];
                 }
             }
             Vec::new()
@@ -1347,12 +1398,16 @@ pub(crate) fn slide(m: &mut AppModel, id: &str, v: i64) -> Vec<AppEffect> {
         ("new", "new.residents") => {
             if let Screen::NewWorld(f) = m.screen_mut() {
                 f.residents = v.clamp(0, 50);
+                f.preview_busy = true;
+                return vec![f.preview_effect()];
             }
             Vec::new()
         }
         ("new", "new.water") => {
             if let Screen::NewWorld(f) = m.screen_mut() {
                 f.water = v.clamp(0, 50);
+                f.preview_busy = true;
+                return vec![f.preview_effect()];
             }
             Vec::new()
         }

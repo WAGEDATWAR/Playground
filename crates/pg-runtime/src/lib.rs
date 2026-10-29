@@ -15,6 +15,7 @@ pub mod journal;
 pub mod keyframes;
 pub mod mods;
 pub mod pool;
+pub mod preview;
 pub mod profile;
 pub mod scenario_env;
 pub mod session;

@@ -198,6 +198,12 @@ pub enum UiEvent {
     // Results of effects.
     Booted(Box<BootInfo>),
     WorldsListed(Vec<WorldEntry>),
+    /// A sample town for the New world screen is ready; `name` is its picture (see `Widget::Thumbnail`).
+    PreviewReady {
+        name: String,
+    },
+    /// A new random seed, for the New world screen's Random seed button.
+    SeedSuggested(String),
     WorldOpened {
         name: String,
     },
@@ -234,6 +240,8 @@ impl fmt::Debug for UiEvent {
             UiEvent::FocusGained => write!(f, "FocusGained"),
             UiEvent::Booted(_) => write!(f, "Booted"),
             UiEvent::WorldsListed(w) => write!(f, "WorldsListed({})", w.len()),
+            UiEvent::PreviewReady { name } => write!(f, "PreviewReady({name})"),
+            UiEvent::SeedSuggested(s) => write!(f, "SeedSuggested({s})"),
             UiEvent::WorldOpened { name } => write!(f, "WorldOpened({name})"),
             UiEvent::Failed(m) => write!(f, "Failed({m})"),
             UiEvent::Hud(h) => write!(f, "Hud(tick {})", h.tick),
@@ -296,6 +304,16 @@ pub enum AppEffect {
         /// `cozy`, `standard` or `mature`.
         tone: String,
     },
+    /// Generate a sample town for these settings in the background (the New world preview).
+    PreviewWorld {
+        seed: String,
+        size: MapSize,
+        residents: u32,
+        water: u32,
+        tone: String,
+    },
+    /// Ask for a new random seed.
+    RandomSeed,
     LoadWorld(String),
     DeleteWorld(String),
     ExportWorld(String),
@@ -378,6 +396,17 @@ impl fmt::Debug for AppEffect {
                 f,
                 "CreateWorld({name}, {seed}, {size:?}, {residents}, water {water}, {tone})"
             ),
+            AppEffect::PreviewWorld {
+                seed,
+                size,
+                residents,
+                water,
+                tone,
+            } => write!(
+                f,
+                "PreviewWorld({seed}, {size:?}, {residents}, water {water}, {tone})"
+            ),
+            AppEffect::RandomSeed => write!(f, "RandomSeed"),
             AppEffect::LoadWorld(i) => write!(f, "LoadWorld({i})"),
             AppEffect::DeleteWorld(i) => write!(f, "DeleteWorld({i})"),
             AppEffect::ExportWorld(i) => write!(f, "ExportWorld({i})"),
