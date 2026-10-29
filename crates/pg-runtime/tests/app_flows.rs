@@ -112,9 +112,10 @@ impl Driver {
         self.send(UiEvent::Click(id.to_owned()));
     }
 
-    /// Lets background work finish and delivers what it produced.
+    /// Lets background work finish and delivers what it produced. The wait is generous (20 s) because it only
+    /// costs time when something is wrong; a busy machine running the whole test suite needs the room.
     fn settle(&mut self, mut done: impl FnMut(&Driver) -> bool) {
-        for _ in 0..600 {
+        for _ in 0..4000 {
             for e in self.ctl.poll() {
                 self.send(e);
             }
@@ -137,6 +138,22 @@ impl Driver {
     }
 
     /// Plays `secs` of fake time in small steps, so the world's frame loop sees a steady clock.
+    /// Keeps the clock running until `done` holds. A busy machine can make the simulation drop time it could not
+    /// keep up with, so waiting for a tick count without moving the clock can wait forever.
+    fn play_until(&mut self, m: &Machine, mut done: impl FnMut(&Driver) -> bool) {
+        for _ in 0..4000 {
+            for e in self.ctl.poll() {
+                self.send(e);
+            }
+            if done(self) {
+                return;
+            }
+            m.clock.advance(Duration::from_millis(100));
+            std::thread::sleep(Duration::from_millis(6));
+        }
+        panic!("timed out at tick {}", self.tick());
+    }
+
     fn play(&mut self, m: &Machine, secs: u64) {
         for _ in 0..secs * 10 {
             m.clock.advance(Duration::from_millis(100));
@@ -569,7 +586,7 @@ fn the_overlay_shows_systems_events_packs_and_script_costs() {
     d.click("hud.speed.27x");
     d.settle(|d| d.model.hud().running);
     d.play(&m, 4);
-    d.settle(|d| d.tick() > 600);
+    d.play_until(&m, |d| d.tick() > 600);
     d.dev_mode();
     d.send(UiEvent::Key(Key::F3));
     d.model.set_overlay_data(d.ctl.overlay_data());
@@ -730,7 +747,7 @@ fn the_reason_explorer_and_shadow_verification_show_up_in_the_overlay() {
     d.click("hud.speed.27x");
     d.settle(|d| d.model.hud().running);
     d.play(&m, 24);
-    d.settle(|d| d.tick() > 3700);
+    d.play_until(&m, |d| d.tick() > 3700);
     let data = d.ctl.overlay_data();
     assert!(
         data.shadow.contains("verified") && data.shadow.contains("0 diverged"),

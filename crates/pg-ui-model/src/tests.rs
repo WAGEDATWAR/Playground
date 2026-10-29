@@ -1433,3 +1433,33 @@ fn the_settings_column_has_a_border_of_its_own_around_its_category_boxes() {
         .expect("a category box");
     assert!(outer < boxes, "{snap}");
 }
+
+#[test]
+fn options_ai_options_and_pause_use_the_layout_pass_pieces() {
+    let mut m = boot(Vec::new(), None);
+    click(&mut m, "main.options");
+    let options = m.tree(&show);
+    assert!(options.width > 420);
+    assert!(matches!(options.footer.as_slice(), [Widget::ButtonBar(b)] if b.len() == 2));
+    assert!(options.snapshot(None).contains("border (Solid 2 Strong)"));
+    click(&mut m, "options.ai");
+    let ai = m.tree(&show);
+    let snap = ai.snapshot(None);
+    for g in ["provider", "account", "model", "connection"] {
+        assert!(snap.contains(&format!("== ui.ai.group.{g} ==")), "{snap}");
+    }
+    assert!(matches!(ai.footer.as_slice(), [Widget::ButtonBar(b)] if b.len() == 1));
+    assert!(ai.find("ai.back").is_some());
+    let pause = super::screens::build_for_test_pause(&show);
+    assert_eq!(
+        pause
+            .widgets
+            .iter()
+            .filter_map(|w| match w {
+                Widget::Stack(c) => Some(c.len()),
+                _ => None,
+            })
+            .sum::<usize>(),
+        3
+    );
+}

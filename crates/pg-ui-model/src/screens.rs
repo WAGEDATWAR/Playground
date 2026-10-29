@@ -317,40 +317,65 @@ fn options(items: &[SettingItem], t: Text) -> Tree {
     }
     // Developer settings go last, out of the way of the ones every player uses.
     groups.sort_by_key(|(g, _)| g == "dev");
-    for (g, children) in groups {
-        w.push(Widget::Group {
-            border: crate::widget::Border::GROUP,
+    let boxes = groups
+        .into_iter()
+        .map(|(g, children)| Widget::Group {
+            border: Border::between(1, BorderTone::Normal),
             title: t(&format!("ui.options.group.{g}"), &[]),
             children,
-        });
+        })
+        .collect();
+    w.push(column(boxes));
+    Tree::new(t("ui.options.title", &[]), w).with_footer(
+        640,
+        vec![Widget::ButtonBar(vec![
+            Widget::button("options.ai", t("ui.options.ai", &[])),
+            Widget::button("options.back", t("ui.back", &[])),
+        ])],
+    )
+}
+
+/// A screen's settings as one bordered column whose category boxes only have lines between them.
+fn column(boxes: Vec<Widget>) -> Widget {
+    Widget::Bordered {
+        border: Border::solid(2, BorderTone::Strong),
+        inner: Box::new(Widget::Stack(boxes)),
     }
-    w.push(Widget::button("options.ai", t("ui.options.ai", &[])));
-    w.push(Widget::button("options.back", t("ui.back", &[])));
-    Tree::new(t("ui.options.title", &[]), w)
 }
 
 fn ai_options(ai: &AiState, f: &AiForm, t: Text) -> Tree {
-    let mut w = vec![
+    let boxed = |title: &str, children: Vec<Widget>| Widget::Group {
+        border: Border::between(1, BorderTone::Normal),
+        title: t(title, &[]),
+        children,
+    };
+    let footer = |back: Widget| vec![Widget::ButtonBar(vec![back])];
+    let head = vec![
         Widget::Heading(t("ui.ai.title", &[])),
         Widget::Note(t("ui.ai.optional", &[])),
-        Widget::Choice {
-            id: "ai.provider".into(),
-            label: t("ui.ai.provider", &[]),
-            options: ai
-                .providers
-                .iter()
-                .map(|p| (p.id.clone(), p.label.clone()))
-                .collect(),
-            value: ai.selected.clone(),
-        },
     ];
+    let provider = vec![Widget::Choice {
+        id: "ai.provider".into(),
+        label: t("ui.ai.provider", &[]),
+        options: ai
+            .providers
+            .iter()
+            .map(|p| (p.id.clone(), p.label.clone()))
+            .collect(),
+        value: ai.selected.clone(),
+    }];
+    let back = || Widget::button("ai.back", t("ui.back", &[]));
     let Some(p) = ai.providers.iter().find(|p| p.id == ai.selected) else {
-        w.push(Widget::button("ai.back", t("ui.back", &[])));
-        return Tree::new(t("ui.ai.title", &[]), w);
+        let mut w = head;
+        w.push(column(vec![boxed("ui.ai.group.provider", provider)]));
+        return Tree::new(t("ui.ai.title", &[]), w).with_footer(640, footer(back()));
     };
+    let mut acct: Vec<Widget> = Vec::new();
+    let mut model: Vec<Widget> = Vec::new();
+    let mut conn: Vec<Widget> = Vec::new();
     match p.auth {
         Auth::PasteKey => {
-            w.push(Widget::Note(t(
+            acct.push(Widget::Note(t(
                 if ai.persistent_keys {
                     "ui.ai.key_stored_os"
                 } else {
@@ -358,7 +383,7 @@ fn ai_options(ai: &AiState, f: &AiForm, t: Text) -> Tree {
                 },
                 &[],
             )));
-            w.push(Widget::TextField {
+            acct.push(Widget::TextField {
                 id: "ai.key".into(),
                 label: t("ui.ai.key", &[]),
                 value: f
@@ -370,7 +395,7 @@ fn ai_options(ai: &AiState, f: &AiForm, t: Text) -> Tree {
                 hint: t("ui.ai.key_hint", &[]),
             });
             let has_input = f.key_input.as_ref().is_some_and(|k| !k.is_empty());
-            w.push(if has_input {
+            acct.push(if has_input {
                 Widget::button("ai.save_key", t("ui.ai.save_key", &[]))
             } else {
                 Widget::disabled_button("ai.save_key", t("ui.ai.save_key", &[]))
@@ -379,36 +404,36 @@ fn ai_options(ai: &AiState, f: &AiForm, t: Text) -> Tree {
         Auth::DeviceCode => match &f.login {
             LoginUi::Idle | LoginUi::Done | LoginUi::Failed(_) => {
                 if let LoginUi::Failed(m) = &f.login {
-                    w.push(Widget::Label(t("ui.ai.login.failed", &[("reason", m)])));
+                    acct.push(Widget::Label(t("ui.ai.login.failed", &[("reason", m)])));
                 }
                 if p.has_key {
-                    w.push(Widget::Label(t("ui.ai.login.signed_in", &[])));
+                    acct.push(Widget::Label(t("ui.ai.login.signed_in", &[])));
                 } else {
-                    w.push(Widget::Note(t("ui.ai.login.explain", &[])));
-                    w.push(Widget::button("ai.signin", t("ui.ai.login.start", &[])));
+                    acct.push(Widget::Note(t("ui.ai.login.explain", &[])));
+                    acct.push(Widget::button("ai.signin", t("ui.ai.login.start", &[])));
                 }
             }
             LoginUi::Starting => {
-                w.push(Widget::Note(t("ui.ai.login.contacting", &[])));
-                w.push(Widget::button("ai.cancel_login", t("ui.cancel", &[])));
+                acct.push(Widget::Note(t("ui.ai.login.contacting", &[])));
+                acct.push(Widget::button("ai.cancel_login", t("ui.cancel", &[])));
             }
             LoginUi::Prompt { code, url } => {
-                w.push(Widget::Label(t(
+                acct.push(Widget::Label(t(
                     "ui.ai.login.enter_code",
                     &[("code", code)],
                 )));
-                w.push(Widget::Note(url.clone()));
-                w.push(Widget::Note(t("ui.ai.login.waiting", &[])));
-                w.push(Widget::button(
+                acct.push(Widget::Note(url.clone()));
+                acct.push(Widget::Note(t("ui.ai.login.waiting", &[])));
+                acct.push(Widget::button(
                     "ai.open_browser",
                     t("ui.ai.login.open", &[]),
                 ));
-                w.push(Widget::button("ai.cancel_login", t("ui.cancel", &[])));
+                acct.push(Widget::button("ai.cancel_login", t("ui.cancel", &[])));
             }
         },
     }
     if p.has_key {
-        w.push(Widget::button(
+        acct.push(Widget::button(
             "ai.clear_key",
             t(
                 if p.auth == Auth::DeviceCode {
@@ -421,33 +446,39 @@ fn ai_options(ai: &AiState, f: &AiForm, t: Text) -> Tree {
         ));
     }
     if p.model_fixed {
-        w.push(Widget::Note(t(
+        model.push(Widget::Note(t(
             "ui.ai.model_fixed",
             &[("provider", &p.label)],
         )));
     } else {
-        w.push(Widget::TextField {
+        model.push(Widget::TextField {
             id: "ai.model".into(),
             label: t("ui.ai.model", &[]),
             value: f.model_input.clone(),
             secret: false,
             hint: p.recommended_model.clone(),
         });
-        w.push(Widget::button("ai.save_model", t("ui.ai.save_model", &[])));
+        model.push(Widget::button("ai.save_model", t("ui.ai.save_model", &[])));
     }
-    w.push(if p.has_key {
+    conn.push(if p.has_key {
         Widget::button("ai.test", t("ui.ai.test", &[]))
     } else {
         Widget::disabled_button("ai.test", t("ui.ai.test", &[]))
     });
     match &f.conn {
         ConnUi::Idle => {}
-        ConnUi::Testing => w.push(Widget::Note(t("ui.ai.testing", &[]))),
-        ConnUi::Ok(m) => w.push(Widget::Label(t("ui.ai.test_ok", &[("detail", m)]))),
-        ConnUi::Failed(m) => w.push(Widget::Label(t("ui.ai.test_failed", &[("reason", m)]))),
+        ConnUi::Testing => conn.push(Widget::Note(t("ui.ai.testing", &[]))),
+        ConnUi::Ok(m) => conn.push(Widget::Label(t("ui.ai.test_ok", &[("detail", m)]))),
+        ConnUi::Failed(m) => conn.push(Widget::Label(t("ui.ai.test_failed", &[("reason", m)]))),
     }
-    w.push(Widget::button("ai.back", t("ui.back", &[])));
-    Tree::new(t("ui.ai.title", &[]), w)
+    let mut w = head;
+    w.push(column(vec![
+        boxed("ui.ai.group.provider", provider),
+        boxed("ui.ai.group.account", acct),
+        boxed("ui.ai.group.model", model),
+        boxed("ui.ai.group.connection", conn),
+    ]));
+    Tree::new(t("ui.ai.title", &[]), w).with_footer(640, footer(back()))
 }
 
 /// The in-game screen in the three places it is drawn: an information bar along the top, the simulation
@@ -533,16 +564,36 @@ fn in_game(m: &AppModel, t: Text) -> Tree {
     Tree::new(t("ui.hud.title", &[]), w)
 }
 
+#[cfg(test)]
+pub(crate) fn build_for_test_pause(t: Text) -> Tree {
+    pause(t)
+}
+
 fn pause(t: Text) -> Tree {
+    // Three boxes with lines between them: carry on, keep or change things, leave.
+    let boxed = |children: Vec<Widget>| Widget::Group {
+        border: Border::between(1, BorderTone::Normal),
+        title: String::new(),
+        children,
+    };
     Tree::new(
         t("ui.pause.title", &[]),
         vec![
             Widget::Heading(t("ui.pause.title", &[])),
-            Widget::button("pause.resume", t("ui.pause.resume", &[])),
-            Widget::button("pause.save", t("ui.pause.save", &[])),
-            Widget::button("pause.options", t("ui.pause.options", &[])),
-            Widget::button("pause.menu", t("ui.pause.menu", &[])),
-            Widget::button("pause.quit", t("ui.pause.quit", &[])),
+            Widget::Stack(vec![
+                boxed(vec![Widget::button(
+                    "pause.resume",
+                    t("ui.pause.resume", &[]),
+                )]),
+                boxed(vec![
+                    Widget::button("pause.save", t("ui.pause.save", &[])),
+                    Widget::button("pause.options", t("ui.pause.options", &[])),
+                ]),
+                boxed(vec![
+                    Widget::button("pause.menu", t("ui.pause.menu", &[])),
+                    Widget::button("pause.quit", t("ui.pause.quit", &[])),
+                ]),
+            ]),
         ],
     )
 }

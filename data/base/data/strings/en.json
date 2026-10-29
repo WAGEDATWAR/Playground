@@ -340,5 +340,9 @@
   "ui.new.packs.choose": "Choose packs",
   "ui.new.group.world": "World",
   "ui.new.group.residents": "Residents",
-  "ui.new.group.content": "Content"
+  "ui.new.group.content": "Content",
+  "ui.ai.group.provider": "Provider",
+  "ui.ai.group.account": "Account",
+  "ui.ai.group.model": "Model",
+  "ui.ai.group.connection": "Connection"
 }
