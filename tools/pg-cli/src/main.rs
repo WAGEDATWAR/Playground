@@ -22,6 +22,7 @@ mod milestone_cmds;
 mod pack_cmds;
 mod persist_cmds;
 mod pins_cmds;
+mod preview_cmds;
 mod residents_cmds;
 mod runtime_cmds;
 mod sched_cmds;
@@ -140,7 +141,10 @@ USAGE:
     pg bench --list | --all | --targets a,b [--runs N] [--out DIR] [--baseline FILE.json]
         Time the named targets (tick loop, towns, world generation, paths, replay) and write a report file
         (JSON and Markdown) under bench/reports/. Run in release mode.
-    pg milestone [--skip-tests] [--tag NAME]
+    pg preview
+        Builds the game in release mode and saves it as preview/Playground-preview_<buildstring>.exe (the commit hash,
+        plus -dirty and a time stamp when there are uncommitted changes); keeps the newest 8.
+    pg milestone [--skip-tests] [--tag NAME] [--no-preview]
         The whole milestone checklist: format, dependency rule, clippy, tests, check --full, app smoke test;
         prints a status report and optionally tags the commit. Commits and pushes nothing.
     pg schema check|update|show
@@ -182,6 +186,7 @@ fn main() -> ExitCode {
         Some("check") => check_cmds::check_cmd(&args[1..]),
         Some("bench") => bench_cmds::bench_cmd(&args[1..]),
         Some("milestone") => milestone_cmds::milestone_cmd(&args[1..]),
+        Some("preview") => preview_cmds::preview_cmd(&args[1..]),
         Some("schema") => schema_cmds::schema_cmd(&args[1..]),
         Some("pins") => pins_cmds::pins_cmd(&args[1..]),
         Some("bugbundle") => persist_cmds::bugbundle_cmd(&args[1..]),

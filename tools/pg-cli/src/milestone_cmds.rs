@@ -111,6 +111,13 @@ pub fn milestone_cmd(args: &[String]) -> Result<ExitCode, String> {
     if passed && skip_tests {
         println!("(tests were skipped; this is not a full milestone check)");
     }
+    if passed && !args.iter().any(|a| a == "--no-preview") {
+        // A passing milestone leaves a runnable build behind, named for the commit.
+        match crate::preview_cmds::make_preview() {
+            Ok(p) => println!("preview build: {}", p.display()),
+            Err(e) => println!("(no preview build: {e})"),
+        }
+    }
     if passed {
         if let Some(t) = tag {
             if dirty {

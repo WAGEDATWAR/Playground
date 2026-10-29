@@ -9,3 +9,6 @@
 # Benchmark reports are per machine (pg bench); keep the folder, not the files.
 bench/reports/*
 !bench/reports/.gitkeep
+
+# Runnable builds made by `pg preview` and `pg milestone`.
+/preview/

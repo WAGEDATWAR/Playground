@@ -327,3 +327,13 @@ cargo run -p pg-app -- --no-vsync --data-dir shots-data --demo new --capture sho
 
 Demo screens: new, options, ai, saved, game, inspector, journal, mods, mods-open, pause, overlay, console, drawer,
 focus. The PNGs are uncompressed (large, exact); the encoder is in `crates/pg-app/src/capture.rs`.
+
+## Preview builds
+
+`cargo run -p pg-cli -- preview` (or `pg preview`) builds the game in release mode and saves it as
+`preview/Playground-preview_<buildstring>.exe`, so you can double-click it instead of using a shell. The build
+string is the short commit hash; with uncommitted changes it is `<hash>-dirty-<MMDD-HHMM>` (UTC), so different
+work never shares a name. A passing `pg milestone` makes one too (`--no-preview` skips it). The folder is git-ignored
+and keeps the newest 8. The program finds `data/base` by walking up from where it sits, so it runs from `preview/`
+as it is; it uses your normal Playground data folder for saves and settings (add `--data-dir <folder>` to keep a
+preview's saves apart).
