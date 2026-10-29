@@ -248,10 +248,7 @@ impl App {
         }
         if !self.styled {
             self.styled = true;
-            ctx.all_styles_mut(|s| {
-                s.spacing.item_spacing = egui::vec2(10.0, 9.0);
-                s.spacing.button_padding = egui::vec2(10.0, 5.0);
-            });
+            crate::theme::apply(&ctx);
         }
         let scale = self
             .controller
@@ -374,7 +371,7 @@ impl App {
             _ => {
                 let behind_menu = matches!(screen, Screen::MainMenu);
                 egui::CentralPanel::default()
-                    .frame(Frame::new().fill(Color32::from_rgb(26, 30, 38)))
+                    .frame(Frame::new().fill(crate::theme::BG))
                     .show(ui, |ui| {
                         if behind_menu {
                             let rect = ui.max_rect();
@@ -411,14 +408,26 @@ impl App {
                         egui::ScrollArea::vertical().show(ui, |ui| {
                             ui.add_space(36.0);
                             centered_column(ui, width, |ui| {
-                                let drawn: Drawn = draw_tree(
-                                    ui,
-                                    &tree,
-                                    focus.as_deref(),
-                                    &self.tracker,
-                                    &mut images,
-                                );
-                                events.extend(drawn.events);
+                                // Over the backdrop the menu sits on a card, so it reads against a busy picture.
+                                let card = if behind_menu {
+                                    Frame::new()
+                                        .fill(crate::theme::SURFACE.gamma_multiply(0.94))
+                                        .stroke(egui::Stroke::new(1.0, crate::theme::HAIRLINE))
+                                        .corner_radius(crate::theme::R_WINDOW)
+                                        .inner_margin(egui::Margin::same(24))
+                                } else {
+                                    Frame::new()
+                                };
+                                card.show(ui, |ui| {
+                                    let drawn: Drawn = draw_tree(
+                                        ui,
+                                        &tree,
+                                        focus.as_deref(),
+                                        &self.tracker,
+                                        &mut images,
+                                    );
+                                    events.extend(drawn.events);
+                                });
                             });
                         });
                     });

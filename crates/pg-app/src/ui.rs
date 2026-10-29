@@ -5,6 +5,7 @@
 //! [`UiEvent`]s. Keyboard navigation (Tab, arrows, Enter, Escape) is not done here: [`collect_keys`] turns
 //! key presses into model keys, and the model moves focus, which this module then shows.
 
+use crate::theme;
 use egui::{Align, Color32, Id, Key as EKey, Layout, Modifiers, RichText, Stroke};
 use pg_host::console::Severity;
 use pg_ui_model::layout::{self, DrawerLayout};
@@ -253,17 +254,45 @@ fn ring(ui: &egui::Ui, r: &egui::Response, id: &str, focus: Option<&str>) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_button(
     ui: &mut egui::Ui,
     id: &str,
     label: &str,
     enabled: bool,
+    primary: bool,
     width: f32,
     focus: Option<&str>,
     d: &mut Drawn,
 ) {
-    let b = egui::Button::new(RichText::new(label).size(17.0)).min_size(egui::vec2(width, 34.0));
-    let r = ui.add_enabled(enabled, b);
+    let b = if primary {
+        // The main action: amber fill, dark text, a little brighter under the pointer.
+        egui::Button::new(
+            RichText::new(label)
+                .size(theme::T_CONTROL + 1.0)
+                .color(theme::ON_ACCENT)
+                .strong(),
+        )
+        .fill(theme::ACCENT)
+        .stroke(Stroke::new(1.0, theme::ACCENT_PRESSED))
+    } else {
+        egui::Button::new(RichText::new(label).size(theme::T_CONTROL + 1.0))
+    }
+    .min_size(egui::vec2(width, 34.0));
+    // The accent's hover and pressed colours are set inside their own scope, so they never reach other buttons.
+    let r = ui
+        .scope(|ui| {
+            if primary {
+                let w = &mut ui.visuals_mut().widgets;
+                w.hovered.weak_bg_fill = theme::ACCENT_HOVER;
+                w.hovered.bg_fill = theme::ACCENT_HOVER;
+                w.hovered.bg_stroke = Stroke::new(1.0, theme::ACCENT_HOVER);
+                w.active.weak_bg_fill = theme::ACCENT_PRESSED;
+                w.active.bg_fill = theme::ACCENT_PRESSED;
+            }
+            ui.add_enabled(enabled, b)
+        })
+        .inner;
     ring(ui, &r, id, focus);
     if r.clicked() {
         d.events.push(UiEvent::Click(id.to_owned()));
@@ -284,13 +313,22 @@ fn draw_widget(
     match w {
         Widget::Heading(t) => {
             ui.add_space(4.0);
-            ui.heading(RichText::new(t).size(28.0).strong());
+            ui.heading(
+                RichText::new(t)
+                    .size(theme::T_TITLE)
+                    .strong()
+                    .color(theme::TEXT),
+            );
         }
         Widget::Label(t) => {
-            ui.label(RichText::new(t).size(16.0));
+            ui.label(RichText::new(t).size(theme::T_BODY));
         }
         Widget::Note(t) => {
-            ui.label(RichText::new(t).size(13.0).weak());
+            ui.label(
+                RichText::new(t)
+                    .size(theme::T_NOTE)
+                    .color(theme::TEXT_MUTED),
+            );
         }
         Widget::Spacer => {
             ui.add_space(14.0);
@@ -301,7 +339,19 @@ fn draw_widget(
             } else {
                 ui.available_width().min(420.0)
             };
-            draw_button(ui, id, label, *enabled, width, focus, d);
+            draw_button(ui, id, label, *enabled, false, width, focus, d);
+        }
+        Widget::Primary(inner) => {
+            if let Widget::Button { id, label, enabled } = &**inner {
+                let width = if compact {
+                    0.0
+                } else {
+                    ui.available_width().min(420.0)
+                };
+                draw_button(ui, id, label, *enabled, true, width, focus, d);
+            } else {
+                draw_widget(ui, inner, focus, focus_moved, compact, images, d);
+            }
         }
         Widget::TextField {
             id,
@@ -404,7 +454,13 @@ fn draw_widget(
             }
         }
         Widget::Progress { label, permille } => {
-            ui.add(egui::ProgressBar::new(*permille as f32 / 1000.0).text(label));
+            ui.add(
+                egui::ProgressBar::new(*permille as f32 / 1000.0).text(
+                    RichText::new(label)
+                        .size(theme::T_NOTE + 1.0)
+                        .color(theme::TEXT),
+                ),
+            );
         }
         Widget::Drawer {
             id,
@@ -523,8 +579,12 @@ fn draw_widget(
                 ui.spacing_mut().item_spacing.x = gap;
                 ui.add_space(pad);
                 for c in children {
+                    let (primary, c) = match c {
+                        Widget::Primary(inner) => (true, &**inner),
+                        other => (false, other),
+                    };
                     if let Widget::Button { id, label, enabled } = c {
-                        draw_button(ui, id, label, *enabled, bw, focus, d);
+                        draw_button(ui, id, label, *enabled, primary, bw, focus, d);
                     } else {
                         draw_widget(ui, c, focus, focus_moved, true, images, d);
                     }
@@ -566,7 +626,12 @@ fn draw_widget(
             }
             framed(ui, border, 6, |ui| {
                 if !title.is_empty() {
-                    ui.label(RichText::new(title).size(18.0).strong());
+                    ui.label(
+                        RichText::new(title)
+                            .size(theme::T_SECTION)
+                            .strong()
+                            .color(theme::ACCENT_QUIET),
+                    );
                 }
                 for (i, c) in children.iter().enumerate() {
                     separate(ui, i, c);
@@ -592,17 +657,16 @@ fn separate(ui: &mut egui::Ui, index: usize, w: &Widget) {
     ui.painter().hline(
         x0..=x1,
         y,
-        Stroke::new(b.width as f32, border_color(ui, b.tone)),
+        Stroke::new(b.width as f32, border_color(b.tone)),
     );
     ui.add_space(6.0 + b.width as f32);
 }
 
-fn border_color(ui: &egui::Ui, tone: BorderTone) -> Color32 {
-    let base = ui.visuals().widgets.noninteractive.bg_stroke.color;
+fn border_color(tone: BorderTone) -> Color32 {
     match tone {
-        BorderTone::Soft => base.gamma_multiply(0.5),
-        BorderTone::Normal => base,
-        BorderTone::Strong => ui.visuals().widgets.inactive.fg_stroke.color,
+        BorderTone::Soft => theme::HAIRLINE.gamma_multiply(0.7),
+        BorderTone::Normal => theme::HAIRLINE,
+        BorderTone::Strong => theme::EDGE,
     }
 }
 
@@ -610,10 +674,10 @@ fn border_color(ui: &egui::Ui, tone: BorderTone) -> Color32 {
 /// frame is as wide as the room it is in, so boxes on one screen line up. A border of `None` keeps the room
 /// but draws nothing.
 fn framed(ui: &mut egui::Ui, border: &Border, margin: i8, add: impl FnOnce(&mut egui::Ui)) {
-    let color = border_color(ui, border.tone);
+    let color = border_color(border.tone);
     let width = border.width as f32;
     let radius: u8 = match border.corners {
-        Corners::Rounded => 6,
+        Corners::Rounded => theme::R_CARD,
         Corners::Square => 0,
     };
     let stroke = Stroke::new(width, color);

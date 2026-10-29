@@ -55,13 +55,13 @@ pub(crate) fn build(m: &AppModel, t: Text) -> Tree {
 
 fn main_menu(worlds: &[WorldEntry], t: Text) -> Tree {
     let cont = match continue_target(worlds) {
-        Some(w) => Widget::button(
+        Some(w) => Widget::Primary(Box::new(Widget::button(
             "main.continue",
             t(
                 "ui.main.continue_named",
                 &[("name", &w.name), ("day", &w.day.to_string())],
             ),
-        ),
+        ))),
         None => Widget::disabled_button("main.continue", t("ui.main.continue", &[])),
     };
     Tree::new(
@@ -186,7 +186,10 @@ fn new_world(f: &NewWorldForm, t: Text) -> Tree {
     Tree::new(t("ui.new.title", &[]), w).with_footer(
         960,
         vec![Widget::ButtonBar(vec![
-            Widget::button("new.create", t("ui.new.create", &[])),
+            Widget::Primary(Box::new(Widget::button(
+                "new.create",
+                t("ui.new.create", &[]),
+            ))),
             Widget::button("new.back", t("ui.back", &[])),
         ])],
     )
@@ -236,7 +239,10 @@ fn saved_worlds(worlds: &[WorldEntry], f: &SavedForm, t: Text) -> Tree {
                 ]));
             } else {
                 kids.push(Widget::Row(vec![
-                    Widget::button("saved.load", t("ui.saved.load", &[])),
+                    Widget::Primary(Box::new(Widget::button(
+                        "saved.load",
+                        t("ui.saved.load", &[]),
+                    ))),
                     Widget::button("saved.export", t("ui.saved.export", &[])),
                     Widget::button("saved.delete", t("ui.saved.delete", &[])),
                 ]));
@@ -517,7 +523,10 @@ pub(crate) fn hud_parts(m: &AppModel, t: Text) -> HudParts {
     if h.suspended {
         dialog.push(Widget::Heading(t("ui.hud.suspended_title", &[])));
         dialog.push(Widget::Label(t("ui.hud.suspended", &[])));
-        dialog.push(Widget::button("hud.resume", t("ui.hud.resume", &[])));
+        dialog.push(Widget::Primary(Box::new(Widget::button(
+            "hud.resume",
+            t("ui.hud.resume", &[]),
+        ))));
     }
     let controls = vec![
         Widget::button(
@@ -581,10 +590,10 @@ fn pause(t: Text) -> Tree {
         vec![
             Widget::Heading(t("ui.pause.title", &[])),
             Widget::Stack(vec![
-                boxed(vec![Widget::button(
+                boxed(vec![Widget::Primary(Box::new(Widget::button(
                     "pause.resume",
                     t("ui.pause.resume", &[]),
-                )]),
+                )))]),
                 boxed(vec![
                     Widget::button("pause.save", t("ui.pause.save", &[])),
                     Widget::button("pause.options", t("ui.pause.options", &[])),

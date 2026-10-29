@@ -85,6 +85,9 @@ pub enum Widget {
     },
     /// Widgets laid out side by side.
     Row(Vec<Widget>),
+    /// The one main action of a screen or box (Continue, Create world, Resume): a button drawn with the
+    /// accent fill. Wraps a button; it takes no focus or id of its own.
+    Primary(Box<Widget>),
     /// Widgets one under the other with nothing drawn around them (a plain vertical container).
     Stack(Vec<Widget>),
     /// Any widget inside a border of its own (style, width, tone), independent of the widget's own look.
@@ -286,7 +289,7 @@ impl Widget {
                     w.visit(f);
                 }
             }
-            Widget::Bordered { inner, .. } => inner.visit(f),
+            Widget::Bordered { inner, .. } | Widget::Primary(inner) => inner.visit(f),
             _ => {}
         }
     }
@@ -519,6 +522,10 @@ fn snapshot_widget(out: &mut String, w: &Widget, depth: usize, focus: Option<&st
         }
         Widget::Placeholder { label, height } => {
             let _ = writeln!(out, "{pad}[{label}] (empty slot, {height} high)");
+        }
+        Widget::Primary(inner) => {
+            let _ = writeln!(out, "{pad}primary:");
+            snapshot_widget(out, inner, depth + 1, focus);
         }
         Widget::Stack(c) => {
             for x in c {

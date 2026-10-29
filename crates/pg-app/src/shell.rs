@@ -133,7 +133,7 @@ impl Shell {
         gui.painter.paint_and_update_textures(
             ViewportId::ROOT,
             ppp,
-            [0.08, 0.09, 0.11, 1.0],
+            crate::theme::BG.to_normalized_gamma_f32(),
             &prims,
             &mut out.textures_delta,
             if ask {

@@ -19,6 +19,7 @@ mod game_view;
 mod os;
 mod shell;
 mod smoke;
+mod theme;
 mod ui;
 
 use std::path::PathBuf;

@@ -189,7 +189,8 @@ fn the_main_menu_snapshot_is_stable() {
 [ui.main.title]
   # ui.main.title
   (ui.main.subtitle)
-  >[ui.main.continue_named{name=Town,day=3}] <main.continue>
+  primary:
+    >[ui.main.continue_named{name=Town,day=3}] <main.continue>
    [ui.main.new] <main.new>
    [ui.main.saved] <main.saved>
    [ui.main.mods] <main.mods>

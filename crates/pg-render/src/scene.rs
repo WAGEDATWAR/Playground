@@ -102,14 +102,15 @@ pub fn build_scene(
                 continue;
             };
             let (sx, sy) = cam.to_screen(x as f32, y as f32, view_w, view_h);
-            let (ax, ay) = (snap(sx), snap(sy));
-            // Size to the next tile's snapped corner so neighbours always meet.
+            // Ground corners always land on whole pixels, even at a fractional zoom (zoomed-out overviews), and
+            // each tile is sized to the next tile's corner, so neighbours always meet with no gap between them.
+            let (ax, ay) = (sx.round(), sy.round());
             let (bx, by) = cam.to_screen((x + 1) as f32, (y + 1) as f32, view_w, view_h);
             quads.push(Quad {
                 x: ax,
                 y: ay,
-                w: snap(bx) - ax,
-                h: snap(by) - ay,
+                w: bx.round() - ax,
+                h: by.round() - ay,
                 uv,
                 tint: WHITE,
             });
@@ -226,6 +227,39 @@ mod tests {
         assert_eq!(snap_zoom(31.9), 16.0);
         assert_eq!(snap_zoom(33.0), 32.0);
         assert_eq!(snap_zoom(96.0), 96.0);
+    }
+
+    #[test]
+    fn at_a_fractional_zoom_ground_tiles_still_meet_on_whole_pixels() {
+        let atlas = Atlas::standard();
+        let cam = Camera {
+            cx: 32.0,
+            cy: 24.0,
+            zoom: 15.6875,
+        };
+        let scene = build_scene(
+            &cam,
+            1004.0,
+            753.0,
+            &Flat(64, 48, TileKind::Grass),
+            &[],
+            &atlas,
+        );
+        let q: Vec<_> = scene.quads.iter().collect();
+        assert!(!q.is_empty());
+        for a in &q {
+            assert_eq!(a.x, a.x.round());
+            assert_eq!(a.w, a.w.round());
+            // The tile to the right starts exactly where this one ends.
+            if let Some(b) = q.iter().find(|b| b.y == a.y && b.x > a.x) {
+                let next = q
+                    .iter()
+                    .filter(|b| b.y == a.y && b.x > a.x)
+                    .map(|b| b.x)
+                    .fold(f32::MAX, f32::min);
+                assert_eq!(a.x + a.w, next, "gap after {a:?} before {b:?}");
+            }
+        }
     }
 
     #[test]
