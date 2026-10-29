@@ -67,6 +67,7 @@ pub fn tree(entries: &[JournalEntry], t: Text) -> Tree {
     if entries.is_empty() {
         w.push(Widget::Note(t("ui.journal.empty", &[])));
     }
+    let mut lines = Vec::new();
     for e in entries.iter().rev() {
         let when = t(
             "ui.journal.when",
@@ -76,10 +77,16 @@ pub fn tree(entries: &[JournalEntry], t: Text) -> Tree {
             ],
         );
         let line = format!("{when}  {}", sentence(e, t));
-        w.push(if e.weight >= 2 {
+        lines.push(if e.weight >= 2 {
             Widget::Label(line)
         } else {
             Widget::Note(line)
+        });
+    }
+    if !lines.is_empty() {
+        w.push(Widget::Scroll {
+            max_height: 340,
+            children: lines,
         });
     }
     w.push(Widget::button("journal.close", t("ui.journal.close", &[])));

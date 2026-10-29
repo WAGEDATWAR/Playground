@@ -111,8 +111,9 @@ pub fn tree(v: &ResidentView, t: Text, dev: bool) -> Tree {
         Some(other) => t("ui.inspect.talking", &[("other", other)]),
         None => t("ui.inspect.doing", &[("activity", &v.activity)]),
     }));
-    w.push(Widget::Group {
-        border: crate::widget::Border::GROUP,
+    let mut sections: Vec<Widget> = Vec::new();
+    sections.push(Widget::Group {
+        border: crate::widget::Border::between(1, crate::widget::BorderTone::Normal),
         title: t("ui.inspect.needs", &[]),
         children: v
             .needs
@@ -123,8 +124,8 @@ pub fn tree(v: &ResidentView, t: Text, dev: bool) -> Tree {
             })
             .collect(),
     });
-    w.push(Widget::Group {
-        border: crate::widget::Border::GROUP,
+    sections.push(Widget::Group {
+        border: crate::widget::Border::between(1, crate::widget::BorderTone::Normal),
         title: t("ui.inspect.memories", &[]),
         children: if v.memories.is_empty() {
             vec![Widget::Note(t("ui.inspect.none", &[]))]
@@ -146,8 +147,8 @@ pub fn tree(v: &ResidentView, t: Text, dev: bool) -> Tree {
                 .collect()
         },
     });
-    w.push(Widget::Group {
-        border: crate::widget::Border::GROUP,
+    sections.push(Widget::Group {
+        border: crate::widget::Border::between(1, crate::widget::BorderTone::Normal),
         title: t("ui.inspect.relationships", &[]),
         children: if v.relationships.is_empty() {
             vec![Widget::Note(t("ui.inspect.none", &[]))]
@@ -209,8 +210,8 @@ pub fn tree(v: &ResidentView, t: Text, dev: bool) -> Tree {
         talks.push(Widget::Note(t("ui.inspect.none", &[])));
     }
     if dev && !v.pack_effects.is_empty() {
-        w.push(Widget::Group {
-            border: crate::widget::Border::GROUP,
+        sections.push(Widget::Group {
+            border: crate::widget::Border::between(1, crate::widget::BorderTone::Normal),
             title: t("ui.inspect.pack_effects", &[]),
             children: v
                 .pack_effects
@@ -229,10 +230,16 @@ pub fn tree(v: &ResidentView, t: Text, dev: bool) -> Tree {
                 .collect(),
         });
     }
-    w.push(Widget::Group {
-        border: crate::widget::Border::GROUP,
+    sections.push(Widget::Group {
+        border: crate::widget::Border::between(1, crate::widget::BorderTone::Normal),
         title: t("ui.inspect.conversations", &[]),
         children: talks,
+    });
+    // The sections scroll inside a bounded height, with a line between neighbours, so a long history never
+    // makes the window taller than the screen.
+    w.push(Widget::Scroll {
+        max_height: 380,
+        children: vec![Widget::Stack(sections)],
     });
     Tree::new(t("ui.inspect.title", &[]), w)
 }

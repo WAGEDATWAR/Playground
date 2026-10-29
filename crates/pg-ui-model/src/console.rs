@@ -220,8 +220,13 @@ impl ConsoleModel {
 
     pub fn tree(&self, t: Text) -> Tree {
         let shown = self.lines();
-        let mut w = vec![
-            Widget::Heading(t("ui.console.title", &[])),
+        let between = |children: Vec<Widget>| Widget::Group {
+            border: crate::widget::Border::between(1, crate::widget::BorderTone::Normal),
+            title: String::new(),
+            children,
+        };
+        // What to show: a text filter and the message types.
+        let show = between(vec![
             Widget::TextField {
                 id: "console.filter".into(),
                 label: t("ui.console.filter", &[]),
@@ -240,6 +245,9 @@ impl ConsoleModel {
                     })
                     .collect(),
             ),
+        ]);
+        // What to do with the log, and the saved filters.
+        let actions = between(vec![
             Widget::Row(vec![
                 Widget::button("console.clear", t("ui.console.clear", &[])),
                 Widget::button("console.copy", t("ui.console.copy", &[])),
@@ -262,6 +270,9 @@ impl ConsoleModel {
                 }))
                 .collect(),
             ),
+        ]);
+        // The log itself.
+        let log = between(vec![
             Widget::Note(t(
                 "ui.console.count",
                 &[
@@ -269,11 +280,17 @@ impl ConsoleModel {
                     ("total", &self.entries.len().to_string()),
                 ],
             )),
-        ];
-        w.push(Widget::Log {
-            lines: shown.iter().map(|e| (e.severity, e.line())).collect(),
-        });
-        Tree::new(t("ui.console.title", &[]), w)
+            Widget::Log {
+                lines: shown.iter().map(|e| (e.severity, e.line())).collect(),
+            },
+        ]);
+        Tree::new(
+            t("ui.console.title", &[]),
+            vec![
+                Widget::Heading(t("ui.console.title", &[])),
+                Widget::Stack(vec![show, actions, log]),
+            ],
+        )
     }
 }
 

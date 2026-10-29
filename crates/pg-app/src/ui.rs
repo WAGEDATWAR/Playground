@@ -480,16 +480,26 @@ fn draw_widget(
             // A switch that is off is dimmed as well as unpressed, so its state reads at a glance.
             let text = match tint {
                 Some(s) => {
-                    let c = severity_colors(*s).0;
+                    // Fatal is black on red in the log; as a chip its red is the text, so it reads on the control.
+                    let (fg, bg) = severity_colors(*s);
+                    let c = bg.unwrap_or(fg);
                     text.color(if *on { c } else { c.gamma_multiply(0.4) })
                 }
                 None => text,
             };
-            let r = ui.add(
-                egui::Button::new(text)
-                    .selected(*on)
-                    .min_size(egui::vec2(0.0, 26.0)),
-            );
+            // A switched-on chip is a lifted control, not the teal selection, so its tinted text stays readable.
+            let r = ui
+                .scope(|ui| {
+                    let sel = &mut ui.visuals_mut().selection;
+                    sel.bg_fill = theme::CONTROL_ACTIVE;
+                    sel.stroke = Stroke::new(1.0, theme::EDGE);
+                    ui.add(
+                        egui::Button::new(text)
+                            .selected(*on)
+                            .min_size(egui::vec2(0.0, 26.0)),
+                    )
+                })
+                .inner;
             ring(ui, &r, id, focus);
             if r.clicked() {
                 d.events.push(UiEvent::Toggle(id.clone(), !*on));
