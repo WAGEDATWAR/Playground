@@ -9,6 +9,12 @@ yanked = "deny"
 ignore = [
     # ttf-parser is unmaintained; reached only through winit's Wayland title-bar drawing on Linux. Revisit when winit moves on (D-030).
     "RUSTSEC-2026-0192",
+    # zbus, zvariant and zbus_names are reported as unmaintained as standalone crates (their code moved into zbus 6).
+    # Reached only on Linux, through keyring's secret-service backend that stores AI keys. No safe upgrade exists yet;
+    # revisit when keyring moves to zbus 6 (D-069).
+    "RUSTSEC-2026-0370",
+    "RUSTSEC-2026-0371",
+    "RUSTSEC-2026-0372",
 ]
 
 [licenses]

@@ -167,6 +167,17 @@ pub fn check_path(path: &str, max_len: usize) -> Result<(), &'static str> {
 
 /// Reads every file of a zip archive into memory, enforcing the limits. Returns `(path, bytes)` in archive
 /// order; directories are validated but not returned.
+/// An entry's name as text. Names that are not valid text are refused, like any other unsafe path.
+fn entry_name(
+    name: Result<std::borrow::Cow<'_, str>, zip::result::ZipError>,
+) -> Result<String, ArchiveError> {
+    name.map(std::borrow::Cow::into_owned)
+        .map_err(|_| ArchiveError::BadPath {
+            path: "(unreadable name)".to_owned(),
+            why: "the name is not valid text",
+        })
+}
+
 pub fn read_archive(
     bytes: &[u8],
     limits: &ArchiveLimits,
@@ -193,7 +204,7 @@ pub fn read_archive(
         let entry = zip
             .by_index_raw(i)
             .map_err(|e| ArchiveError::NotAnArchive(e.to_string()))?;
-        let name = entry.name().to_owned();
+        let name = entry_name(entry.name())?;
         check_path(&name, limits.max_path_len).map_err(|why| ArchiveError::BadPath {
             path: name.clone(),
             why,
@@ -246,7 +257,7 @@ pub fn read_archive(
         if entry.is_dir() {
             continue;
         }
-        let name = entry.name().to_owned();
+        let name = entry_name(entry.name())?;
         let declared = entry.size();
         let mut data = Vec::new();
         entry
