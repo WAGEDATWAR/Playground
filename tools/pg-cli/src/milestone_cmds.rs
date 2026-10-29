@@ -26,6 +26,11 @@ fn steps(skip_tests: bool) -> Vec<Step> {
             args: vec!["scripts/check_deps.py"],
         },
         Step {
+            name: "deferral register",
+            program: "python".into(),
+            args: vec!["scripts/check_deferrals.py"],
+        },
+        Step {
             name: "clippy (warnings are errors)",
             program: "cargo".into(),
             args: vec![

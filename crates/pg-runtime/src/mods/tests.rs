@@ -37,13 +37,19 @@ fn the_choices_round_trip_through_storage_and_a_damaged_file_starts_fresh_with_a
 #[test]
 fn installing_copies_a_valid_pack_refuses_duplicates_and_bad_folders_and_discovery_lists_them() {
     let data = temp("install");
-    let id = install(&data, &root("packs/cookbook/caffeine")).unwrap();
-    assert_eq!(id, "caffeine");
+    let done = install(&data, &root("packs/cookbook/caffeine")).unwrap();
+    assert_eq!(done.id, "caffeine");
+    assert_eq!(done.previous, None, "a first install replaces nothing");
     assert!(data.join("packs/caffeine/pack.json").exists());
     assert!(data.join("packs/caffeine/scripts/main.luau").exists());
-    assert!(install(&data, &root("packs/cookbook/caffeine"))
-        .unwrap_err()
-        .contains("already installed"));
+    // Installing the same pack again replaces it in place and says which version it replaced.
+    let again = install(&data, &root("packs/cookbook/caffeine")).unwrap();
+    assert_eq!(again.previous.as_deref(), Some(again.version.as_str()));
+    assert!(data.join("packs/caffeine/pack.json").exists());
+    assert!(
+        !data.join("packs/.installing-caffeine").exists(),
+        "no staging folder is left behind"
+    );
     assert!(install(&data, &root("data/base"))
         .unwrap_err()
         .contains("base"));

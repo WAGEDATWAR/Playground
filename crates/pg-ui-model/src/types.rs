@@ -50,6 +50,19 @@ pub struct PackRow {
     pub capabilities: Vec<CapRow>,
     /// Why the pack is not valid, if it is not.
     pub error: Option<String>,
+    /// The manifest's optional descriptive text and the API version the pack asks for.
+    pub about: PackAbout,
+}
+
+/// What a pack says about itself (all optional text; empty when the manifest leaves it out).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PackAbout {
+    pub author: String,
+    pub description: String,
+    pub website: String,
+    pub license: String,
+    /// The API versions the pack was built for, as the manifest writes them (`>=0.1 <0.2`).
+    pub api: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

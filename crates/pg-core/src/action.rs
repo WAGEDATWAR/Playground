@@ -5,6 +5,8 @@
 //! theirs during the load phase, then [`ActionRegistry::freeze`] shuts it. Anything that later asks for an
 //! unregistered action (a schedule, a script, an LLM proposal) is refused with `unknown_action`.
 //!
+//! DEFERRED: DF-006 (see docs/DEFERRALS.md): preconditions, permissions, costs and effects are not all built.
+//!
 //! Milestone 0.5 ships the skeleton: `move_to` and `idle_at`, with `MoveTo` and `PerformFor` steps.
 //! Preconditions, permissions, costs and effects arrive with the systems that need them (Needs in Stage 1).
 

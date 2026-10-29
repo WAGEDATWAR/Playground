@@ -535,6 +535,7 @@ impl AppController {
             )
             .map_err(|e| e.to_string())?;
         } else {
+            // DEFERRED: DF-002 (see docs/DEFERRALS.md).
             // Content without game data (a stripped-down test pack): the old scaffolding town.
             sim.submit(0, cmd(Command::DevCreateMap { w, h, style: 1 }))
                 .map_err(|e| e.to_string())?;
@@ -774,13 +775,28 @@ impl AppController {
             }
             AppEffect::CopyText(_) => Vec::new(),
             AppEffect::ListMods => vec![UiEvent::ModsLoaded(self.mods_view())],
-            AppEffect::SetPackEnabled { id, on } => self.change_mods(|c| {
-                if on {
-                    c.enabled.insert(id.clone());
+            AppEffect::SetPackEnabled { id, on } => {
+                // Turning a pack on also turns on the installed packs it needs.
+                let also = if on {
+                    self.dependencies_to_enable(&id)
                 } else {
-                    c.enabled.remove(&id);
+                    Vec::new()
+                };
+                let mut out = self.change_mods(|c| {
+                    if on {
+                        c.enabled.insert(id.clone());
+                        c.enabled.extend(also.iter().cloned());
+                    } else {
+                        c.enabled.remove(&id);
+                    }
+                });
+                if !also.is_empty() {
+                    out.push(UiEvent::Notice(
+                        self.text("ui.notice.pack_deps", &[("packs", &also.join(", "))]),
+                    ));
                 }
-            }),
+                out
+            }
             AppEffect::ApproveCapability { id, cap, on } => {
                 self.change_mods(|c| c.set_approved(&id, &cap, on))
             }
@@ -1127,14 +1143,15 @@ impl AppController {
                         .find(|r| r.pack_id == crate::mods::BASE)
                         .map(|r| r.hash)
                         .unwrap_or_default(),
-                    size_bytes: 0,
-                    files: 0,
+                    size_bytes: c.pack_stats(&m.id).map_or(0, |s| s.1),
+                    files: c.pack_stats(&m.id).map_or(0, |s| s.0),
                     path: String::new(),
                     enabled: true,
                     loaded: true,
                     base: true,
                     capabilities: Vec::new(),
                     error: None,
+                    about: pg_ui_model::types::PackAbout::default(),
                 });
             }
         }
@@ -1155,6 +1172,7 @@ impl AppController {
                     base: false,
                     capabilities: Vec::new(),
                     error: Some(e.clone()),
+                    about: pg_ui_model::types::PackAbout::default(),
                 }),
                 Ok(s) if s.id == crate::mods::BASE => {}
                 Ok(s) => packs.push(PackRow {
@@ -1189,6 +1207,13 @@ impl AppController {
                         })
                         .collect(),
                     error: None,
+                    about: pg_ui_model::types::PackAbout {
+                        author: s.author.clone().unwrap_or_default(),
+                        description: s.description.clone().unwrap_or_default(),
+                        website: s.website.clone().unwrap_or_default(),
+                        license: s.license.clone().unwrap_or_default(),
+                        api: s.api.clone(),
+                    },
                 }),
             }
         }
@@ -1246,12 +1271,70 @@ impl AppController {
             return Vec::new();
         };
         match crate::mods::install(&data_dir, &folder) {
-            Ok(id) => vec![
-                UiEvent::Notice(self.text("ui.notice.pack_installed", &[("id", &id)])),
-                UiEvent::ModsLoaded(self.mods_view()),
-            ],
+            Ok(done) => {
+                let note = match &done.previous {
+                    None => self.text("ui.notice.pack_installed", &[("id", &done.id)]),
+                    Some(prev) if *prev == done.version => self.text(
+                        "ui.notice.pack_reinstalled",
+                        &[("id", &done.id), ("version", &done.version)],
+                    ),
+                    Some(prev) => {
+                        // Approvals for permissions the new version no longer asks for are dropped; the ones
+                        // it still asks for, and the pack's On or Off choice, stay.
+                        let asks: Vec<String> = crate::mods::discover(&data_dir)
+                            .into_iter()
+                            .filter_map(|i| i.outcome.ok())
+                            .find(|s| s.id == done.id)
+                            .map(|s| s.capabilities)
+                            .unwrap_or_default();
+                        let (mut config, _) = self.mods_config();
+                        if let Some(approved) = config.approved.get_mut(&done.id) {
+                            approved.retain(|c| asks.contains(c));
+                        }
+                        let _ = config.save(self.svc.storage.as_ref());
+                        self.text(
+                            "ui.notice.pack_updated",
+                            &[("id", &done.id), ("from", prev), ("to", &done.version)],
+                        )
+                    }
+                };
+                vec![UiEvent::Notice(note), UiEvent::ModsLoaded(self.mods_view())]
+            }
             Err(e) => vec![UiEvent::Failed(e)],
         }
+    }
+
+    /// The installed packs that `id` needs (directly or through other packs) and that are not turned on yet.
+    fn dependencies_to_enable(&self, id: &str) -> Vec<String> {
+        let Some(dir) = self.svc.data_dir.as_deref() else {
+            return Vec::new();
+        };
+        let installed = crate::mods::discover(dir);
+        let (config, _) = self.mods_config();
+        let summary = |pack: &str| {
+            installed
+                .iter()
+                .find_map(|i| i.outcome.as_ref().ok().filter(|s| s.id == pack))
+        };
+        let mut out: Vec<String> = Vec::new();
+        let mut todo = vec![id.to_owned()];
+        while let Some(current) = todo.pop() {
+            let Some(s) = summary(&current) else {
+                continue;
+            };
+            for d in &s.depends {
+                let skip = d == crate::mods::BASE
+                    || d == id
+                    || config.enabled.contains(d)
+                    || out.contains(d);
+                if !skip && summary(d).is_some() {
+                    out.push(d.clone());
+                    todo.push(d.clone());
+                }
+            }
+        }
+        out.sort();
+        out
     }
 
     fn remove_pack(&mut self, folder: &str) -> Vec<UiEvent> {

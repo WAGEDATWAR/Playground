@@ -370,5 +370,20 @@
   "ui.new.preview_note": "A sample of this town: {w} by {h} tiles, {residents} residents.",
   "ui.new.preview_sample": "A sample town (with no seed, a random one is made): {w} by {h} tiles, {residents} residents.",
   "ui.new.preview_busy": "Making a sample town...",
-  "ui.new.randomize": "Random seed"
+  "ui.new.randomize": "Random seed",
+  "ui.mods.search": "Search packs",
+  "ui.mods.search_hint": "Name or id",
+  "ui.mods.no_match": "No packs match.",
+  "ui.mods.group.about": "About",
+  "ui.mods.fact.author": "Author",
+  "ui.mods.fact.license": "Licence",
+  "ui.mods.fact.website": "Website",
+  "ui.mods.fact.api": "Built for API",
+  "ui.mods.copy_error": "Copy error",
+  "ui.saved.badge.packs_differ": "Packs differ",
+  "ui.saved.packs_differ": "This world was made with packs that differ from the ones loaded now. Not loaded now: {missing}. Not in this world: {added}.",
+  "ui.saved.none": "none",
+  "ui.notice.pack_updated": "Updated the pack '{id}' from version {from} to {to}. It keeps your On or Off choice; changes apply at the next start.",
+  "ui.notice.pack_reinstalled": "Reinstalled the pack '{id}' (version {version}).",
+  "ui.notice.pack_deps": "Also turned on the packs it needs: {packs}."
 }

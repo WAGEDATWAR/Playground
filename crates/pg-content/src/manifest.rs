@@ -25,8 +25,16 @@ const MANIFEST_KEYS: &[&str] = &[
     "capabilities",
     "entry",
     "settings",
+    "author",
+    "description",
+    "website",
+    "license",
 ];
 const MAX_NAME_LEN: usize = 64;
+const MAX_AUTHOR_LEN: usize = 80;
+const MAX_DESCRIPTION_LEN: usize = 400;
+const MAX_WEBSITE_LEN: usize = 200;
+const MAX_LICENSE_LEN: usize = 40;
 const MAX_DEPENDS: usize = 32;
 const MAX_SETTINGS: usize = 32;
 
@@ -242,6 +250,12 @@ pub struct PackManifest {
     pub capabilities: BTreeSet<Capability>,
     pub entry: Option<String>,
     pub settings: Vec<PackSetting>,
+    /// Optional descriptive text for the Mods screen. Shown as text only; nothing here is ever acted on.
+    pub author: Option<String>,
+    pub description: Option<String>,
+    /// An `http://` or `https://` address, shown as text (never opened by itself).
+    pub website: Option<String>,
+    pub license: Option<String>,
 }
 
 /// Whether `path` is a safe pack-relative path: `/`-separated ASCII segments, no `..`, no absolute or
@@ -466,6 +480,24 @@ impl PackManifest {
             },
         };
 
+        let author = optional_text(map, "author", MAX_AUTHOR_LEN, path, report, false);
+        let description =
+            optional_text(map, "description", MAX_DESCRIPTION_LEN, path, report, true);
+        let license = optional_text(map, "license", MAX_LICENSE_LEN, path, report, false);
+        let website =
+            optional_text(map, "website", MAX_WEBSITE_LEN, path, report, false).filter(|w| {
+                let ok = (w.starts_with("https://") || w.starts_with("http://"))
+                    && !w.chars().any(char::is_whitespace);
+                if !ok {
+                    report.error(
+                        "bad_text",
+                        format!("{path}.website"),
+                        "website must be an http:// or https:// address with no spaces",
+                    );
+                }
+                ok
+            });
+
         let mut settings = Vec::new();
         match map.get("settings") {
             None => {}
@@ -533,7 +565,47 @@ impl PackManifest {
             capabilities,
             entry,
             settings,
+            author,
+            description,
+            website,
+            license,
         })
+    }
+}
+
+/// An optional text field: absent or null is `None`; otherwise it must be text of at most `max` characters with
+/// no control characters (a description may contain line breaks).
+fn optional_text(
+    map: &std::collections::BTreeMap<String, Canon>,
+    key: &str,
+    max: usize,
+    path: &str,
+    report: &mut ValidationReport,
+    multiline: bool,
+) -> Option<String> {
+    let at = format!("{path}.{key}");
+    match map.get(key) {
+        None | Some(Canon::Null) => None,
+        Some(v) => match v.as_str() {
+            Some(t) if t.trim().is_empty() => None,
+            Some(t)
+                if t.chars().count() > max
+                    || t.chars()
+                        .any(|c| c.is_control() && !(multiline && c == '\n')) =>
+            {
+                report.error(
+                    "bad_text",
+                    at,
+                    format!("{key} must be at most {max} characters with no control characters"),
+                );
+                None
+            }
+            Some(t) => Some(t.trim().to_owned()),
+            None => {
+                report.error("type_mismatch", at, format!("{key} must be text"));
+                None
+            }
+        },
     }
 }
 
@@ -821,5 +893,45 @@ mod tests {
             assert_eq!(Capability::from_name(c.name()), Some(c));
         }
         assert_eq!(Capability::from_name("world_write"), None);
+    }
+
+    #[test]
+    fn optional_descriptive_fields_are_accepted_bounded_and_checked() {
+        let with = |extra: &str| {
+            load(&format!(
+                r#"{{"id":"x","name":"X","version":"1.0","api":">=0.1"{extra}}}"#
+            ))
+        };
+        // None of them is required, and a pack without them is as valid as before.
+        let (m, r) = with("");
+        let m = m.expect("valid");
+        assert!(r.is_ok());
+        assert!(m.author.is_none() && m.description.is_none());
+        assert!(m.website.is_none() && m.license.is_none());
+        // All four, with a description that may contain line breaks.
+        let (m, r) = with(
+            r#","author":"Ada","description":"Line one.\nLine two.","website":"https://example.com/x","license":"MIT""#,
+        );
+        let m = m.expect("valid");
+        assert!(r.is_ok(), "{r}");
+        assert_eq!(m.author.as_deref(), Some("Ada"));
+        assert_eq!(m.description.as_deref(), Some("Line one.\nLine two."));
+        assert_eq!(m.website.as_deref(), Some("https://example.com/x"));
+        assert_eq!(m.license.as_deref(), Some("MIT"));
+        // Blank text is the same as absent.
+        let (m, _) = with(r#","author":"   ","license":null"#);
+        assert!(m.expect("valid").author.is_none());
+        // Bad ones are errors that name the field.
+        for bad in [
+            format!(r#","author":"{}""#, "a".repeat(81)),
+            format!(r#","description":"{}""#, "d".repeat(401)),
+            r#","license":"tab\there""#.to_owned(),
+            r#","website":"ftp://example.com""#.to_owned(),
+            r#","website":"https://exa mple.com""#.to_owned(),
+            r#","author":5"#.to_owned(),
+        ] {
+            let (m, r) = with(&bad);
+            assert!(m.is_none() && !r.is_ok(), "{bad}");
+        }
     }
 }

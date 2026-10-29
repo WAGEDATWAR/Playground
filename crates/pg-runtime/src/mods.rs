@@ -150,6 +150,12 @@ pub struct Summary {
     pub hash: String,
     pub size_bytes: u64,
     pub files: usize,
+    /// The manifest's optional descriptive text, and the API version the pack asks for.
+    pub author: Option<String>,
+    pub description: Option<String>,
+    pub website: Option<String>,
+    pub license: Option<String>,
+    pub api: String,
 }
 
 /// Looks at every folder in `<data_dir>/packs`. A folder that is not a valid pack comes back with the
@@ -166,6 +172,10 @@ pub fn discover(data_dir: &Path) -> Vec<Installed> {
             continue;
         }
         let folder = e.file_name().to_string_lossy().into_owned();
+        // A folder whose name starts with a dot is an install in progress, not a pack.
+        if folder.starts_with('.') {
+            continue;
+        }
         let outcome = match load_pack(&DirPack::new(&path), &Limits::default()) {
             Ok(p) => Ok(Summary {
                 id: p.manifest.id.to_string(),
@@ -189,6 +199,11 @@ pub fn discover(data_dir: &Path) -> Vec<Installed> {
                 hash: p.hash.clone(),
                 size_bytes: p.total_bytes,
                 files: p.file_count,
+                author: p.manifest.author.clone(),
+                description: p.manifest.description.clone(),
+                website: p.manifest.website.clone(),
+                license: p.manifest.license.clone(),
+                api: p.manifest.api.as_str().to_owned(),
             }),
             Err(report) => Err(report.to_string()),
         };
@@ -304,24 +319,65 @@ pub fn build_content(
 
 /// Copies a pack folder into `<data_dir>/packs/<id>` after checking that it is a valid pack. Returns the
 /// pack's id. Refuses a pack that is already installed, and the base pack.
-pub fn install(data_dir: &Path, source: &Path) -> Result<String, String> {
+/// What installing a pack did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InstallOutcome {
+    pub id: String,
+    pub version: String,
+    /// The version that was installed before, when this replaced one in place.
+    pub previous: Option<String>,
+}
+
+/// Installs the pack in `source`. A pack with the same id that is already installed is replaced in place (its
+/// folder, whatever it is called, keeps its place), so updating is just installing the newer version; the
+/// player's On / Off choice and approvals are kept by the caller. The copy is made beside the old one first, so a
+/// failure never loses an installed pack.
+pub fn install(data_dir: &Path, source: &Path) -> Result<InstallOutcome, String> {
     let pack = load_pack(&DirPack::new(source), &Limits::default())
         .map_err(|r| format!("That folder is not a valid pack:\n{r}"))?;
     let id = pack.manifest.id.to_string();
+    let v = pack.manifest.version;
+    let version = format!("{}.{}.{}", v.major, v.minor, v.patch);
     if id == BASE {
         return Err("The base game cannot be installed again.".to_owned());
     }
-    let target = data_dir.join(PACKS_DIR).join(&id);
-    if target.exists() {
+    let packs = data_dir.join(PACKS_DIR);
+    let existing = discover(data_dir)
+        .into_iter()
+        .find(|i| i.outcome.as_ref().is_ok_and(|s| s.id == id));
+    let (target, previous) = match &existing {
+        Some(i) => (
+            i.path.clone(),
+            i.outcome.as_ref().ok().map(|s| s.version.clone()),
+        ),
+        None => (packs.join(&id), None),
+    };
+    if existing.is_none() && target.exists() {
         return Err(format!(
-            "A pack named '{id}' is already installed; remove it first."
+            "A folder named '{id}' is already in the packs folder but is not a valid pack; remove it first."
         ));
     }
-    copy_dir(source, &target, 0).map_err(|e| {
-        let _ = std::fs::remove_dir_all(&target);
+    let staging = packs.join(format!(".installing-{id}"));
+    let _ = std::fs::remove_dir_all(&staging);
+    copy_dir(source, &staging, 0).map_err(|e| {
+        let _ = std::fs::remove_dir_all(&staging);
         format!("The pack could not be copied: {e}")
     })?;
-    Ok(id)
+    if previous.is_some() {
+        std::fs::remove_dir_all(&target).map_err(|e| {
+            let _ = std::fs::remove_dir_all(&staging);
+            format!("The old version could not be replaced: {e}")
+        })?;
+    }
+    std::fs::rename(&staging, &target).map_err(|e| {
+        let _ = std::fs::remove_dir_all(&staging);
+        format!("The pack could not be put in place: {e}")
+    })?;
+    Ok(InstallOutcome {
+        id,
+        version,
+        previous,
+    })
 }
 
 fn copy_dir(from: &Path, to: &Path, depth: u32) -> std::io::Result<()> {

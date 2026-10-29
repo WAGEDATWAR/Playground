@@ -5,7 +5,7 @@ Playground is a deterministic 2D pixel-art town life-simulation, built as a **na
 ## Source of truth
 
 The binding specification is in `docs/reference/`:
-`architecture-blueprint-v3.15.md` (how), `design-document-v3.4.md` (what/why), `roadmap-v4.9.md` (when).
+`architecture-blueprint-v3.16.md` (how), `design-document-v3.4.md` (what/why), `roadmap-v4.9.md` (when).
 Read the relevant Blueprint sections before touching a crate. If code and spec disagree, stop and resolve it (fix code, or record a decision in `docs/DECISIONS.md` and update the spec copy with a version bump).
 
 ## Working files (keep current)
@@ -14,6 +14,7 @@ Read the relevant Blueprint sections before touching a crate. If code and spec d
 - `docs/TODO.md` — rolling todo and notes. **Update at the start and end of every work session and whenever direction changes.**
 - `docs/SUGGESTIONS.md` — ideas beyond the spec; add entries whenever they arise.
 - `docs/DECISIONS.md` — decisions and spec deviations.
+- `docs/DEFERRALS.md` — every stub, deferred feature, known limit and parked idea, each with an ID, a reason, a target and a "done when". **Add the entry the same day something is deferred or stubbed** (stubs also get a `// DEFERRED: DF-nnn` marker in the code, checked by `scripts/check_deferrals.py`), and walk the page at every gate: each entry due by that gate is built, rescheduled or dropped with a decision.
 
 ## Rules that must not be broken
 

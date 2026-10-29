@@ -116,6 +116,7 @@ pub enum Stream<'a> {
     SocialTopic,
     SocialOutcome,
     PathTiebreak,
+    /// DEFERRED: DF-001 (see docs/DEFERRALS.md).
     /// `dev.*`: temporary scaffolding streams (removed with the scaffolding, D-009).
     DevProbe,
     DevWander,

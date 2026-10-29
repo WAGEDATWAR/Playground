@@ -274,7 +274,7 @@ fn saved_worlds_choose_load_export_delete_import() {
         None,
     );
     let fx = click(&mut m, "main.saved");
-    assert_eq!(fx, vec![AppEffect::ListWorlds]);
+    assert_eq!(fx, vec![AppEffect::ListWorlds, AppEffect::ListMods]);
     let s = snap(&m);
     assert!(
         s.contains("[ui.saved.badge.damaged]!"),
@@ -1270,6 +1270,7 @@ fn pack_row(
             })
             .collect(),
         error: None,
+        about: crate::types::PackAbout::default(),
     }
 }
 
@@ -1545,4 +1546,129 @@ fn new_world_shows_a_sample_town_that_follows_the_settings_and_lists_its_packs()
     assert!(snap(&m).contains("Pack base: 0.1.0"), "{}", snap(&m));
     assert_eq!(click(&mut m, "new.packs"), vec![AppEffect::ListMods]);
     assert!(matches!(m.screen(), Screen::Mods));
+}
+
+#[test]
+fn the_mods_polish_search_about_compatibility_copy_error_and_base_size() {
+    let mut m = boot(Vec::new(), None);
+    click(&mut m, "main.mods");
+    let base = crate::types::PackRow {
+        base: true,
+        enabled: true,
+        loaded: true,
+        folder: String::new(),
+        files: 40,
+        size_bytes: 9_000,
+        hash: "abcdef0123456789".into(),
+        ..pack_row("base", true, true, &[])
+    };
+    let broken = crate::types::PackRow {
+        id: String::new(),
+        error: Some("pack.json: line 3: bad json".into()),
+        ..pack_row("broken", false, false, &[])
+    };
+    let described = crate::types::PackRow {
+        about: crate::types::PackAbout {
+            author: "Ada".into(),
+            description: "Makes mornings better.".into(),
+            website: "https://example.com/caffeine".into(),
+            license: "MIT".into(),
+            api: ">=0.1 <0.2".into(),
+        },
+        ..pack_row("caffeine", true, true, &[("data", false, false)])
+    };
+    let mut packs = vec![base, broken, described];
+    // Few packs: no search box.
+    m.update(UiEvent::ModsLoaded(crate::types::ModsView {
+        packs: packs.clone(),
+        ..crate::types::ModsView::default()
+    }));
+    assert!(!snap(&m).contains("<mods.filter>"));
+    // Many packs: a search box appears and narrows the list by name or id.
+    for id in ["alpha", "beta", "gamma"] {
+        packs.push(pack_row(id, false, false, &[("data", false, false)]));
+    }
+    m.update(UiEvent::ModsLoaded(crate::types::ModsView {
+        packs,
+        ..crate::types::ModsView::default()
+    }));
+    let s = snap(&m);
+    assert!(
+        s.contains("<mods.filter>") && s.contains("<mods.row.gamma>"),
+        "{s}"
+    );
+    assert!(m
+        .update(UiEvent::Text("mods.filter".into(), "  BET ".into()))
+        .is_empty());
+    let s = snap(&m);
+    assert!(s.contains("<mods.row.beta>"), "{s}");
+    assert!(
+        !s.contains("<mods.row.gamma>") && !s.contains("<mods.row.caffeine>"),
+        "{s}"
+    );
+    m.update(UiEvent::Text("mods.filter".into(), "zzz".into()));
+    assert!(snap(&m).contains("ui.mods.no_match"));
+    m.update(UiEvent::Text("mods.filter".into(), String::new()));
+    // A pack that describes itself shows an About section; its API shows as a fact.
+    click(&mut m, "mods.row.caffeine");
+    let s = snap(&m);
+    for want in [
+        "== ui.mods.group.about ==",
+        "Makes mornings better.",
+        "ui.mods.fact.author: Ada",
+        "ui.mods.fact.license: MIT",
+        "ui.mods.fact.website: https://example.com/caffeine",
+        "ui.mods.fact.api: >=0.1 <0.2",
+    ] {
+        assert!(s.contains(want), "missing {want:?} in\n{s}");
+    }
+    // A pack with nothing to say has no About section.
+    click(&mut m, "mods.row.alpha");
+    assert!(!snap(&m).contains("ui.mods.group.about"));
+    // The base game's size and file count show.
+    click(&mut m, "mods.row.base");
+    let s = snap(&m);
+    assert!(
+        s.contains("ui.mods.fact.files: 40") && s.contains("ui.mods.fact.size: 9.0 KB"),
+        "{s}"
+    );
+    // A pack that failed offers its error to copy.
+    click(&mut m, "mods.row.broken");
+    assert_eq!(
+        click(&mut m, "mods.copy_error.broken"),
+        vec![AppEffect::CopyText("pack.json: line 3: bad json".into())]
+    );
+}
+
+#[test]
+fn a_saved_world_whose_packs_differ_from_the_loaded_ones_says_so() {
+    let mut m = boot(vec![world("a", "Alpha", 1, false)], None);
+    click(&mut m, "main.saved");
+    let base = crate::types::PackRow {
+        base: true,
+        enabled: true,
+        loaded: true,
+        folder: String::new(),
+        ..pack_row("base", true, true, &[])
+    };
+    let extra = pack_row("caffeine", true, true, &[("data", false, false)]);
+    // Until the pack list arrives nothing can be said.
+    assert!(!snap(&m).contains("packs_differ"));
+    // The world was made with the base game alone; a pack is loaded now that it does not have.
+    m.update(UiEvent::ModsLoaded(crate::types::ModsView {
+        packs: vec![base.clone(), extra],
+        ..crate::types::ModsView::default()
+    }));
+    let s = snap(&m);
+    assert!(s.contains("[ui.saved.badge.packs_differ]!"), "{s}");
+    assert!(
+        s.contains("ui.saved.packs_differ{missing=ui.saved.none,added=caffeine}"),
+        "{s}"
+    );
+    // With the same packs loaded as the world has, nothing is said.
+    m.update(UiEvent::ModsLoaded(crate::types::ModsView {
+        packs: vec![base],
+        ..crate::types::ModsView::default()
+    }));
+    assert!(!snap(&m).contains("packs_differ"));
 }

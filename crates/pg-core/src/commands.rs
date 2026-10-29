@@ -1,5 +1,7 @@
 //! Commands: requests that enter the simulation as `SimInput`s and are applied at tick boundaries.
 //!
+//! DEFERRED: DF-003 (see docs/DEFERRALS.md): the developer commands are stand-ins for gameplay and editor commands.
+//!
 //! Milestone 0.4 has only developer commands. They let the dev tools and tests build and poke a world
 //! entirely through logged inputs, so every run is replayable. They are marked developer-only and are
 //! replaced by real gameplay commands (and the editor's `EditCommand`s) in later milestones.

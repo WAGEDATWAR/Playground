@@ -1031,3 +1031,104 @@ fn the_mods_screen_installs_enables_approves_and_removes_a_pack() {
     assert!(!saved.contains("caffeine"), "{saved}");
     let _ = std::fs::remove_dir_all(&data);
 }
+
+#[test]
+fn enabling_a_pack_turns_on_what_it_needs_and_installing_again_updates_it_in_place() {
+    let data = std::env::temp_dir().join(format!("pg-mods-update-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&data);
+    std::fs::create_dir_all(&data).unwrap();
+    let m = Machine::new();
+    let c = content(&[]);
+    let dialogs = Arc::new(pg_host::ScriptedDialogs::new());
+    let mut svc = m.services();
+    svc.dialogs = Some(dialogs.clone());
+    svc.data_dir = Some(data.clone());
+    let mut ctl = AppController::new(svc, Some(Arc::clone(&c)));
+    let mut model = AppModel::new();
+    let boot = ctl.boot();
+    model.update(boot);
+    let mut d = Driver { ctl, model };
+    let source = std::path::PathBuf::from(format!(
+        "{}/../../packs/cookbook/caffeine",
+        env!("CARGO_MANIFEST_DIR")
+    ));
+    d.click("main.mods");
+    dialogs.answer_folder(Some(source.clone()));
+    d.click("mods.install");
+    // A second pack on disk that needs the first.
+    let mornings = data.join("packs/mornings");
+    std::fs::create_dir_all(&mornings).unwrap();
+    std::fs::write(
+        mornings.join("pack.json"),
+        r#"{"id":"mornings","name":"Mornings","version":"0.1.0","api":">=0.1 <0.2","depends":[{"id":"base","version":">=0.1"},{"id":"caffeine","version":">=0.1"}],"capabilities":["data"]}"#,
+    )
+    .unwrap();
+    // Leave and come back, so the list is read again.
+    d.click("mods.back");
+    d.click("main.mods");
+    d.click("mods.row.mornings");
+    d.click("mods.enable.mornings");
+    let on = |d: &Driver, id: &str| d.model.mods().packs.iter().any(|p| p.id == id && p.enabled);
+    assert!(
+        on(&d, "mornings") && on(&d, "caffeine"),
+        "what it needs is turned on too: {:?} / {}",
+        d.model
+            .mods()
+            .packs
+            .iter()
+            .map(|p| (p.id.clone(), p.enabled, p.error.clone()))
+            .collect::<Vec<_>>(),
+        d.text()
+    );
+    assert!(
+        d.text()
+            .contains("Also turned on the packs it needs: caffeine"),
+        "{}",
+        d.text()
+    );
+    // Installing a newer version of an installed pack replaces it in place and keeps the choices.
+    d.send(UiEvent::Toggle("mods.cap.caffeine.systems".into(), true));
+    let newer = data.join("newer-caffeine");
+    std::fs::create_dir_all(newer.join("scripts")).unwrap();
+    let manifest = std::fs::read_to_string(source.join("pack.json")).unwrap();
+    std::fs::write(newer.join("pack.json"), manifest.replace("0.1.0", "0.2.0")).unwrap();
+    std::fs::copy(
+        source.join("scripts/main.luau"),
+        newer.join("scripts/main.luau"),
+    )
+    .unwrap();
+    dialogs.answer_folder(Some(newer));
+    d.click("mods.install");
+    let row = d
+        .model
+        .mods()
+        .packs
+        .iter()
+        .find(|p| p.id == "caffeine")
+        .cloned()
+        .unwrap();
+    assert_eq!(row.version, "0.2.0");
+    assert!(row.enabled, "an update keeps the On choice");
+    assert!(
+        row.capabilities
+            .iter()
+            .any(|c| c.name == "systems" && c.approved),
+        "and the approvals it still needs"
+    );
+    assert!(
+        d.text()
+            .contains("Updated the pack 'caffeine' from version 0.1.0 to 0.2.0"),
+        "{}",
+        d.text()
+    );
+    assert_eq!(
+        d.model
+            .mods()
+            .packs
+            .iter()
+            .filter(|p| p.id == "caffeine")
+            .count(),
+        1
+    );
+    let _ = std::fs::remove_dir_all(&data);
+}

@@ -283,6 +283,7 @@ impl Default for Pipeline {
     }
 }
 
+/// DEFERRED: DF-004 (see docs/DEFERRALS.md): the no-op slots.
 /// The system that ships in a built-in slot: the real behaviour systems, and no-ops for the slots whose
 /// systems arrive in later milestones.
 fn builtin_system(

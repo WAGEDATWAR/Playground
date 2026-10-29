@@ -1,3 +1,5 @@
+//! DEFERRED: DF-005 (see docs/DEFERRALS.md): generated art stands in for real assets.
+//!
 //! Procedural pixel art (Stage 1, milestone 1.6): terrain tiles and residents drawn in code.
 //!
 //! The art is generated, not loaded, so the game has pictures before there are assets (the decision for

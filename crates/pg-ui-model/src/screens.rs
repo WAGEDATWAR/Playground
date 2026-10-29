@@ -44,7 +44,7 @@ pub(crate) fn build(m: &AppModel, t: Text) -> Tree {
         ),
         Screen::MainMenu => main_menu(st.worlds, t),
         Screen::NewWorld(f) => new_world(m, f, t),
-        Screen::SavedWorlds(f) => saved_worlds(st.worlds, f, t),
+        Screen::SavedWorlds(f) => saved_worlds(m, st.worlds, f, t),
         Screen::Options => options(st.settings, t),
         Screen::AiOptions(f) => ai_options(st.ai, f, t),
         Screen::Mods => mods(m, t),
@@ -229,7 +229,7 @@ fn new_world(m: &AppModel, f: &NewWorldForm, t: Text) -> Tree {
 
 /// The Saved worlds screen: the worlds as a list on the left, and everything about the chosen one (its picture,
 /// facts and what can be done with it) in a pane on the right. The newest world is chosen when the screen opens.
-fn saved_worlds(worlds: &[WorldEntry], f: &SavedForm, t: Text) -> Tree {
+fn saved_worlds(m: &AppModel, worlds: &[WorldEntry], f: &SavedForm, t: Text) -> Tree {
     let chosen = chosen_world(worlds, f.selected.as_deref());
     let rows: Vec<Widget> = worlds
         .iter()
@@ -288,22 +288,60 @@ fn saved_worlds(worlds: &[WorldEntry], f: &SavedForm, t: Text) -> Tree {
                 tone: BadgeTone::Bad,
             });
         }
+        // Packs the world was made with against the packs loaded now.
+        let loaded: Vec<&str> = m
+            .mods()
+            .packs
+            .iter()
+            .filter(|p| p.loaded && !p.id.is_empty())
+            .map(|p| p.id.as_str())
+            .collect();
+        let missing: Vec<&str> = e
+            .packs
+            .iter()
+            .map(String::as_str)
+            .filter(|id| !loaded.contains(id))
+            .collect();
+        let added: Vec<&str> = loaded
+            .iter()
+            .copied()
+            .filter(|id| !e.packs.iter().any(|p| p == id))
+            .collect();
+        let differs = !loaded.is_empty() && (!missing.is_empty() || !added.is_empty());
+        if differs {
+            badges.push(Widget::Badge {
+                label: t("ui.saved.badge.packs_differ", &[]),
+                tone: BadgeTone::Accent,
+            });
+        }
         head.push(Widget::Row(badges));
         if let Some(name) = &e.thumbnail {
             head.push(Widget::Thumbnail { name: name.clone() });
         }
         sections.push(between(String::new(), head));
-        sections.push(between(
-            t("ui.saved.group.details", &[]),
-            vec![Widget::Facts(vec![
-                (t("ui.saved.fact.saved", &[]), e.saved.clone()),
-                (
-                    t("ui.saved.fact.played", &[]),
-                    t("ui.saved.played", &[("ticks", &e.play_ticks.to_string())]),
-                ),
-                (t("ui.saved.fact.packs", &[]), e.packs.join(", ")),
-            ])],
-        ));
+        let list = |v: &[&str]| {
+            if v.is_empty() {
+                t("ui.saved.none", &[])
+            } else {
+                v.join(", ")
+            }
+        };
+        let mut details = Vec::new();
+        details.push(Widget::Facts(vec![
+            (t("ui.saved.fact.saved", &[]), e.saved.clone()),
+            (
+                t("ui.saved.fact.played", &[]),
+                t("ui.saved.played", &[("ticks", &e.play_ticks.to_string())]),
+            ),
+            (t("ui.saved.fact.packs", &[]), e.packs.join(", ")),
+        ]));
+        if differs {
+            details.push(Widget::Note(t(
+                "ui.saved.packs_differ",
+                &[("missing", &list(&missing)), ("added", &list(&added))],
+            )));
+        }
+        sections.push(between(t("ui.saved.group.details", &[]), details));
         sections.push(between(
             String::new(),
             if f.confirm_delete {
@@ -758,7 +796,8 @@ pub(crate) fn activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
         }
         ("main", "main.saved") => {
             m.go_to(Screen::SavedWorlds(SavedForm::default()));
-            vec![AppEffect::ListWorlds]
+            // The pack list is read too, to say when a world's packs differ from the ones loaded now.
+            vec![AppEffect::ListWorlds, AppEffect::ListMods]
         }
         ("main", "main.options") | ("pause", "pause.options") => {
             m.go_to(Screen::Options);
@@ -975,6 +1014,10 @@ pub(crate) fn text(m: &mut AppModel, id: &str, s: String) -> Vec<AppEffect> {
             }
             Vec::new()
         }
+        ("mods", "mods.filter") => {
+            m.set_mods_filter(s.chars().take(60).collect());
+            Vec::new()
+        }
         ("ai", "ai.key") => {
             if let Screen::AiOptions(f) = m.screen_mut() {
                 // The text goes straight into a Secret: it is never held as a plain string again.
@@ -1027,6 +1070,18 @@ fn mods_activate(m: &mut AppModel, id: &str) -> Vec<AppEffect> {
             if let Some(key) = other.strip_prefix("mods.row.") {
                 m.select_mod(key);
                 return Vec::new();
+            }
+            if let Some(key) = other.strip_prefix("mods.copy_error.") {
+                return match m
+                    .mods()
+                    .packs
+                    .iter()
+                    .find(|p| pack_key(p) == key)
+                    .and_then(|p| p.error.clone())
+                {
+                    Some(e) => vec![AppEffect::CopyText(e)],
+                    None => Vec::new(),
+                };
             }
             if let Some(pack) = other.strip_prefix("mods.enable.") {
                 let now = m
@@ -1187,12 +1242,42 @@ fn mod_detail(m: &AppModel, p: &crate::types::PackRow, t: Text) -> Vec<Widget> {
         String::new(),
         vec![Widget::Heading(p.name.clone()), Widget::Row(chips)],
     )];
+    // What the pack says about itself, when its manifest says anything.
+    let about = &p.about;
+    if !about.description.is_empty()
+        || !about.author.is_empty()
+        || !about.license.is_empty()
+        || !about.website.is_empty()
+    {
+        let mut kids = Vec::new();
+        if !about.description.is_empty() {
+            kids.push(Widget::Label(about.description.clone()));
+        }
+        let mut facts = Vec::new();
+        for (key, value) in [
+            ("ui.mods.fact.author", &about.author),
+            ("ui.mods.fact.license", &about.license),
+            ("ui.mods.fact.website", &about.website),
+        ] {
+            if !value.is_empty() {
+                facts.push((t(key, &[]), value.clone()));
+            }
+        }
+        if !facts.is_empty() {
+            kids.push(Widget::Facts(facts));
+        }
+        out.push(between(t("ui.mods.group.about", &[]), kids));
+    }
     if let Some(e) = &p.error {
         out.push(between(
             t("ui.mods.group.problem", &[]),
             vec![
                 Widget::Label(t("ui.mods.invalid", &[])),
                 Widget::Note(e.chars().take(300).collect()),
+                Widget::button(
+                    &format!("mods.copy_error.{}", pack_key(p)),
+                    t("ui.mods.copy_error", &[]),
+                ),
             ],
         ));
     } else {
@@ -1201,6 +1286,9 @@ fn mod_detail(m: &AppModel, p: &crate::types::PackRow, t: Text) -> Vec<Widget> {
             facts.push((t("ui.mods.fact.id", &[]), p.id.clone()));
         }
         facts.push((t("ui.mods.fact.version", &[]), p.version.clone()));
+        if !p.about.api.is_empty() {
+            facts.push((t("ui.mods.fact.api", &[]), p.about.api.clone()));
+        }
         if p.files > 0 {
             facts.push((t("ui.mods.fact.files", &[]), p.files.to_string()));
             facts.push((t("ui.mods.fact.size", &[]), size_text(p.size_bytes)));
@@ -1311,14 +1399,40 @@ fn mods(m: &AppModel, t: Text) -> Tree {
     for n in &v.notes {
         w.push(Widget::Note(n.clone()));
     }
+    // A long list gets a search box; it matches a pack's name or id.
+    let searchable = v.packs.len() > 4;
+    let needle = if searchable {
+        m.mods_filter().trim().to_lowercase()
+    } else {
+        String::new()
+    };
     let rows: Vec<Widget> = ordered_packs(m)
         .into_iter()
+        .filter(|p| {
+            needle.is_empty()
+                || p.name.to_lowercase().contains(&needle)
+                || p.id.to_lowercase().contains(&needle)
+        })
         .map(|p| mod_row(p, chosen.is_some_and(|c| pack_key(c) == pack_key(p)), t))
         .collect();
-    let mut left = vec![Widget::Scroll {
-        max_height: FILL,
-        children: rows,
-    }];
+    let mut left = Vec::new();
+    if searchable {
+        left.push(Widget::TextField {
+            id: "mods.filter".into(),
+            label: t("ui.mods.search", &[]),
+            value: m.mods_filter().to_owned(),
+            secret: false,
+            hint: t("ui.mods.search_hint", &[]),
+        });
+    }
+    left.push(if rows.is_empty() {
+        Widget::Note(t("ui.mods.no_match", &[]))
+    } else {
+        Widget::Scroll {
+            max_height: FILL,
+            children: rows,
+        }
+    });
     let mut options = vec![Widget::Toggle {
         id: "mods.safe".into(),
         label: t("ui.mods.safe", &[]),

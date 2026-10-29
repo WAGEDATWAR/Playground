@@ -155,6 +155,8 @@ pub struct AppModel {
     mods_selected: Option<String>,
     /// The folder of a pack whose removal is waiting for a yes.
     mods_confirm: Option<String>,
+    /// The text typed in the Mods search box.
+    mods_filter: String,
     /// The town journal window is open.
     journal_open: bool,
     /// How the world is being played; the journal is for observation and possession modes only.
@@ -190,6 +192,7 @@ impl AppModel {
             mods: crate::types::ModsView::default(),
             mods_selected: None,
             mods_confirm: None,
+            mods_filter: String::new(),
             journal_open: false,
             mode: crate::journal::Mode::Observation,
         }
@@ -221,6 +224,14 @@ impl AppModel {
 
     pub fn mods_selected(&self) -> Option<&str> {
         self.mods_selected.as_deref()
+    }
+
+    pub fn mods_filter(&self) -> &str {
+        &self.mods_filter
+    }
+
+    pub(crate) fn set_mods_filter(&mut self, text: String) {
+        self.mods_filter = text;
     }
 
     pub fn mods_confirm(&self) -> Option<&str> {

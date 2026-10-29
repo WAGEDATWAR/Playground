@@ -1,0 +1,98 @@
+# Deferrals and stubs
+
+Everything we have chosen **not** to build yet, and everything in the code that is a stand-in for something real.
+Deferral discipline: nothing is postponed in conversation only. If it is not built, it is on this page.
+
+## Rules
+
+1. **Same-day entry.** The day something is deferred, stubbed, parked or left as a known limit, it gets an entry here
+   (ID `DF-nnn`, never reused) and, if it is a stub in code, a marker comment at the stub: `// DEFERRED: DF-nnn`.
+   `scripts/check_deferrals.py` (part of `pg milestone`) fails if a marker names an ID that is not on this page, or
+   if an open stub entry has no marker in the code.
+2. **Every entry says six things:** what it is, why it is not built, where it lives (code and docs), the target
+   (a milestone or stage, or `unscheduled` with a date by which a target must be chosen), what "done" means, and
+   the source (decision and suggestion IDs).
+3. **Gate review.** At every milestone gate and phase gate, walk this page. Each entry whose target is at or before
+   that gate is built, rescheduled (with a `docs/DECISIONS.md` entry and the new target written here) or dropped
+   (with a decision). `unscheduled` entries past their date are forced to one of those three.
+4. **Closing.** A finished entry moves to **Closed**, with the date and the commit. Closed entries are never deleted.
+5. **Kinds.** *Stub* is code standing in for the real thing. *Deferred* is a feature we decided to build later.
+   *Limit* is a known weakness of something that exists. *Process* is a check or habit we do not have yet.
+   *Parked* is an idea set aside on purpose with no target.
+
+Last reviewed: 2026-10-29, at the start of 1.9 (this page was created then).
+
+## A. Stubs and scaffolding in the code
+
+| ID | Kind | What | Why not done | Where | Target | Done when | Source |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| DF-001 | Stub | **Dev scaffolding systems**: the dev probe system and `WorldState.probe`, the dev plan source for pawns with no occupation, the dev generators, `Command::DevNudge`, the `dev.*` RNG streams (`DevProbe`, `DevWander`) and the "Developer scaffolding: a day began" event | They gave the pipeline deterministic work before real systems existed; the real needs, mood, occupation and conversation systems now replace them for towns made by the generator, but they are woven through the golden replay, scenarios, keyframe and script tests, and about 25 files use them | `crates/pg-core/src/dev.rs`, `world.rs` (`probe`), `rng.rs`, `life.rs` (scaffolding plan for anonymous pawns), `events.rs`, `commands.rs`; used by `pg-cli` (`sim`, `pack`), `pg-runtime` tests, `pg-persist` testkit | **1.9**: decide to move it under `cfg(test)` or a `dev-scaffold` feature and re-pin the goldens, or keep it as a named test fixture; `unscheduled` is not allowed past 1.9 | No scaffolding system, stream or event in a release pipeline; golden replay built on the real systems; D-009 closed | D-009, D-045 |
+| DF-002 | Stub | **Scaffolding town fallback**: when content has no game data, creating a world builds a map with `DevCreateMap` and `DevSpawnPawn` instead of the generator | Stripped-down test packs have no generator data | `crates/pg-runtime/src/app.rs` (`create_world`) | With DF-001 | Every world is made by the generator (tests carry their own fixture content) | D-009 |
+| DF-003 | Stub | **Developer commands** (`DevCreateMap`, `DevSpawnPawn`, `DevNudge`, ...) are the only way some tools and tests change the world | They are logged as inputs and developer-only; real gameplay and editor commands replace them over time | `crates/pg-core/src/commands.rs` | Stage 3 (editor and mutation API) and Stage 4 (possession); the dev ones stay dev-only | No release path needs a `Dev*` command | roadmap Stage 3, 4 |
+| DF-004 | Stub | **Empty pipeline slots**: the Event and Maintenance slots run a no-op system (and the Relationship slot needs checking: relationship change may live inside the conversation system) | The systems that belong there have not been needed yet | `crates/pg-core/src/pipeline.rs` (`builtin_system`) | **1.9** to verify and record; the systems themselves arrive with the stage that needs them | Each slot either has its real system or is removed from the pipeline with a decision | Blueprint 6 |
+| DF-005 | Stub | **Procedural sprites** stand in for art | No art assets yet; the atlas format is ready for real art | `crates/pg-render/src/sprite.rs`, `atlas.rs` | When you have assets | Real art replaces the generated sprites with no code change outside `pg-render` | D-038 |
+| DF-006 | Stub | **Action system pieces**: preconditions, permissions, costs, effects and relationship hostility in plan acceptance, and script weight hooks, were deferred "to Stage 1" | They arrive with the systems that need them | `crates/pg-core/src/action.rs` (header comment) | **1.9** to verify which exist; the rest go to Stage 2 (free-time scheduler, API 0.2) | Each piece is built or has its own entry with a target | D-021 |
+
+## B. Deferred features
+
+| ID | Kind | What | Why not done | Where | Target | Done when | Source |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| DF-010 | Deferred | **Accessibility output (AccessKit)**: screen-reader names, roles and focus for every screen; keyboard handling of permission checkboxes; focus handling in drawers | The widget tree already carries names, roles and focus order; the work is the egui integration and a full pass | `crates/pg-ui-model/src/widget.rs`, `pg-app` | Stage 11 | A screen reader can use every screen; the keyboard reaches every control | D-033, D-061, D-063, S-038 |
+| DF-011 | Deferred | **Audio service** (sound, music, spoken lines) | Trait and null double exist only | `crates/pg-host` | Stage 11 | Real audio behind the trait; optional text-to-speech (S-033) evaluated | D-026, S-033 |
+| DF-012 | Deferred | **Real per-world pack choice**: choosing which packs a world uses when it is made | The content set is built once at launch; a world uses what is loaded. New world lists the packs and Manage packs opens Mods | `crates/pg-runtime/src/mods.rs`, `app.rs`; New world screen | `unscheduled`: choose a target by the Stage 2 plan | A new world can be made with a different pack set than the one loaded at launch, and a saved world records and restores its own set | D-060, D-077, D-078 |
+| DF-013 | Deferred | **Pack settings page**: editing the per-world settings a manifest declares | Per-world pack setting storage does not exist | `crates/pg-content/src/manifest.rs` (`PackSetting`), Mods screen | With DF-012 | Declared settings appear in the pack's pane and New world and are saved with the world | D-078 |
+| DF-014 | Deferred | **Mods: reorder load order by dragging**, with the order saved | Needs a drag widget and a saved order that the loader honours | Mods screen, `mods.rs` | `unscheduled`: choose by Stage 2 | The player can change the order, it is saved, and the load report shows it | D-078 |
+| DF-015 | Deferred | **Mods: pack icons and screenshots** | Needs a manifest field and image loading | manifest, Mods screen | Stage 11 (packaging) | A pack may name an icon file that the list and pane show | D-078 |
+| DF-016 | Deferred | **Mods: sort options** beyond the fixed order (base, then by name, failures last) | Not needed until lists are long | Mods screen | `unscheduled` | Sort choices exist | D-078 |
+| DF-017 | Deferred | **Events (read) for scripts**: scripts cannot subscribe to the event stream; they react through systems and hooks | Kept the API 0.1 surface small | `crates/pg-api` | API 0.2 (Stage 2) | A capability-gated read of the event stream with attribution | D-062 |
+| DF-018 | Deferred | **Batch entry point for hooks** (`S-034`) | Script cost was 3.1 percent of the tick at 200 pawns, under the threshold that justified it | `crates/pg-script` | Only if script cost passes a few percent | Measured benefit and a decision | D-062, S-034 |
+| DF-019 | Deferred | **Wall-clock watchdog** for scripts and `PackQuarantined` as a recorded input | Deterministic fuel already bounds scripts; the watchdog guards hangs outside fuel | `crates/pg-script` | `unscheduled`: choose by the Stage 2 plan | A hang outside fuel is caught, the pack is quarantined, and the quarantine is replayable | D-031 |
+| DF-020 | Deferred | **Renderer extras**: building roles drawn differently, day and night tint, animated water | Procedural art first | `crates/pg-render` | `unscheduled` (with real art, DF-005) | Each is drawn | D-052 |
+| DF-021 | Deferred | **UI polish**: motion (hover and press easing, windows fading), a custom pixel-friendly UI font, a second look at AI options' Provider box (title and label repeat) | 1.8b was about structure and the base look | `crates/pg-app/src/theme.rs`, `ui.rs`, `docs/UI-DESIGN.md` | Stage 11, or earlier if you ask | Motion and font in the theme; the repeated label fixed | D-070, UI-DESIGN |
+| DF-022 | Deferred | **Customisable map sizes**; New world offers three sizes | Stage 3 generator controls | New world, `MapSize` | Stage 3 | The player can set the size | D-038 |
+| DF-023 | Deferred | **Player mode** (a world-creation toggle that locks the player to one pawn, blocking observation and possession) | Observation mode, which includes possession, is all the product does today | `crates/pg-ui-model` | Stage 4 | The toggle exists and the modes behave as D-048 describes | D-048 |
+| DF-024 | Deferred | **Friends seek each other out** (friendships between households are rare today) | Needs the free-time scheduler | `crates/pg-core/src/conversation.rs`, social report | Stage 2 | The social report shows friendships forming across households | S-055, D-054 |
+| DF-025 | Deferred | **Gossip and second-hand memories** | Needs the memory and relationship layers to settle | `crates/pg-core/src/memory.rs` | Stage 3 | A memory can be passed on with its source and a trust effect | S-053 |
+| DF-026 | Deferred | **Template variants** (`S-016`): evaluated against 15 templates, not needed yet | Not enough templates | `crates/pg-content` | Stage 6, once there are 50 or more templates | Variants exist or the decision to drop them is recorded | D-062, S-016 |
+| DF-027 | Deferred | **Organism system** (vitals, parts, status effects, pain, consciousness, conditions) | Accepted as Stage 2B | `docs/proposals/organism-system.md` | Stage 2B | The Stage 2B "Done when" | D-039, D-040, S-040 to S-047 |
+| DF-028 | Deferred | **Luau type check in `pg pack lint`** | Needs the analyzer built or bundled | `tools/pg-cli` | Stage 11 | `--!strict` errors show before load | S-035 |
+| DF-029 | Deferred | **Player2 extras**: server-side NPC memory, game-data store, speech | Not needed for text generation | `crates/pg-ai` | Stage 4 and 11 (evaluate) | Each evaluated and built or dropped | S-033 |
+| DF-030 | Deferred | **Editor, mutation API, worldgen API** | Stage 3 | roadmap | Stage 3 | The Stage 3 "Done when" | roadmap |
+| DF-031 | Deferred | **Dormancy and acute stepping, declarative effect programs, and the other organism suggestions** | Part of Stage 2B | `docs/SUGGESTIONS.md` | Stage 2B | Their own checks | S-041 to S-047 |
+
+## C. Known limits and tuning debts
+
+| ID | Kind | What | Where | Target | Done when | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| DF-040 | Limit | Personality changes how often residents talk by a modest amount; line sets by topic and tone are small | conversation data | Tune with the social report when content grows | A clear, measured difference | D-055 |
+| DF-041 | Limit | The map view draws zoomed-out maps at a fractional zoom (tile edges are whole pixels, widths 15 or 16) | `pg-render` | Accepted unless it looks wrong | A decision to keep or snap | D-070 |
+| DF-042 | Limit | A* keeps its scores in a `BTreeMap` (about 3 ms a request on a 160x120 town) and there are no region labels for instant reachability | `pg-core` pathfinding | **1.9** profile pass decides whether S-017 and S-021 are needed | Measured, then built or dropped | S-017, S-021 |
+| DF-043 | Limit | The Saved worlds pane now warns when a world's packs differ from the ones loaded now; what loading does about it is the existing content compatibility check on load (Blueprint 13). Making differences resolvable, not just reported, needs DF-012 | `pg-runtime`, Saved worlds screen | With DF-012 | A world with a different pack set can be opened with its own set | D-078 |
+| DF-044 | Limit | The preview exe shares your normal Playground data folder for saves and settings | `pg preview` | Your choice | A decision | D-071 |
+
+## D. Process and tooling gaps
+
+| ID | Kind | What | Target | Done when | Source |
+| --- | --- | --- | --- | --- | --- |
+| DF-050 | Process | `cargo deny` is not part of `pg check --full` or `pg milestone`; it only fails in CI | **1.9** (offered, not yet accepted) | `pg milestone` runs it | D-069 |
+| DF-051 | Process | Local Linux check (S-060) | Opportunistic; only when easy | A one-command run on Linux | S-060 |
+| DF-052 | Process | Cross-OS determinism relies on CI; there is no local macOS or Linux run | Standing | CI stays green | D-048 |
+| DF-053 | Process | Real folder and file pickers are tested through a scripted double; the Windows and Linux dialogs have been confirmed by you only for export and import | You confirm Install a pack on a real folder | Confirmed | D-059, D-060 |
+| DF-054 | Process | `cargo-fuzz` targets (parser, manifest, archive reader, import, save loader); proptest stands in | Stage 11 | Fuzz targets run in CI | D-011 |
+| DF-055 | Process | Edition 2024 migration (optional) | `unscheduled` | Decision | D-003 |
+| DF-056 | Process | Branch ruleset requires no status checks; `LICENSE` copyright line to confirm | You | Decision | TODO |
+| DF-057 | Process | Required before the Stage 1 gate: S-061 conversation and path scale check, S-064 save-size watch, S-070 story digests with their golden in `pg check --full` | **1.9** | Each done and recorded in `docs/gates/stage-1.md` | S-061, S-064, S-070 |
+
+## E. Parked on purpose
+
+| ID | What | Why | Source |
+| --- | --- | --- | --- |
+| DF-070 | Weather, seasons and fire | Roadmap item parked | S-048, D-040 |
+| DF-071 | Animals and non-human humanoids | The physiology profile leaves room | D-040 |
+| DF-072 | Anatomy extensions after Stage 2B's base (eyes and ears, neck, spine segments) | After the base | D-040 |
+
+## Closed
+
+| ID | What | Closed | Commit |
+| --- | --- | --- | --- |
+| (none yet) | | | |

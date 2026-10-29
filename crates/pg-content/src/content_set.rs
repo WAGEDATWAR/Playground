@@ -71,6 +71,8 @@ struct PackInfo {
     manifest: PackManifest,
     hash: String,
     scripts: BTreeMap<String, String>,
+    files: usize,
+    bytes: u64,
 }
 
 impl ContentSet {
@@ -334,6 +336,8 @@ impl ContentSet {
                 manifest: p.manifest.clone(),
                 hash: p.hash.clone(),
                 scripts: p.scripts.clone(),
+                files: p.file_count,
+                bytes: p.total_bytes,
             })
             .collect();
         Ok(ContentSet {
@@ -393,6 +397,14 @@ impl ContentSet {
     /// Packs in load order (dependencies first).
     pub fn load_order(&self) -> Vec<&PackId> {
         self.packs.iter().map(|p| &p.manifest.id).collect()
+    }
+
+    /// How many files a loaded pack has and how many bytes they take, for the Mods screen.
+    pub fn pack_stats(&self, id: &PackId) -> Option<(usize, u64)> {
+        self.packs
+            .iter()
+            .find(|p| &p.manifest.id == id)
+            .map(|p| (p.files, p.bytes))
     }
 
     pub fn manifests(&self) -> impl Iterator<Item = &PackManifest> {
