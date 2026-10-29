@@ -9,9 +9,12 @@
 //!          --no-vsync         do not wait for the display
 //!          --shadow <n>       re-run every keyframe span on n threads and compare (developer)
 //!          --demo <screen>    open straight on a screen (new, options, ai, saved, game, inspector, journal, mods, mods-open, pause, overlay)
+//!          --capture <file>   save the finished frame from the frame buffer as a PNG, then quit (developer; with --demo)
+//!          --capture-frames <n>  frames to let the screen settle first (default 30)
 //! ```
 
 mod app;
+mod capture;
 mod game_view;
 mod os;
 mod shell;
@@ -27,6 +30,8 @@ struct Options {
     packs: Vec<PathBuf>,
     vsync: bool,
     demo: Option<String>,
+    capture: Option<PathBuf>,
+    capture_frames: u32,
     shadow: Option<usize>,
     /// Start with only the base game (`--safe-mode`).
     safe_mode: bool,
@@ -39,6 +44,8 @@ fn parse_args() -> Result<Options, String> {
         packs: Vec::new(),
         vsync: true,
         demo: None,
+        capture: None,
+        capture_frames: 30,
         shadow: None,
         safe_mode: false,
     };
@@ -51,6 +58,13 @@ fn parse_args() -> Result<Options, String> {
             "--shadow" => {
                 let n = args.next().ok_or("--shadow needs a thread count")?;
                 o.shadow = Some(n.parse().map_err(|_| "--shadow needs a number")?);
+            }
+            "--capture" => {
+                o.capture = Some(args.next().ok_or("--capture needs a file name")?.into())
+            }
+            "--capture-frames" => {
+                let n = args.next().ok_or("--capture-frames needs a number")?;
+                o.capture_frames = n.parse().map_err(|_| "--capture-frames needs a number")?;
             }
             "--demo" => o.demo = Some(args.next().ok_or("--demo needs a screen name")?),
             "--data-dir" => {
@@ -110,7 +124,11 @@ fn run() -> Result<(), String> {
     if let Some(d) = &o.demo {
         app.apply_demo(d);
     }
-    shell::run(app, o.vsync)
+    let capture = o.capture.map(|path| capture::Capture {
+        path,
+        after_frames: o.capture_frames,
+    });
+    shell::run(app, o.vsync, capture)
 }
 
 fn main() -> ExitCode {

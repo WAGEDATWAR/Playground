@@ -28,6 +28,9 @@ struct Shell {
     gui: Option<Gui>,
     vsync: bool,
     mode: String,
+    capture: Option<crate::capture::Capture>,
+    frames: u32,
+    capture_asked: bool,
 }
 
 impl Shell {
@@ -108,22 +111,59 @@ impl Shell {
         let Some(mut gui) = self.gui.take() else {
             return;
         };
-        let raw = gui.state.take_egui_input(&gui.window);
+        let mut raw = gui.state.take_egui_input(&gui.window);
+        // A capture asked for earlier arrives here as an event: save it and quit.
+        gui.painter.handle_screenshots(&mut raw.events);
+        let shot = raw.events.iter().find_map(|e| match e {
+            egui::Event::Screenshot { image, .. } => Some(image.clone()),
+            _ => None,
+        });
         let mut out = self.ctx.run_ui(raw, |ui| self.app.draw(ui));
         gui.state
             .handle_platform_output(&gui.window, out.platform_output.clone());
         let ppp = out.pixels_per_point;
         let prims = self.ctx.tessellate(std::mem::take(&mut out.shapes), ppp);
+        self.frames += 1;
+        let ask = !self.capture_asked
+            && self
+                .capture
+                .as_ref()
+                .is_some_and(|c| self.frames >= c.after_frames);
+        self.capture_asked |= ask;
         gui.painter.paint_and_update_textures(
             ViewportId::ROOT,
             ppp,
             [0.08, 0.09, 0.11, 1.0],
             &prims,
             &mut out.textures_delta,
-            Vec::new(),
+            if ask {
+                vec![egui::UserData::default()]
+            } else {
+                Vec::new()
+            },
             &gui.window,
         );
+        // The copy of the frame is read back asynchronously; the device has to be polled for it to finish.
+        if self.capture_asked {
+            if let Some(rs) = gui.painter.render_state() {
+                let _ = rs.device.poll(wgpu::PollType::Poll);
+            }
+        }
         self.gui = Some(gui);
+        if let (true, Some(img)) = (self.capture.is_some(), shot) {
+            let Some(c) = self.capture.take() else {
+                return;
+            };
+            let [w, h] = img.size;
+            let rgba: Vec<u8> = img.pixels.iter().flat_map(|p| p.to_array()).collect();
+            match crate::capture::write_png(&c.path, w, h, &rgba) {
+                Ok(()) => println!("captured {w}x{h} to {}", c.path.display()),
+                Err(e) => eprintln!("{e}"),
+            }
+            self.app.shutdown();
+            el.exit();
+            return;
+        }
         self.apply_window_mode();
         if self.app.wants_exit() {
             self.app.shutdown();
@@ -183,7 +223,7 @@ impl ApplicationHandler for Shell {
 }
 
 /// Opens the window and runs until the player quits.
-pub fn run(app: App, vsync: bool) -> Result<(), String> {
+pub fn run(app: App, vsync: bool, capture: Option<crate::capture::Capture>) -> Result<(), String> {
     let event_loop = EventLoop::new().map_err(|e| format!("no event loop: {e}"))?;
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut shell = Shell {
@@ -192,6 +232,9 @@ pub fn run(app: App, vsync: bool) -> Result<(), String> {
         gui: None,
         vsync,
         mode: String::new(),
+        capture,
+        frames: 0,
+        capture_asked: false,
     };
     event_loop
         .run_app(&mut shell)

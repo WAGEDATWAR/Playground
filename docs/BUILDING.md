@@ -314,3 +314,16 @@ cargo run -q -p pg-cli -- sim --seed demo --town 48x36 --residents 10 --days 1 -
 # The window itself, open on a running town.
 cargo run -p pg-app -- --demo console
 ```
+
+## Frame-buffer captures
+
+`--capture <file.png>` renders a screen, copies the finished frame straight out of the GPU frame buffer (what the
+window shows, not a desktop screenshot), writes it as a PNG and quits. Use it with `--demo <screen>`; a separate
+`--data-dir` keeps your own saves out of it. `--capture-frames <n>` (default 30) lets the screen settle first.
+
+```
+cargo run -p pg-app -- --no-vsync --data-dir shots-data --demo new --capture shots/new.png
+```
+
+Demo screens: new, options, ai, saved, game, inspector, journal, mods, mods-open, pause, overlay, console, drawer,
+focus. The PNGs are uncompressed (large, exact); the encoder is in `crates/pg-app/src/capture.rs`.
