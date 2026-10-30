@@ -610,3 +610,200 @@ fn no_plan_source_means_open_days_and_no_tasks() {
         48
     );
 }
+
+// ---- what kept and broken plans leave behind (2.1) -------------------------------------------------
+
+fn outcome_data() -> Arc<GameData> {
+    use pg_content::{load_pack, ComponentRegistry, ContentSet, DirPack, Limits};
+    let dir = format!("{}/../../data/base", env!("CARGO_MANIFEST_DIR"));
+    let pack = load_pack(&DirPack::new(dir), &Limits::default()).unwrap_or_else(|r| panic!("{r}"));
+    let set = ContentSet::build(vec![pack], ComponentRegistry::builtin()).unwrap();
+    Arc::new(set.game().clone())
+}
+
+fn outcome_pipeline() -> Pipeline {
+    let source: Arc<dyn PlanSource> = Arc::new(Fixed(PlanInputs::default()));
+    let mut pipeline = pipe(&source);
+    pipeline.set_builtin(
+        crate::pipeline::SystemSlot::Commitment,
+        Box::new(CommitmentSystem::new(Some(outcome_data()))),
+    );
+    pipeline
+}
+
+/// Two pawns far apart with a social need of 100, and the commitment system that knows the game data.
+fn outcome_world() -> (Sim, EntityId, Vec<EntityId>) {
+    let mut w = WorldState::new("t", "seed");
+    let map = w.create_map(MapKind::Overworld, 16, 16).unwrap();
+    let ids: Vec<EntityId> = [(0, 0), (9, 9)]
+        .iter()
+        .enumerate()
+        .map(|(i, (x, y))| {
+            let id = w.spawn_pawn(&format!("P{i}"), map, t(*x, *y)).unwrap();
+            w.pawns
+                .get_mut(id)
+                .unwrap()
+                .needs
+                .insert("social".into(), 100);
+            id
+        })
+        .collect();
+    (Sim::new(w, outcome_pipeline()), map, ids)
+}
+
+fn commitment_params() -> pg_content::gamedata::CommitmentOutcomes {
+    outcome_data()
+        .relationships
+        .as_ref()
+        .unwrap()
+        .commitment
+        .clone()
+}
+
+fn memory_keys(sim: &Sim, p: EntityId) -> Vec<String> {
+    pawn(sim, p)
+        .memories
+        .iter()
+        .filter_map(|m| m.summary_key.clone())
+        .collect()
+}
+
+fn wall_in(sim: &mut Sim, map: EntityId, around: (i32, i32)) {
+    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+        command(
+            sim,
+            Command::DevSetBlocked {
+                map,
+                at: t(around.0 + dx, around.1 + dy),
+                blocked: true,
+            },
+        );
+    }
+}
+
+#[test]
+fn a_kept_plan_leaves_memories_warmth_and_less_loneliness() {
+    let (mut sim, _, ids) = outcome_world();
+    run_to(&mut sim, 305);
+    propose(&mut sim, ids[0], ids[1], 4, 2, t(5, 5), 100_000);
+    let events = run_to(&mut sim, 1810);
+    assert_eq!(only_commitment(&sim).state, CommitState::Completed);
+    let o = commitment_params();
+    let rel = sim.world().relationships.get(ids[0], ids[1]).unwrap();
+    assert_eq!(rel.affinity, o.kept_affinity);
+    for (me, other) in [(ids[0], ids[1]), (ids[1], ids[0])] {
+        assert_eq!(memory_keys(&sim, me), ["memory.commitment.kept"]);
+        assert_eq!(pawn(&sim, me).memories[0].participants, vec![other]);
+        assert_eq!(pawn(&sim, me).needs["social"], 100 + o.kept_social);
+    }
+    // The completed event names the pair, so the journal can say who met.
+    let done = kinds(&events, "commitment.completed");
+    assert_eq!(done.len(), 1);
+    assert!(done[0].detail.get("proposer").is_some());
+    assert_eq!(
+        sim.world().journal.entries().last().unwrap().kind,
+        "plan_kept"
+    );
+}
+
+#[test]
+fn a_plan_one_pawn_misses_is_remembered_by_both_and_cools_the_pair() {
+    let (mut sim, map, ids) = outcome_world();
+    run(&mut sim, SLOT + 5);
+    propose(&mut sim, ids[0], ids[1], 4, 1, t(5, 5), 100_000);
+    run(&mut sim, SLOT);
+    assert_eq!(only_commitment(&sim).state, CommitState::Accepted);
+    // The second pawn is walled in; the first can arrive.
+    wall_in(&mut sim, map, (9, 9));
+    let events = run(&mut sim, 5 * SLOT);
+    assert_eq!(only_commitment(&sim).state, CommitState::Failed);
+    let o = commitment_params();
+    let rel = sim.world().relationships.get(ids[0], ids[1]).unwrap();
+    assert_eq!(rel.affinity, o.stood_up_affinity);
+    assert_eq!(memory_keys(&sim, ids[0]), ["memory.commitment.stood_up"]);
+    assert_eq!(memory_keys(&sim, ids[1]), ["memory.commitment.missed"]);
+    assert!(pawn(&sim, ids[0]).memories[0].impact < 0);
+    assert_eq!(pawn(&sim, ids[0]).needs["social"], 100);
+    assert_eq!(kinds(&events, "commitment.failed").len(), 1);
+    assert_eq!(
+        sim.world().journal.entries().last().unwrap().kind,
+        "plan_broken"
+    );
+}
+
+#[test]
+fn when_neither_comes_the_cooling_is_halved() {
+    let (mut sim, map, ids) = outcome_world();
+    run(&mut sim, SLOT + 5);
+    propose(&mut sim, ids[0], ids[1], 4, 1, t(12, 12), 100_000);
+    run(&mut sim, SLOT);
+    wall_in(&mut sim, map, (12, 12));
+    run(&mut sim, 5 * SLOT);
+    assert_eq!(only_commitment(&sim).state, CommitState::Failed);
+    let o = commitment_params();
+    let rel = sim.world().relationships.get(ids[0], ids[1]).unwrap();
+    assert_eq!(rel.affinity, o.stood_up_affinity / 2);
+    for p in &ids {
+        assert_eq!(memory_keys(&sim, *p), ["memory.commitment.missed"]);
+    }
+}
+
+#[test]
+fn a_pawn_who_could_not_come_is_excused() {
+    let (mut sim, _, ids) = outcome_world();
+    run(&mut sim, SLOT + 5);
+    propose(&mut sim, ids[0], ids[1], 4, 1, t(5, 5), 100_000);
+    run(&mut sim, SLOT);
+    assert_eq!(only_commitment(&sim).state, CommitState::Accepted);
+    // The second pawn passes out (the needs system is not installed, so nothing wakes them).
+    let mut snap = sim.snapshot();
+    snap.world
+        .pawns
+        .get_mut(ids[1])
+        .unwrap()
+        .capacities
+        .cap("consciousness", 0);
+    sim = Sim::restore(snap, outcome_pipeline());
+    run(&mut sim, 5 * SLOT);
+    assert_eq!(only_commitment(&sim).state, CommitState::Failed);
+    assert!(
+        sim.world().relationships.get(ids[0], ids[1]).is_none(),
+        "nobody is blamed, so nothing between them changes"
+    );
+    assert!(pawn(&sim, ids[0]).memories.is_empty());
+    assert!(pawn(&sim, ids[1]).memories.is_empty());
+}
+
+#[test]
+fn an_invitee_on_bad_terms_declines() {
+    let (sim, _, ids) = outcome_world();
+    let data = outcome_data();
+    let rel_params = data.relationships.as_ref().unwrap();
+    let mut snap = sim.snapshot();
+    snap.world.relationships.set(crate::social::Relationship {
+        key: crate::social::PairKey::new(ids[0], ids[1]).unwrap(),
+        affinity: rel_params.commitment.decline_below - 50,
+        label: rel_params.labels[0].id.clone(),
+        last_interaction_tick: 0,
+        day: 0,
+        day_change: 0,
+        last_topic: None,
+        forgotten: 0,
+    });
+    let mut sim = Sim::restore(snap, outcome_pipeline());
+    run_to(&mut sim, 305);
+    propose(&mut sim, ids[0], ids[1], 4, 2, t(5, 5), 100_000);
+    let events = run_to(&mut sim, 605);
+    let c = only_commitment(&sim);
+    assert_eq!(c.state, CommitState::Declined);
+    assert!(c.reason.as_ref().unwrap().explain().contains("bad terms"));
+    assert_eq!(kinds(&events, "commitment.declined").len(), 1);
+    for p in &ids {
+        assert!(pawn(&sim, *p)
+            .schedule
+            .as_ref()
+            .unwrap()
+            .reservations()
+            .all(|r| r.commitment.is_none()));
+    }
+}

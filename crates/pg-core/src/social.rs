@@ -786,6 +786,7 @@ mod tests {
             min,
         };
         RelationshipParams {
+            commitment: Default::default(),
             start_affinity: 0,
             daily_cap: 120,
             hysteresis: 40,

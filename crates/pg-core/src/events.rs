@@ -531,12 +531,17 @@ impl EventCatalog {
             ("failed", "The commitment failed."),
             ("cancelled", "The commitment was cancelled."),
         ] {
+            let mut fields = vec![("commitment", id("cmt")), ("explain", maybe_text(400))];
+            if state == "completed" || state == "failed" {
+                fields.push(("proposer", id("pawn")));
+                fields.push(("invitee", id("pawn")));
+            }
             add(
                 &format!("commitment.{state}"),
                 Commitment,
                 true,
                 summary,
-                &[("commitment", id("cmt")), ("explain", maybe_text(400))],
+                &fields,
             );
         }
         c

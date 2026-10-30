@@ -191,6 +191,21 @@ pub fn record(world: &mut WorldState, e: &Event) {
                 ],
             ))
         }
+        "commitment.completed" | "commitment.failed" => {
+            let kind = if e.kind == "commitment.completed" {
+                "plan_kept"
+            } else {
+                "plan_broken"
+            };
+            Some(entry(
+                kind,
+                if kind == "plan_kept" { 1 } else { 2 },
+                &[
+                    ("a", name(world, pawn_id(e, "proposer"))),
+                    ("b", name(world, pawn_id(e, "invitee"))),
+                ],
+            ))
+        }
         "conversation.closed" => {
             let delta = e.detail.get("delta").and_then(Canon::as_i64).unwrap_or(0);
             let kind = if delta >= WARM_DELTA {

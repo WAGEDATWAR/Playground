@@ -294,7 +294,7 @@ fn builtin_system(
 ) -> Box<dyn System> {
     match slot {
         SystemSlot::DayPlanner => Box::new(DayPlannerSystem::new(Arc::clone(plans))),
-        SystemSlot::Commitment => Box::new(CommitmentSystem),
+        SystemSlot::Commitment => Box::new(CommitmentSystem::new(None)),
         SystemSlot::ReservationActivator => {
             Box::new(ReservationActivatorSystem::new(Arc::clone(plans)))
         }

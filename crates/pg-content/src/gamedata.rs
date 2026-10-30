@@ -189,8 +189,49 @@ pub struct RelationshipLabel {
     pub min: i32,
 }
 
+/// What a kept or broken two-pawn plan does to the people in it (Blueprint 8.6). All amounts are data.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommitmentOutcomes {
+    /// An invitee whose affinity with the proposer is at or below this declines (bad terms).
+    pub decline_below: i32,
+    /// Affinity change for the pair when a plan is kept.
+    pub kept_affinity: i32,
+    /// Social need restored for each pawn when a plan is kept.
+    pub kept_social: i32,
+    /// Memory impact for each pawn when a plan is kept.
+    pub kept_impact: i32,
+    /// Affinity change when one pawn stood the other up (half of it when neither came).
+    pub stood_up_affinity: i32,
+    /// Memory impact for the pawn who was stood up.
+    pub stood_up_impact: i32,
+    /// Memory impact for the pawn who did not come.
+    pub missed_impact: i32,
+}
+
+impl Default for CommitmentOutcomes {
+    fn default() -> Self {
+        CommitmentOutcomes {
+            decline_below: -400,
+            kept_affinity: 40,
+            kept_social: 200,
+            kept_impact: 60,
+            stood_up_affinity: -50,
+            stood_up_impact: -80,
+            missed_impact: -30,
+        }
+    }
+}
+
+/// String keys of the memories a kept or broken plan leaves (each takes `{other}`).
+pub const COMMITMENT_MEMORY_KEYS: [&str; 3] = [
+    "memory.commitment.kept",
+    "memory.commitment.stood_up",
+    "memory.commitment.missed",
+];
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationshipParams {
+    pub commitment: CommitmentOutcomes,
     pub start_affinity: i32,
     /// Largest total change per pair per day (diminishing returns).
     pub daily_cap: i32,
@@ -810,6 +851,7 @@ impl GameData {
         keys.extend(self.occupations.values().map(|o| o.name_key.clone()));
         if let Some(r) = &self.relationships {
             keys.extend(r.labels.iter().map(|l| l.label_key.clone()));
+            keys.extend(COMMITMENT_MEMORY_KEYS.iter().map(|k| (*k).to_owned()));
         }
         if let Some(c) = &self.conversation {
             keys.extend(c.lines.iter().flat_map(|l| l.keys.iter().cloned()));
@@ -1514,9 +1556,86 @@ pub fn parse_relationships(
     let o = Obj::new(
         value,
         RELATIONSHIPS_FILE,
-        &["start_affinity", "daily_cap", "hysteresis", "labels"],
+        &[
+            "start_affinity",
+            "daily_cap",
+            "hysteresis",
+            "labels",
+            "commitment",
+        ],
         report,
     )?;
+    let commitment = match o.map.get("commitment") {
+        None => CommitmentOutcomes::default(),
+        Some(v) => {
+            let c = Obj::new(
+                v,
+                format!("{RELATIONSHIPS_FILE}.commitment"),
+                &[
+                    "decline_below",
+                    "kept_affinity",
+                    "kept_social",
+                    "kept_impact",
+                    "stood_up_affinity",
+                    "stood_up_impact",
+                    "missed_impact",
+                ],
+                report,
+            )?;
+            let d = CommitmentOutcomes::default();
+            CommitmentOutcomes {
+                decline_below: i32_of(c.int(
+                    "decline_below",
+                    -1000,
+                    1000,
+                    Some(i64::from(d.decline_below)),
+                    report,
+                ))?,
+                kept_affinity: i32_of(c.int(
+                    "kept_affinity",
+                    0,
+                    1000,
+                    Some(i64::from(d.kept_affinity)),
+                    report,
+                ))?,
+                kept_social: i32_of(c.int(
+                    "kept_social",
+                    0,
+                    1000,
+                    Some(i64::from(d.kept_social)),
+                    report,
+                ))?,
+                kept_impact: i32_of(c.int(
+                    "kept_impact",
+                    0,
+                    1000,
+                    Some(i64::from(d.kept_impact)),
+                    report,
+                ))?,
+                stood_up_affinity: i32_of(c.int(
+                    "stood_up_affinity",
+                    -1000,
+                    0,
+                    Some(i64::from(d.stood_up_affinity)),
+                    report,
+                ))?,
+                stood_up_impact: i32_of(c.int(
+                    "stood_up_impact",
+                    -1000,
+                    0,
+                    Some(i64::from(d.stood_up_impact)),
+                    report,
+                ))?,
+                missed_impact: i32_of(c.int(
+                    "missed_impact",
+                    -1000,
+                    0,
+                    Some(i64::from(d.missed_impact)),
+                    report,
+                ))?,
+            }
+        }
+    };
     let labels = o.list("labels", report).map(|l| {
         l.iter()
             .enumerate()
@@ -1556,6 +1675,7 @@ pub fn parse_relationships(
         return None;
     }
     Some(RelationshipParams {
+        commitment,
         start_affinity: i32_of(o.int("start_affinity", -1000, 1000, Some(0), report))?,
         daily_cap: i32_of(o.int("daily_cap", 1, 2000, None, report))?,
         hysteresis: i32_of(o.int("hysteresis", 0, 500, Some(0), report))?,

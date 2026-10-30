@@ -579,6 +579,12 @@ pub fn install(pipeline: &mut Pipeline, data: Arc<GameData>) {
             Some(Arc::clone(&data)),
         )),
     );
+    pipeline.set_builtin(
+        SystemSlot::Commitment,
+        Box::new(crate::activity::CommitmentSystem::new(Some(Arc::clone(
+            &data,
+        )))),
+    );
     crate::conversation::install(pipeline, data);
     pipeline.set_builtin(
         SystemSlot::DayPlanner,

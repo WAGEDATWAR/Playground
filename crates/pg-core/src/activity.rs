@@ -549,8 +549,17 @@ fn finish_effects(
     Ok(())
 }
 
-/// Moves commitments through the protocol at each slot boundary.
-pub struct CommitmentSystem;
+/// Moves commitments through the protocol at each slot boundary, and, when it has the game data, lets kept
+/// and broken plans change memories, affinity and the need for company.
+pub struct CommitmentSystem {
+    data: Option<Arc<GameData>>,
+}
+
+impl CommitmentSystem {
+    pub fn new(data: Option<Arc<GameData>>) -> CommitmentSystem {
+        CommitmentSystem { data }
+    }
+}
 
 impl System for CommitmentSystem {
     fn id(&self) -> &str {
@@ -571,42 +580,161 @@ impl System for CommitmentSystem {
                 continue;
             };
             let outcome = match c.state {
-                CommitState::Proposed => evaluate_proposal(ctx, &c),
+                CommitState::Proposed => evaluate_proposal(ctx, &c, self.data.as_deref()),
                 CommitState::Accepted | CommitState::Active => progress(ctx, &c),
                 _ => None,
             };
             if let Some((state, reason)) = outcome {
-                set_state(ctx, id, state, reason);
+                // Who let the other down is read before the state changes.
+                let culprits = if state == CommitState::Failed {
+                    culprits(ctx, &c)
+                } else {
+                    Vec::new()
+                };
+                if set_state(ctx, id, state, reason) {
+                    if let Some(data) = self.data.as_deref() {
+                        match state {
+                            CommitState::Completed => plan_kept(ctx, &c, data),
+                            CommitState::Failed => plan_broken(ctx, &c, &culprits, data),
+                            _ => {}
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-fn set_state(ctx: &mut TickCtx<'_>, id: EntityId, state: CommitState, reason: ReasonCode) {
+fn set_state(ctx: &mut TickCtx<'_>, id: EntityId, state: CommitState, reason: ReasonCode) -> bool {
     let Some(c) = ctx.world.commitments.get_mut(id) else {
-        return;
+        return false;
     };
     let explain = reason.explain();
     if c.transition(state, reason).is_err() {
-        return;
+        return false;
     }
     let parties = c.parties();
-    ctx.emit(
-        format!("commitment.{}", state.name()),
-        Canon::map([
-            ("commitment", id.to_canon()),
-            ("explain", Canon::str(explain)),
-        ]),
-    );
+    let mut detail = Canon::map([
+        ("commitment", id.to_canon()),
+        ("explain", Canon::str(explain)),
+    ]);
+    if matches!(state, CommitState::Completed | CommitState::Failed) {
+        if let Canon::Map(m) = &mut detail {
+            m.insert("proposer".into(), parties[0].to_canon());
+            m.insert("invitee".into(), parties[1].to_canon());
+        }
+    }
+    ctx.emit(format!("commitment.{}", state.name()), detail);
     for p in parties {
         ctx.mark_changed(p);
+    }
+    true
+}
+
+/// The parties who did not keep a plan that failed: not in the place, or no longer holding it. A pawn that
+/// could not act (collapsed) is excused, and a plan that simply ran out of day blames nobody.
+fn culprits(ctx: &TickCtx<'_>, c: &Commitment) -> Vec<EntityId> {
+    if c.day < ctx.flags.day {
+        return Vec::new();
+    }
+    let held = |who: EntityId| {
+        ctx.world
+            .pawns
+            .get(who)
+            .and_then(|p| p.schedule.as_ref())
+            .is_some_and(|s| s.reservations().any(|r| r.commitment == Some(c.id)))
+    };
+    let place = c.params.get("at").and_then(Tile::from_canon);
+    c.parties()
+        .into_iter()
+        .filter(|w| {
+            !held(*w)
+                || place.is_some_and(|t| {
+                    ctx.world
+                        .pawns
+                        .get(*w)
+                        .is_none_or(|p| p.position.tile.manhattan(t) > MEET_RADIUS)
+                })
+        })
+        .filter(|w| {
+            ctx.world
+                .pawns
+                .get(*w)
+                .is_some_and(|p| p.capacities.can_act())
+        })
+        .collect()
+}
+
+/// Both came: a memory for each, the pair grows closer, and both feel less alone.
+fn plan_kept(ctx: &mut TickCtx<'_>, c: &Commitment, data: &GameData) {
+    let Some(rel) = &data.relationships else {
+        return;
+    };
+    let o = &rel.commitment;
+    let [a, b] = c.parties();
+    effects::ensure_relationship(ctx.world, a, b, ctx.flags.day, data);
+    effects::adjust_relationship(ctx, a, b, o.kept_affinity, data);
+    for (who, other) in [(a, b), (b, a)] {
+        effects::add_memory(
+            ctx,
+            who,
+            Some(other),
+            "shared_event",
+            o.kept_impact,
+            pg_content::gamedata::COMMITMENT_MEMORY_KEYS[0],
+            data,
+        );
+        if let Some(v) = ctx
+            .world
+            .pawns
+            .get_mut(who)
+            .and_then(|p| p.needs.get_mut("social"))
+        {
+            *v = v.saturating_add(o.kept_social).clamp(0, 1000);
+        }
+        ctx.mark_changed(who);
+    }
+}
+
+/// Someone did not come: the one left waiting remembers being stood up, the one who missed it remembers
+/// that, and the pair grows apart (by half as much when neither came).
+fn plan_broken(ctx: &mut TickCtx<'_>, c: &Commitment, culprits: &[EntityId], data: &GameData) {
+    let Some(rel) = &data.relationships else {
+        return;
+    };
+    if culprits.is_empty() {
+        return;
+    }
+    let o = &rel.commitment;
+    let [a, b] = c.parties();
+    let delta = if culprits.len() == 1 {
+        o.stood_up_affinity
+    } else {
+        o.stood_up_affinity / 2
+    };
+    effects::ensure_relationship(ctx.world, a, b, ctx.flags.day, data);
+    effects::adjust_relationship(ctx, a, b, delta, data);
+    for (who, other) in [(a, b), (b, a)] {
+        let missed = culprits.contains(&who);
+        let (impact, key) = if missed {
+            (
+                o.missed_impact,
+                pg_content::gamedata::COMMITMENT_MEMORY_KEYS[2],
+            )
+        } else {
+            (
+                o.stood_up_impact,
+                pg_content::gamedata::COMMITMENT_MEMORY_KEYS[1],
+            )
+        };
+        effects::add_memory(ctx, who, Some(other), "shared_event", impact, key, data);
     }
 }
 
 type Outcome = Option<(CommitState, ReasonCode)>;
 
 /// The invitee's answer, evaluated at a slot boundary. Both schedules reserve, or neither does.
-fn evaluate_proposal(ctx: &mut TickCtx<'_>, c: &Commitment) -> Outcome {
+fn evaluate_proposal(ctx: &mut TickCtx<'_>, c: &Commitment, data: Option<&GameData>) -> Outcome {
     if ctx.flags.tick >= c.expires_tick || c.day < ctx.flags.day {
         return Some((
             CommitState::Expired,
@@ -622,6 +750,20 @@ fn evaluate_proposal(ctx: &mut TickCtx<'_>, c: &Commitment) -> Outcome {
             ReasonCode::builtin("commitment_declined", [("why", Canon::str(why))]),
         ))
     };
+    // Bad terms: an invitee who thinks that badly of the proposer says no, whatever their day looks like.
+    if let Some(rel) = data.and_then(|d| d.relationships.as_ref()) {
+        let affinity = ctx
+            .world
+            .relationships
+            .get(c.proposer, c.invitee)
+            .map(|r| r.affinity);
+        if affinity.is_some_and(|a| a <= rel.commitment.decline_below) {
+            return decline(format!(
+                "{} does not want to meet {} (they are on bad terms)",
+                c.invitee, c.proposer
+            ));
+        }
+    }
     let (Some(a), Some(b)) = (
         ctx.world
             .pawns

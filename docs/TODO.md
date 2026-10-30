@@ -4,7 +4,7 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Stage 1 is closed** (1.9 accepted 2026-10-29, tagged `m1.9`; report `docs/gates/stage-1.md`). **Stage 2 is under way** (plan accepted, D-085): 2.0 action preconditions and effects is done (D-086, Blueprint v3.17). **Next: 2.1 commitment outcomes** (memories and affinity for kept and broken plans, hostility on answering). AccessKit is Stage 11 (DF-010).
+**Stage 1 is closed** (1.9 accepted 2026-10-29, tagged `m1.9`; report `docs/gates/stage-1.md`). **Stage 2 is under way** (plan accepted, D-085): 2.0 (action preconditions and effects, D-086) and 2.1 (commitment outcomes, D-087, Blueprint v3.18) are done. **Next: 2.2 free-time scheduler** (leisure weighted by mood, needs, place and relationships; the first milestone that moves hashes and re-pins). AccessKit is Stage 11 (DF-010).
 
 **Known, scheduled:** the map view still draws generated towns with the painter-based view (the real renderer is 1.6); building roles are not yet drawn differently; conversation bubbles and the inspector panel come with 1.6/1.7 (the data and `pg residents inspect` exist now).
 

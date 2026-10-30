@@ -339,6 +339,37 @@ pub fn apply_planned(ctx: &mut TickCtx<'_>, pawn: EntityId, planned: &[Planned],
     }
 }
 
+/// Makes sure the pair has a relationship row (first contact starts at the data's starting affinity, as in
+/// a first conversation). Returns whether a row exists afterwards.
+pub fn ensure_relationship(
+    world: &mut WorldState,
+    a: EntityId,
+    b: EntityId,
+    day: u64,
+    data: &GameData,
+) -> bool {
+    let (Some(params), Some(key)) = (&data.relationships, crate::social::PairKey::new(a, b)) else {
+        return false;
+    };
+    if world.relationships.get(a, b).is_none() {
+        let label = params
+            .label_for(params.start_affinity)
+            .map(|l| l.id.clone())
+            .unwrap_or_default();
+        world.relationships.set(crate::social::Relationship {
+            key,
+            affinity: params.start_affinity,
+            label,
+            last_interaction_tick: 0,
+            day,
+            day_change: 0,
+            last_topic: None,
+            forgotten: 0,
+        });
+    }
+    true
+}
+
 /// Changes the affinity between `a` and `b` by `requested`, through the pair's daily cap and the label
 /// hysteresis, after the `relationship.delta_modifier` hook. Returns the change that was applied.
 pub fn adjust_relationship(

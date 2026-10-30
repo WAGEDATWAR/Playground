@@ -2,6 +2,15 @@
   "start_affinity": 0,
   "daily_cap": 120,
   "hysteresis": 40,
+  "commitment": {
+    "decline_below": -400,
+    "kept_affinity": 40,
+    "kept_social": 200,
+    "kept_impact": 60,
+    "stood_up_affinity": -50,
+    "stood_up_impact": -80,
+    "missed_impact": -30
+  },
   "labels": [
     { "id": "enemy", "label_key": "relationship.enemy", "min": -1000 },
     { "id": "disliked", "label_key": "relationship.disliked", "min": -600 },
