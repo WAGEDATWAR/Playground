@@ -381,6 +381,37 @@ fn read_golden(path: &str) -> Result<(DigestSpec, String), String> {
     Ok((DigestSpec::from_header(first)?, text))
 }
 
+/// DF-045: a town that has lived for weeks must show conflict as well as warmth, not warmth alone. Checked on
+/// digests of 20 days or more: at least one relationship soured, and fewer soured than warmed.
+fn social_bounds(spec: &DigestSpec, text: &str) -> Result<(), String> {
+    if spec.days < 20 {
+        return Ok(());
+    }
+    let count = |word: &str| -> Option<u64> {
+        let line = text.lines().find(|l| l.starts_with("The town:"))?;
+        let before = line.split(word).next()?;
+        before
+            .rsplit([' ', ','])
+            .find(|t| !t.is_empty())?
+            .parse()
+            .ok()
+    };
+    let (Some(warmed), Some(soured)) = (count(" relationships warmed"), count(" soured")) else {
+        return Err("the digest has no 'The town:' counts to check".into());
+    };
+    if soured == 0 {
+        return Err(
+            "no relationship soured in a month: the town has warmth but no conflict".into(),
+        );
+    }
+    if soured >= warmed {
+        return Err(format!(
+            "{soured} soured against {warmed} warmed: conflict outweighs warmth"
+        ));
+    }
+    Ok(())
+}
+
 pub fn digest_cmd(args: &[String]) -> Result<ExitCode, String> {
     let p = parse(args, &SPEC)?;
     if let Some(path) = p.one("check").or_else(|| p.one("update")) {
@@ -392,6 +423,10 @@ pub fn digest_cmd(args: &[String]) -> Result<ExitCode, String> {
             std::fs::write(path, &new).map_err(|e| format!("cannot write {path}: {e}"))?;
             println!("rewrote {path}");
             return Ok(ExitCode::SUCCESS);
+        }
+        if let Err(why) = social_bounds(&spec, &new) {
+            println!("{path}: SOCIAL BOUNDS BROKEN: {why}");
+            return Ok(ExitCode::FAILURE);
         }
         if new == old {
             println!(
@@ -458,5 +493,24 @@ mod tests {
     fn clock_text_is_day_and_time() {
         assert_eq!(clock(0), "day 0, 00:00");
         assert_eq!(clock(TICKS_PER_DAY + 10 * 61), "day 1, 01:01");
+    }
+
+    #[test]
+    fn a_month_with_warmth_and_no_conflict_breaks_the_social_bounds() {
+        let month = |soured: u64, warmed: u64| {
+            let spec = DigestSpec {
+                seed: "x".into(),
+                w: 48,
+                h: 36,
+                residents: 14,
+                days: 30,
+                content: vec![],
+            };
+            let text = format!("The town: 9 conversations, {warmed} relationships warmed, {soured} soured, 1 collapses.");
+            social_bounds(&spec, &text)
+        };
+        assert!(month(7, 94).is_ok());
+        assert!(month(0, 94).unwrap_err().contains("no conflict"));
+        assert!(month(94, 94).unwrap_err().contains("outweighs"));
     }
 }

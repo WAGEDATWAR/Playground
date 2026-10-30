@@ -69,7 +69,6 @@ Last reviewed: 2026-10-29, at the start of 1.9 (this page was created then; DF-0
 | DF-043 | Limit | The Saved worlds pane now warns when a world's packs differ from the ones loaded now; what loading does about it is the existing content compatibility check on load (Blueprint 13). Making differences resolvable, not just reported, needs DF-012 | `pg-runtime`, Saved worlds screen | With DF-012 | A world with a different pack set can be opened with its own set | D-078 |
 | DF-044 | Limit | The preview exe shares your normal Playground data folder for saves and settings | `pg preview` | Your choice | A decision | D-071 |
 | DF-047 | Stub | **Chores and personal goals (priority 4) have no data source**: the planner places them, nothing supplies them. The Roadmap's Stage 2 list does not name them; they belong with jobs and property. Also not built: leisure weighted by *who will be at the place* (plan time cannot know; 2.3's proposals cover meeting friends) and time-of-day windows for duties | Not in the Stage 2 "Done when" | `crates/pg-core/src/schedule.rs` (`Chore`), `life.rs` | Chores Stage 6; company-aware leisure 2.3 | Occupations or the world can supply chores and the planner places them, with reasons | D-088 |
-| DF-045 | Limit | The base content has little social conflict: in 30 days a 20-resident town has no soured relationship (the digest shows "first rift: none") and relationships only warm; fifteen collapses came from exhaustion, not from people | base content, conversation data | Stage 2 content tuning, with S-055; Stage 7 (relationships v2) at the latest | A 30-day digest shows rifts as well as warmings, and the social report shows a spread of moods | D-083, D-054 |
 
 ## D. Process and tooling gaps
 
@@ -95,6 +94,7 @@ Last reviewed: 2026-10-29, at the start of 1.9 (this page was created then; DF-0
 
 | ID | What | Closed | Commit |
 | --- | --- | --- | --- |
+| DF-045 | Social conflict in the base content: the 30-day, 20-resident digest now shows 5 rifts against 98 warmings and a mixed mood spread (`pg residents digest`, `report`); `pg check` keeps it so (a month with no rift, or more rifts than warmings, fails) | 2026-10-30 | 2.5 |
 | DF-024 | Friends seek each other out: residents with a friend and free time ask them to meet (S-055). In the 30-day, 20-resident digest 73 plans are asked, 55 kept, 17 broken, and 7 of 24 friendships of 550 and up cross households (`pg residents report`) | 2026-10-29 | 2.3 |
 | DF-046 | Kept and broken plans seen in the base town, the pair cooldown (tested), and bounds on live plans and on the commitments table (tested; finished plans pruned after `keep_days`) | 2026-10-29 | 2.3 |
 | DF-050 | `cargo deny` was not part of the local gate; it only failed in CI. `pg milestone` now runs it (skipped with a note when cargo-deny is not installed) | 2026-10-29 | 1.9 step 8 |

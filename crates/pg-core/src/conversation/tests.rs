@@ -579,7 +579,7 @@ fn talks_in(sim: &mut Sim, days: u64) -> Vec<(EntityId, Talk)> {
 #[test]
 fn talks_carry_a_tone_per_turn_the_bands_they_were_read_by_and_what_they_look_back_on() {
     let mut sim = town("bands");
-    let talks = talks_in(&mut sim, 5);
+    let talks = talks_in(&mut sim, 10);
     assert!(talks.len() > 60, "{} talks", talks.len());
     let mut drifted = 0;
     let mut looked_back = 0;

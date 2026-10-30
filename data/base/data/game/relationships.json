@@ -7,8 +7,8 @@
     "kept_affinity": 40,
     "kept_social": 200,
     "kept_impact": 60,
-    "stood_up_affinity": -50,
-    "stood_up_impact": -80,
+    "stood_up_affinity": -120,
+    "stood_up_impact": -120,
     "missed_impact": -30
   },
   "meetups": {

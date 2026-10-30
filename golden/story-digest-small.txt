@@ -1,5 +1,5 @@
 # seed=digest-a town=48x36 residents=14 days=10 content=data/base
-Story digest: seed 'digest-a', a 48x36 town, 14 residents, 10 days. Final state 4e2179c9.
+Story digest: seed 'digest-a', a 48x36 town, 14 residents, 10 days. Final state 97ab57b4.
 
 Firsts
   first conversation: day 0, 00:04 - Imani Ellis and Grace Ellis (small talk, warm)
@@ -8,20 +8,20 @@ Firsts
   first collapse: none
 
 Who talked most
-  Maya Adler: 102 conversations
-  Imani Ellis: 96 conversations
-  Kai Hartley: 85 conversations
+  Maya Adler: 99 conversations
+  Imani Ellis: 94 conversations
+  Kai Hartley: 88 conversations
 
-The town: 486 conversations, 40 relationships warmed, 0 soured, 0 collapses.
-  plans: 18 asked, 13 kept, 5 broken, 0 declined, 0 unanswered.
-  topics: small talk 158, work 93, food 83, town news 78, remember 42, personal 21, complaint 11
-  relationships (83): Close friend 7, Friend 7, Friendly 6, Acquaintance 21, Stranger 42
-  closest pair: Ivan Adler and Lena Adler (1000); coolest: Grace Ellis and Uma Nakamura (-23)
+The town: 485 conversations, 44 relationships warmed, 0 soured, 0 collapses.
+  plans: 17 asked, 13 kept, 4 broken, 0 declined, 0 unanswered.
+  topics: small talk 152, work 91, food 79, town news 71, remember 45, complaint 27, personal 20
+  relationships (83): Close friend 6, Friend 7, Friendly 9, Acquaintance 23, Stranger 38
+  closest pair: Ivan Adler and Lena Adler (1000); coolest: Leo Adler and Kai Hartley (-35)
 
 From the journal (the most recent notable entries)
-  day 9, 13:43 - Imani Ellis and Tariq Hartley are now Friend.
-  day 9, 17:00 - Maya Adler and Leo Adler are now Close friend.
-  day 9, 18:50 - Grace Ellis and Elena Hartley are now Friend.
-  day 9, 18:52 - Maya Adler and Lena Adler are now Friend.
+  day 8, 17:27 - Ivan Adler and Grace Ellis are now Acquaintance.
+  day 8, 18:56 - Lena Adler and Noah Okafor are now Friendly.
+  day 8, 18:59 - Leo Adler and Grace Ellis are now Friendly.
+  day 8, 19:13 - Imani Ellis and Tariq Hartley are now Friend.
+  day 8, 20:52 - Maya Adler and Noah Okafor are now Friendly.
   day 9, 19:02 - Tariq Hartley and Kai Hartley are now Close friend.
-  day 9, 19:14 - Leo Adler and Imani Ellis are now Friendly.

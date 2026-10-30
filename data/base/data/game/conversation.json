@@ -17,11 +17,11 @@
     { "id": "town_news", "weight": 15, "delta": 15, "severity": 1 },
     { "id": "personal", "weight": 10, "delta": 60, "severity": 3, "min_affinity": 250 },
     { "id": "remember", "weight": 18, "delta": 45, "severity": 2, "min_affinity": 100, "needs_shared_memory": true, "rehearse": 250 },
-    { "id": "complaint", "weight": 14, "delta": -30, "severity": 2, "moods": ["sad", "upset", "uneasy", "bored"] }
+    { "id": "complaint", "weight": 24, "delta": -110, "severity": 2, "moods": ["sad", "upset", "uneasy", "bored"] }
   ],
   "tones": [
     { "id": "hostile", "priority": 1, "delta_permille": -1500, "restore_permille": 0, "max_affinity": -250 },
-    { "id": "curt", "priority": 2, "delta_permille": -400, "restore_permille": 300, "moods": ["upset", "uneasy"] },
+    { "id": "curt", "priority": 2, "delta_permille": -1200, "restore_permille": 300, "moods": ["upset", "uneasy"] },
     { "id": "warm", "priority": 3, "delta_permille": 1500, "restore_permille": 1200, "min_affinity": 300 },
     { "id": "cheerful", "priority": 4, "delta_permille": 1200, "restore_permille": 1100, "moods": ["cheerful"] },
     { "id": "friendly", "priority": 9, "delta_permille": 1000, "restore_permille": 1000 }
