@@ -666,3 +666,77 @@ fn a_pawn_without_an_occupation_falls_back_and_an_unknown_pawn_gets_nothing() {
     let none = plans.inputs(w, EntityId::new(Kind::Pawn, 9999), 0);
     assert!(none.duties.is_empty() && none.urgent.is_empty());
 }
+
+fn gathering_leisure(
+    def: &pg_content::gamedata::OccupationDef,
+) -> pg_content::gamedata::LeisureDef {
+    def.leisure
+        .iter()
+        .find(|l| l.place == pg_content::gamedata::PlaceKind::Gathering)
+        .cloned()
+        .expect("every base occupation has a gathering option")
+}
+
+#[test]
+fn leisure_weights_follow_needs_and_mood_and_say_why() {
+    let sim = generated("leisure-weights");
+    let d = data();
+    let (id, def) = sim
+        .world()
+        .pawns
+        .iter()
+        .find_map(|(id, p)| {
+            let o = p.occupation.as_ref()?;
+            Some((id, d.occupations.get(&o.template)?.clone()))
+        })
+        .expect("a resident with an occupation");
+    let base = gathering_leisure(&def);
+    let mut w = sim.world().clone();
+    let set = |w: &mut WorldState, social: i32, mood: &str| {
+        let p = w.pawns.get_mut(id).unwrap();
+        p.needs.insert("social".into(), social);
+        p.mood = mood.into();
+    };
+    // Well supplied and content: the data's own weight, nothing to explain.
+    set(&mut w, 900, "content");
+    let (weight, because) = leisure_weight(&w, id, &base);
+    assert_eq!((weight, because.as_str()), (base.weight, ""));
+    // Short of company: the need factor applies and the reason names it.
+    set(&mut w, 100, "content");
+    let (weight, because) = leisure_weight(&w, id, &base);
+    assert!(weight > base.weight, "{weight} vs {}", base.weight);
+    assert!(because.contains("social is low"), "{because}");
+    // Lonely as well: both factors multiply.
+    set(&mut w, 100, "lonely");
+    let (both, because) = leisure_weight(&w, id, &base);
+    assert!(both > weight, "{both} vs {weight}");
+    assert!(because.contains("feeling lonely"), "{because}");
+}
+
+#[test]
+fn the_time_window_becomes_start_slots_and_permille_reads_naturally() {
+    let sim = generated("leisure-window");
+    let d = data();
+    let (id, def) = sim
+        .world()
+        .pawns
+        .iter()
+        .find_map(|(id, p)| {
+            let o = p.occupation.as_ref()?;
+            Some((id, d.occupations.get(&o.template)?.clone()))
+        })
+        .unwrap();
+    let inputs = occupation_inputs(sim.world(), id, 0, 0, &def);
+    let slot_minutes = sim.world().settings.slot_minutes.get();
+    let gathering = gathering_leisure(&def);
+    let until = gathering.until.expect("the base data limits the evening");
+    let option = inputs
+        .leisure
+        .iter()
+        .find(|o| o.latest != u32::MAX)
+        .expect("a windowed option");
+    assert_eq!(option.latest, until / slot_minutes - option.len);
+    assert_eq!(permille_text(2500), "2.5");
+    assert_eq!(permille_text(3000), "3");
+    assert_eq!(permille_text(1250), "1.25");
+}

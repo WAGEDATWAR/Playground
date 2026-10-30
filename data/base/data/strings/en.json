@@ -17,7 +17,7 @@
   "reason.duty_placed": "A required duty was placed at slot {slot} for {slots} slot(s).",
   "reason.duty_varied": "The duty's start moved by {shift} slot(s) and its length by -{shrink} (seeded variation), giving slots {start}..{end}.",
   "reason.interrupted": "The task was interrupted because the schedule moved on.",
-  "reason.leisure_chosen": "Leisure was chosen at slot {slot} for {slots} slot(s) (weight {weight} of {total}).",
+  "reason.leisure_chosen": "Leisure was chosen at slot {slot} for {slots} slot(s) (weight {weight} of {total}{because}).",
   "reason.moved_later": "A reservation was moved from slot {from} to slot {to} because an urgent need took its slot.",
   "reason.no_free_slot": "{what} was dropped: no free slot remained today.",
   "reason.path_blocked": "The route stayed blocked by other pawns.",

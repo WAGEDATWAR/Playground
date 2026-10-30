@@ -1,4 +1,4 @@
-# Playground — Architecture Blueprint v3.18
+# Playground — Architecture Blueprint v3.19
 
 **Purpose:** a granular technical blueprint for building Playground as a **native desktop binary written in Rust, with a sandboxed Luau scripting layer for user-created content packs**, as defined by the Design Document v3.2 and Roadmap v4.9. Roadmap decisions are binding; this document says *how*. **Notation:** interfaces are written in Rust-style pseudocode (structs, enums, traits). Where a part is built, the text describes it **as built** and the code is the authority on names and signatures; where it is not built yet, the sketch is a contract whose invariants may not change. Stage tags like **\[S4\]** show when a part is first built. **Reading order:** §0–6 are the foundation (Stage 0), and §23 (scripting and mods) is also Stage 0 foundation because it shapes the data model and tick pipeline. §7–15 are the simulation systems and the presentation layer. §16–22 cover later modules, quality and the build map. §24 covers the native build and distribution.
 
@@ -20,6 +20,7 @@
 | 2.8 | ScriptVm spike outcome (0.9): compiler configuration, no string caps, extension data semantics, quarantine as world state, the `ScriptVm` trait as built (D-031) | §23 |
 | 2.9 | App shell and main menu (0.10): the three-layer UI (D-033) | §14 |
 | 3.0 | Consolidation: as-built description through 0.10, notes folded into their sections, corrections (D-035) | whole document |
+| 3.19 | Leisure weighted by time, needs and mood; the `schedule.leisure_weight` hook as built (D-088) | §8.5, §23 |
 | 3.18 | Commitment outcomes and hostility as built (D-087) | §8.6 |
 | 3.17 | Action preconditions and effects as built (D-086) | §8.7 |
 | 3.16 | Optional manifest text fields, list-and-detail Mods and Saved worlds, New world sample town, in-place pack update (D-076 to D-078) | §12.1, §14.3, §23.2 |
@@ -604,6 +605,8 @@ Script hooks and script-requested reservations enter planning only as weights an
 **Replanning triggers:** day start; need becomes critical; commitment accepted / cancelled; possession ends \[S4\]; map edit invalidating a destination; interruption (event, injury). `replan_from(slot)` re-runs steps 2–5 for remaining slots only, never touching completed slots.
 
 **As built:** (a) Planning runs in strict priority order, so a full `plan_day` never has a lower-priority reservation to displace; "may displace a priority 4-5 reservation" is therefore implemented by `insert_urgent`, the mid-day path used when a need becomes critical (displaced reservations return unchanged if their slots are still free, otherwise move to the first later free run, otherwise are dropped with `no_free_slot`). (b) Replans are requested by setting `Pawn.replan` and carried out at the next slot boundary (inside ReservationActivator, before activation), starting at that boundary, so a slot already under way is never rewritten; a task failure therefore replans from the following slot. (c) A started reservation is never displaced, including by a commitment. (d) Reservation ids are per-schedule counters and survive being lifted out and put back. (e) A change of slot length makes every schedule stale (it is replanned at the next boundary) and cancels live commitments, because both are expressed in slots.
+
+**As built (2.2), leisure:** each occupation's leisure options are data (`occupations.json`) with optional `from` and `until` (minutes of the day; the option may start no earlier than `from` and must end by `until`), `when_need` (multiply the weight by `permille` while a need is below a level) and `when_mood` (multiply while in a mood). `occupation_inputs` turns them into a weight, a start-slot window and a plain-words `because`, so `leisure_chosen` explains itself ("social is low x2.5, feeling lonely x3"). Replans re-read the pawn's state, so a mood change shows in the rest of the day. The hook `schedule.leisure_weight` (pawn; product, 0 to 2000 permille; API 0.2) scales every leisure weight against the open-time weight and is applied when a day is planned or replanned; a pack's scaling is appended to the explanation. Chores (priority 4) remain an input the planner understands but no data feeds them yet (DF-047).
 
 **Activation:** at each slot boundary ReservationActivator sets the pawn's intent to the reservation covering that slot. Unreserved slots set intent `Free`; the TaskPlanner may then pick small self-directed behavior from a data table (wander, sit), keeping unreserved time genuinely open.
 

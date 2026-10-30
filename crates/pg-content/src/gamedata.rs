@@ -436,6 +436,26 @@ pub struct LeisureDef {
     pub place: PlaceKind,
     pub minutes: u32,
     pub weight: u32,
+    /// The earliest the option may start and the latest it may end, in minutes of the day.
+    pub from: Option<u32>,
+    pub until: Option<u32>,
+    /// The weight is multiplied (permille) while a need is below a level; the largest applies per need.
+    pub when_need: Vec<NeedBoost>,
+    /// The weight is multiplied (permille) while the pawn is in a mood.
+    pub when_mood: Vec<MoodBoost>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NeedBoost {
+    pub need: String,
+    pub below: i32,
+    pub permille: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MoodBoost {
+    pub mood: String,
+    pub permille: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -703,6 +723,44 @@ impl GameData {
                         p,
                         "min_minutes must be at least 1 and at most minutes",
                     );
+                }
+            }
+            for (i, l) in occ.leisure.iter().enumerate() {
+                let p = format!("{path}.leisure[{i}]");
+                if let (Some(from), Some(until)) = (l.from, l.until) {
+                    if until < from.saturating_add(l.minutes) {
+                        report.error(
+                            "bad_range",
+                            p.clone(),
+                            "the window between from and until is shorter than the option",
+                        );
+                    }
+                }
+                for b in &l.when_need {
+                    if !self.needs.contains_key(&b.need) {
+                        report.error(
+                            "unknown_need",
+                            format!("{p}.when_need"),
+                            format!(
+                                "need '{}' is not defined{}",
+                                b.need,
+                                hint(&b.need, self.needs.keys().map(String::as_str))
+                            ),
+                        );
+                    }
+                }
+                for b in &l.when_mood {
+                    if !self.moods.contains_key(&b.mood) {
+                        report.error(
+                            "unknown_mood",
+                            format!("{p}.when_mood"),
+                            format!(
+                                "mood '{}' is not defined{}",
+                                b.mood,
+                                hint(&b.mood, self.moods.keys().map(String::as_str))
+                            ),
+                        );
+                    }
                 }
             }
             let mut spans: Vec<(u32, u32)> = occ
@@ -1777,16 +1835,73 @@ pub fn parse_occupations(
         if let Some(Canon::List(l)) = o.map.get("leisure") {
             for (i, d) in l.iter().enumerate() {
                 let p = format!("{path}.leisure[{i}]");
-                let Some(d) = Obj::new(d, p, &["activity", "place", "minutes", "weight"], r) else {
+                let Some(d) = Obj::new(
+                    d,
+                    p,
+                    &[
+                        "activity",
+                        "place",
+                        "minutes",
+                        "weight",
+                        "from",
+                        "until",
+                        "when_need",
+                        "when_mood",
+                    ],
+                    r,
+                ) else {
                     ok = false;
                     continue;
                 };
                 let item = (|| {
+                    let opt_minute = |key: &str, r: &mut ValidationReport| -> Option<Option<u32>> {
+                        if d.map.contains_key(key) {
+                            Some(Some(u32_of(d.int(key, 0, 1440, None, r))?))
+                        } else {
+                            Some(None)
+                        }
+                    };
+                    let (from, until) = (opt_minute("from", r)?, opt_minute("until", r)?);
+                    let mut when_need = Vec::new();
+                    if let Some(Canon::List(l)) = d.map.get("when_need") {
+                        for (j, b) in l.iter().enumerate() {
+                            let b = Obj::new(
+                                b,
+                                format!("{}.when_need[{j}]", d.at("when_need")),
+                                &["need", "below", "permille"],
+                                r,
+                            )?;
+                            when_need.push(NeedBoost {
+                                need: b.id("need", r)?,
+                                below: i32_of(b.int("below", 1, 1000, None, r))?,
+                                permille: u32_of(b.int("permille", 0, 10_000, None, r))?,
+                            });
+                        }
+                    }
+                    let mut when_mood = Vec::new();
+                    if let Some(Canon::List(l)) = d.map.get("when_mood") {
+                        for (j, b) in l.iter().enumerate() {
+                            let b = Obj::new(
+                                b,
+                                format!("{}.when_mood[{j}]", d.at("when_mood")),
+                                &["mood", "permille"],
+                                r,
+                            )?;
+                            when_mood.push(MoodBoost {
+                                mood: b.id("mood", r)?,
+                                permille: u32_of(b.int("permille", 0, 10_000, None, r))?,
+                            });
+                        }
+                    }
                     Some(LeisureDef {
                         activity: d.text("activity", 48, r)?,
                         place: parse_place(&d, "place", r)?,
                         minutes: u32_of(d.int("minutes", 5, 720, None, r))?,
                         weight: u32_of(d.int("weight", 1, 1000, None, r))?,
+                        from,
+                        until,
+                        when_need,
+                        when_mood,
                     })
                 })();
                 match item {

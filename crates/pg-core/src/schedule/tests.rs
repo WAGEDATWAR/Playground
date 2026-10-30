@@ -256,6 +256,9 @@ fn leisure_fills_some_slots_and_leaves_the_rest_open() {
             params: Canon::Null,
             len: 2,
             weight: 10,
+            earliest: 0,
+            latest: u32::MAX,
+            because: String::new(),
         }],
         open_weight: 10,
         ..PlanInputs::default()
@@ -421,6 +424,9 @@ fn arb_inputs() -> impl Strategy<Value = PlanInputs> {
                 params: Canon::Null,
                 len,
                 weight,
+                earliest: 0,
+                latest: u32::MAX,
+                because: String::new(),
             })
             .collect::<Vec<_>>()
     });
@@ -487,6 +493,35 @@ proptest! {
         prop_assert!(s.check_invariants().is_ok(), "{:?}", s.check_invariants());
         for r in strong {
             prop_assert_eq!(s.reservation(r.id), Some(&r));
+        }
+    }
+}
+
+#[test]
+fn a_leisure_option_only_starts_inside_its_window_and_says_why_it_was_weighted() {
+    let inputs = PlanInputs {
+        leisure: vec![LeisureOption {
+            action: act("idle_at"),
+            params: Canon::Null,
+            len: 2,
+            weight: 100,
+            earliest: 30,
+            latest: 38,
+            because: "social is low x2.5".into(),
+        }],
+        open_weight: 1,
+        ..PlanInputs::default()
+    };
+    for day in 0..6 {
+        let s = plan_day(seed(), pawn(), day, 48, &inputs);
+        assert!(
+            s.reservations().all(|r| (30..=38).contains(&r.start)),
+            "{:?}",
+            s.reservations().map(|r| r.start).collect::<Vec<_>>()
+        );
+        for r in s.reservations() {
+            let why = r.reason.explain();
+            assert!(why.contains(", social is low x2.5)"), "{why}");
         }
     }
 }

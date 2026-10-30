@@ -350,6 +350,7 @@ pub struct CommitmentReq {
     pub created_tick: u64,
 }
 
+/// DEFERRED: DF-047 (see docs/DEFERRALS.md): the planner places chores, but no data supplies them yet.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Chore {
     pub id: u32,
@@ -367,6 +368,11 @@ pub struct LeisureOption {
     pub params: Canon,
     pub len: u32,
     pub weight: u32,
+    /// The first and last slot the option may start in (`u32::MAX` for "no limit").
+    pub earliest: u32,
+    pub latest: u32,
+    /// Why the weight is what it is, in words, for the explanation ("lonely x3"); empty when unchanged.
+    pub because: String,
 }
 
 /// Everything the planner needs to know about a pawn's day.
@@ -694,7 +700,9 @@ fn place_leisure(s: &mut DaySchedule, seed: Seed, pawn: EntityId, from: u32, inp
         let fits: Vec<&LeisureOption> = inputs
             .leisure
             .iter()
-            .filter(|o| o.len > 0 && o.len <= run && o.weight > 0)
+            .filter(|o| {
+                o.len > 0 && o.len <= run && o.weight > 0 && slot >= o.earliest && slot <= o.latest
+            })
             .collect();
         let mut weights: Vec<u32> = fits.iter().map(|o| o.weight).collect();
         weights.push(inputs.open_weight);
@@ -713,6 +721,14 @@ fn place_leisure(s: &mut DaySchedule, seed: Seed, pawn: EntityId, from: u32, inp
                         ("slots", n(option.len)),
                         ("weight", n(option.weight)),
                         ("total", n(total)),
+                        (
+                            "because",
+                            Canon::str(if option.because.is_empty() {
+                                String::new()
+                            } else {
+                                format!(", {}", option.because)
+                            }),
+                        ),
                     ],
                 );
                 let _ = s.place(blank(

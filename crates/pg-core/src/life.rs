@@ -466,14 +466,64 @@ pub fn occupation_inputs(
         } else {
             tile_params(at)
         };
+        let len = to_slots(l.minutes);
+        let (weight, because) = leisure_weight(world, pawn, l);
+        let earliest = l.from.map_or(0, |m| m.div_ceil(slot_minutes));
+        let latest = l
+            .until
+            .map_or(u32::MAX, |m| (m / slot_minutes).saturating_sub(len));
         inputs.leisure.push(LeisureOption {
             action,
             params,
-            len: to_slots(l.minutes),
-            weight: l.weight,
+            len,
+            weight,
+            earliest,
+            latest,
+            because,
         });
     }
     inputs
+}
+
+/// A leisure option's weight for this pawn now: the data's base weight times a factor for each need that is
+/// low and for the pawn's mood, with the reasons in words. Every factor is data; nothing here is tuned in code.
+fn leisure_weight(
+    world: &WorldState,
+    pawn: EntityId,
+    l: &pg_content::gamedata::LeisureDef,
+) -> (u32, String) {
+    let Some(p) = world.pawns.get(pawn) else {
+        return (l.weight, String::new());
+    };
+    let mut factor: i64 = 1000;
+    let mut why: Vec<String> = Vec::new();
+    for b in &l.when_need {
+        if p.needs.get(&b.need).is_some_and(|v| *v < b.below) {
+            factor = factor * i64::from(b.permille) / 1000;
+            why.push(format!("{} is low x{}", b.need, permille_text(b.permille)));
+        }
+    }
+    for b in &l.when_mood {
+        if p.mood == b.mood {
+            factor = factor * i64::from(b.permille) / 1000;
+            why.push(format!("feeling {} x{}", b.mood, permille_text(b.permille)));
+        }
+    }
+    let weight = i64::from(l.weight) * factor / 1000;
+    (
+        u32::try_from(weight.clamp(0, 100_000)).unwrap_or(l.weight),
+        why.join(", "),
+    )
+}
+
+/// 2500 reads "2.5", 3000 reads "3".
+fn permille_text(p: u32) -> String {
+    let (whole, frac) = (p / 1000, p % 1000);
+    if frac == 0 {
+        whole.to_string()
+    } else {
+        format!("{whole}.{}", format!("{frac:03}").trim_end_matches('0'))
+    }
 }
 
 /// DEFERRED: DF-007 (see docs/DEFERRALS.md): the scaffolding plan serves developer towns and pawns with no occupation.

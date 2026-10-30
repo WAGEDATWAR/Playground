@@ -353,6 +353,16 @@ HookPoint {
     since: "0.1",
     summary: "Scales the chance that two residents who are free to talk start a conversation, in permille (0 means never, 2000 twice as likely). Asked for each pair that could talk, once a game minute.",
     context: "pawn: Entity (the lower id of the pair)",
+},
+HookPoint {
+    id: "schedule.leisure_weight",
+    combiner: Combiner::ProductPermille,
+    min: 0,
+    max: 2000,
+    default: 1000,
+    since: "0.2",
+    summary: "Scales how much a pawn wants to fill free time with planned leisure rather than leave it open, in permille (0 means leave it all open, 2000 twice as keen). Asked when a pawn's day is planned or replanned.",
+    context: "pawn: Entity",
 }];
 
 pub fn hook_point(id: &str) -> Option<&'static HookPoint> {

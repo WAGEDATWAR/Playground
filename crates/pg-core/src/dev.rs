@@ -115,6 +115,9 @@ impl PlanSource for DevPlanSource {
                     params: Canon::map([("to", stroll.to_canon())]),
                     len: 1,
                     weight: 4,
+                    earliest: 0,
+                    latest: u32::MAX,
+                    because: String::new(),
                 });
             }
         }
@@ -124,6 +127,9 @@ impl PlanSource for DevPlanSource {
                 params: at(spot),
                 len: 2,
                 weight: 10,
+                earliest: 0,
+                latest: u32::MAX,
+                because: String::new(),
             });
         }
         inputs

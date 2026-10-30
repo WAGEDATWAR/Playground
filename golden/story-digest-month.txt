@@ -1,5 +1,5 @@
 # seed=digest-b town=64x48 residents=20 days=30 content=data/base
-Story digest: seed 'digest-b', a 64x48 town, 20 residents, 30 days. Final state 2c7c7390.
+Story digest: seed 'digest-b', a 64x48 town, 20 residents, 30 days. Final state 9f01505f.
 
 Firsts
   first conversation: day 0, 00:03 - Hana Underhill and Omar Underhill (personal, warm)
@@ -8,19 +8,19 @@ Firsts
   first collapse: day 0, 15:27 - Tess Larsen
 
 Who talked most
-  Wren Young: 225 conversations
-  Olga Young: 218 conversations
-  Elena Larsen: 215 conversations
+  Wren Young: 221 conversations
+  Olga Young: 212 conversations
+  Elena Larsen: 210 conversations
 
-The town: 1552 conversations, 82 relationships warmed, 0 soured, 15 collapses.
-  topics: small talk 483, work 292, food 254, town news 217, remember 167, personal 98, complaint 41
-  relationships (150): Close friend 20, Friend 5, Friendly 8, Acquaintance 34, Stranger 83
-  closest pair: Jonas Rivera and Tariq Rivera (1000); coolest: Yara Nakamura and Carlos Larsen (-34)
+The town: 1523 conversations, 84 relationships warmed, 0 soured, 16 collapses.
+  topics: small talk 458, work 307, food 270, town news 207, remember 159, personal 86, complaint 36
+  relationships (154): Close friend 19, Friend 6, Friendly 7, Acquaintance 39, Stranger 83
+  closest pair: Jonas Rivera and Tariq Rivera (1000); coolest: Grace Okafor and Zane Petrov (-20)
 
 From the journal (the most recent notable entries)
-  day 29, 09:29 - Grace Okafor is in a bad way: Social is critical.
-  day 29, 09:57 - Zane Petrov is in a bad way: Hunger is critical.
-  day 29, 10:45 - Elena Larsen is in a bad way: Hunger is critical.
   day 29, 10:50 - Sofia Young is in a bad way: Hunger is critical.
-  day 29, 21:51 - Zane Petrov is in a bad way: Energy is critical.
-  day 29, 21:51 - Zane Petrov collapsed from exhaustion.
+  day 29, 16:19 - Amir Young and Anya Nakamura are now Acquaintance.
+  day 29, 18:48 - Tariq Rivera and Yara Nakamura are now Friendly.
+  day 29, 19:07 - Amir Young and Zane Petrov are now Acquaintance.
+  day 29, 22:08 - Zane Petrov is in a bad way: Energy is critical.
+  day 29, 22:08 - Zane Petrov collapsed from exhaustion.

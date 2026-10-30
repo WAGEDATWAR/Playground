@@ -6,9 +6,9 @@
       { "activity": "idle_at", "place": "workplace", "start": 780, "minutes": 240, "min_minutes": 150, "shift_earlier": 30, "shift_later": 30 }
     ],
     "leisure": [
-      { "activity": "idle_at", "place": "gathering", "minutes": 90, "weight": 10 },
-      { "activity": "move_to", "place": "anywhere", "minutes": 30, "weight": 4 },
-      { "activity": "idle_at", "place": "home", "minutes": 60, "weight": 8 }
+      { "activity": "idle_at", "place": "gathering", "minutes": 90, "weight": 10, "until": 1320, "when_need": [{ "need": "social", "below": 450, "permille": 2500 }], "when_mood": [{ "mood": "lonely", "permille": 3000 }] },
+      { "activity": "move_to", "place": "anywhere", "minutes": 30, "weight": 4, "when_mood": [{ "mood": "bored", "permille": 2500 }] },
+      { "activity": "idle_at", "place": "home", "minutes": 60, "weight": 8, "when_need": [{ "need": "energy", "below": 450, "permille": 2000 }], "when_mood": [{ "mood": "upset", "permille": 2000 }] }
     ]
   },
   {
@@ -17,9 +17,9 @@
       { "activity": "idle_at", "place": "workplace", "start": 480, "minutes": 420, "min_minutes": 330, "shift_earlier": 20, "shift_later": 20 }
     ],
     "leisure": [
-      { "activity": "idle_at", "place": "gathering", "minutes": 60, "weight": 8 },
-      { "activity": "idle_at", "place": "home", "minutes": 90, "weight": 12 },
-      { "activity": "move_to", "place": "anywhere", "minutes": 30, "weight": 4 }
+      { "activity": "idle_at", "place": "gathering", "minutes": 60, "weight": 8, "until": 1320, "when_need": [{ "need": "social", "below": 450, "permille": 2500 }], "when_mood": [{ "mood": "lonely", "permille": 3000 }] },
+      { "activity": "idle_at", "place": "home", "minutes": 90, "weight": 12, "when_need": [{ "need": "energy", "below": 450, "permille": 2000 }], "when_mood": [{ "mood": "upset", "permille": 2000 }] },
+      { "activity": "move_to", "place": "anywhere", "minutes": 30, "weight": 4, "when_mood": [{ "mood": "bored", "permille": 2500 }] }
     ]
   },
   {
@@ -28,8 +28,8 @@
       { "activity": "idle_at", "place": "workplace", "start": 540, "minutes": 480, "min_minutes": 360, "shift_earlier": 30, "shift_later": 30 }
     ],
     "leisure": [
-      { "activity": "idle_at", "place": "gathering", "minutes": 60, "weight": 6 },
-      { "activity": "idle_at", "place": "home", "minutes": 90, "weight": 12 }
+      { "activity": "idle_at", "place": "gathering", "minutes": 60, "weight": 6, "until": 1320, "when_need": [{ "need": "social", "below": 450, "permille": 2500 }], "when_mood": [{ "mood": "lonely", "permille": 3000 }] },
+      { "activity": "idle_at", "place": "home", "minutes": 90, "weight": 12, "when_need": [{ "need": "energy", "below": 450, "permille": 2000 }], "when_mood": [{ "mood": "upset", "permille": 2000 }] }
     ]
   },
   {
@@ -39,9 +39,9 @@
       { "activity": "idle_at", "place": "workplace", "start": 780, "minutes": 180, "min_minutes": 120, "shift_earlier": 20, "shift_later": 40 }
     ],
     "leisure": [
-      { "activity": "move_to", "place": "anywhere", "minutes": 30, "weight": 8 },
-      { "activity": "idle_at", "place": "gathering", "minutes": 60, "weight": 8 },
-      { "activity": "idle_at", "place": "home", "minutes": 60, "weight": 8 }
+      { "activity": "move_to", "place": "anywhere", "minutes": 30, "weight": 8, "when_mood": [{ "mood": "bored", "permille": 2500 }] },
+      { "activity": "idle_at", "place": "gathering", "minutes": 60, "weight": 8, "until": 1320, "when_need": [{ "need": "social", "below": 450, "permille": 2500 }], "when_mood": [{ "mood": "lonely", "permille": 3000 }] },
+      { "activity": "idle_at", "place": "home", "minutes": 60, "weight": 8, "when_need": [{ "need": "energy", "below": 450, "permille": 2000 }], "when_mood": [{ "mood": "upset", "permille": 2000 }] }
     ]
   },
   {
@@ -51,18 +51,18 @@
       { "activity": "idle_at", "place": "workplace", "start": 810, "minutes": 240, "min_minutes": 180, "shift_earlier": 30, "shift_later": 30 }
     ],
     "leisure": [
-      { "activity": "idle_at", "place": "gathering", "minutes": 60, "weight": 8 },
-      { "activity": "idle_at", "place": "home", "minutes": 90, "weight": 12 },
-      { "activity": "move_to", "place": "anywhere", "minutes": 30, "weight": 3 }
+      { "activity": "idle_at", "place": "gathering", "minutes": 60, "weight": 8, "until": 1320, "when_need": [{ "need": "social", "below": 450, "permille": 2500 }], "when_mood": [{ "mood": "lonely", "permille": 3000 }] },
+      { "activity": "idle_at", "place": "home", "minutes": 90, "weight": 12, "when_need": [{ "need": "energy", "below": 450, "permille": 2000 }], "when_mood": [{ "mood": "upset", "permille": 2000 }] },
+      { "activity": "move_to", "place": "anywhere", "minutes": 30, "weight": 3, "when_mood": [{ "mood": "bored", "permille": 2500 }] }
     ]
   },
   {
     "id": "retiree", "name_key": "occupation.retiree", "weight": 6, "open_weight": 25,
     "duties": [],
     "leisure": [
-      { "activity": "idle_at", "place": "gathering", "minutes": 120, "weight": 14 },
-      { "activity": "move_to", "place": "anywhere", "minutes": 30, "weight": 10 },
-      { "activity": "idle_at", "place": "home", "minutes": 90, "weight": 8 }
+      { "activity": "idle_at", "place": "gathering", "minutes": 120, "weight": 14, "until": 1320, "when_need": [{ "need": "social", "below": 450, "permille": 2500 }], "when_mood": [{ "mood": "lonely", "permille": 3000 }] },
+      { "activity": "move_to", "place": "anywhere", "minutes": 30, "weight": 10, "when_mood": [{ "mood": "bored", "permille": 2500 }] },
+      { "activity": "idle_at", "place": "home", "minutes": 90, "weight": 8, "when_need": [{ "need": "energy", "below": 450, "permille": 2000 }], "when_mood": [{ "mood": "upset", "permille": 2000 }] }
     ]
   }
 ]

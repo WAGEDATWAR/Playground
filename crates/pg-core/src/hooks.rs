@@ -75,6 +75,11 @@ pub fn resolve(point: &HookPoint, answers: &[i64]) -> i64 {
     point.resolve(answers)
 }
 
+/// `schedule.leisure_weight`: permille scaling the appetite for planned leisure over open time.
+pub fn leisure_weight() -> Option<&'static HookPoint> {
+    pg_api::hook_point("schedule.leisure_weight")
+}
+
 /// `movement.speed_modifier`: permille of normal walking speed.
 pub fn movement_speed() -> Option<&'static HookPoint> {
     pg_api::hook_point("movement.speed_modifier")

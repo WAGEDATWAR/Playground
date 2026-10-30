@@ -55,6 +55,7 @@ pub fn gather_inputs(
     day: u64,
 ) -> PlanInputs {
     let mut inputs = source.inputs(world, pawn, day);
+    // (The hook is applied by the planner systems, which can ask packs; this function only reads.)
     inputs.commitments.extend(
         world
             .commitments
@@ -84,9 +85,32 @@ impl DayPlannerSystem {
     }
 }
 
+/// Lets packs scale the pawn's appetite for planned leisure against leaving time open
+/// (`schedule.leisure_weight`).
+fn apply_leisure_hook(ctx: &mut TickCtx<'_>, pawn: EntityId, inputs: &mut PlanInputs) {
+    let (Some(point), Some(host)) = (crate::hooks::leisure_weight(), ctx.services.hooks.as_mut())
+    else {
+        return;
+    };
+    let answers = host.ask(point, &*ctx.world, pawn);
+    if answers.is_empty() {
+        return;
+    }
+    let f = crate::hooks::resolve(point, &answers);
+    for o in &mut inputs.leisure {
+        let scaled = i64::from(o.weight) * f / 1000;
+        o.weight = u32::try_from(scaled.clamp(0, 100_000)).unwrap_or(o.weight);
+        if !o.because.is_empty() {
+            o.because.push_str(", ");
+        }
+        o.because.push_str(&format!("a pack scaled it x{f}/1000"));
+    }
+}
+
 fn plan_pawn(ctx: &mut TickCtx<'_>, source: &dyn PlanSource, pawn: EntityId, from: u32) {
     let day = ctx.flags.day;
-    let inputs = gather_inputs(source, ctx.world, pawn, day);
+    let mut inputs = gather_inputs(source, ctx.world, pawn, day);
+    apply_leisure_hook(ctx, pawn, &mut inputs);
     let schedule = plan_day_from(
         ctx.world.seed(),
         pawn,
@@ -152,7 +176,8 @@ fn replan_pass(ctx: &mut TickCtx<'_>, source: &dyn PlanSource) {
             continue;
         };
         let from = request.from.max(boundary);
-        let inputs = gather_inputs(source, ctx.world, pawn, ctx.flags.day);
+        let mut inputs = gather_inputs(source, ctx.world, pawn, ctx.flags.day);
+        apply_leisure_hook(ctx, pawn, &mut inputs);
         let seed = ctx.world.seed();
         if let Some(p) = ctx.world.pawns.get_mut(pawn) {
             if let Some(s) = p.schedule.as_mut() {

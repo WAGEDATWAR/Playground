@@ -565,6 +565,9 @@ fn busy_sim() -> Sim {
             params: Canon::map([("to", t(12, 3).to_canon())]),
             len: 1,
             weight: 5,
+            earliest: 0,
+            latest: u32::MAX,
+            because: String::new(),
         }],
         open_weight: 10,
         ..PlanInputs::default()
@@ -806,4 +809,60 @@ fn an_invitee_on_bad_terms_declines() {
             .reservations()
             .all(|r| r.commitment.is_none()));
     }
+}
+
+// ---- the leisure hook (2.2) --------------------------------------------------------------------------
+
+struct Answer(i64);
+
+impl crate::hooks::HookHost for Answer {
+    fn ask(
+        &mut self,
+        point: &'static pg_api::HookPoint,
+        _w: &WorldState,
+        _s: EntityId,
+    ) -> Vec<i64> {
+        if point.id == "schedule.leisure_weight" {
+            vec![self.0]
+        } else {
+            Vec::new()
+        }
+    }
+}
+
+fn leisure_day(answer: Option<i64>) -> usize {
+    let inputs = PlanInputs {
+        leisure: vec![crate::schedule::LeisureOption {
+            action: act("idle_at"),
+            params: at(t(3, 3)),
+            len: 1,
+            weight: 10,
+            earliest: 0,
+            latest: u32::MAX,
+            because: String::new(),
+        }],
+        open_weight: 10,
+        ..PlanInputs::default()
+    };
+    let (mut sim, _, ids) = world(Arc::new(Fixed(inputs)), &[(0, 0)]);
+    if let Some(a) = answer {
+        sim.set_hooks(Some(Box::new(Answer(a))));
+    }
+    run(&mut sim, SLOT + 5);
+    pawn(&sim, ids[0])
+        .schedule
+        .as_ref()
+        .unwrap()
+        .reservations()
+        .count()
+}
+
+#[test]
+fn a_pack_can_make_a_pawn_keener_or_less_keen_on_leisure_within_the_clamp() {
+    let plain = leisure_day(None);
+    let none = leisure_day(Some(0));
+    let keen = leisure_day(Some(100_000)); // clamped to 2000
+    assert!(plain > 0);
+    assert_eq!(none, 0, "0 leaves all the time open");
+    assert!(keen > plain, "{keen} vs {plain}");
 }

@@ -149,6 +149,7 @@ world.pawns.*.schedule.reservations[].priority: int
 world.pawns.*.schedule.reservations[].reason: map
 world.pawns.*.schedule.reservations[].reason.code: text
 world.pawns.*.schedule.reservations[].reason.params: map
+world.pawns.*.schedule.reservations[].reason.params.because: text
 world.pawns.*.schedule.reservations[].reason.params.end: int
 world.pawns.*.schedule.reservations[].reason.params.need: text
 world.pawns.*.schedule.reservations[].reason.params.predicted: int

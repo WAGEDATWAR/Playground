@@ -37,7 +37,7 @@ const TEMPLATES: &[(&str, &str)] = &[
     ("commitment_failed", "A commitment at slot {slot} could not be kept: {why}."),
     ("chore_placed", "A chore was placed at slot {slot} for {slots} slot(s) (urgency {urgency})."),
     ("chore_dropped", "A chore (urgency {urgency}) was dropped: no free slot fits it{deadline}."),
-    ("leisure_chosen", "Leisure was chosen at slot {slot} for {slots} slot(s) (weight {weight} of {total})."),
+    ("leisure_chosen", "Leisure was chosen at slot {slot} for {slots} slot(s) (weight {weight} of {total}{because})."),
     ("moved_later", "A reservation was moved from slot {from} to slot {to} because an urgent need took its slot."),
     ("no_free_slot", "{what} was dropped: no free slot remained today."),
     ("slots_open", "{count} slot(s) were left open."),
