@@ -53,6 +53,19 @@ pub struct ConversationRow {
     pub lines: Vec<(String, Said)>,
 }
 
+/// One line of the day's plan and the reason it is there.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanRow {
+    /// Minutes of the day.
+    pub from: u32,
+    pub to: u32,
+    pub action: String,
+    /// The planner's own sentence for the decision (attributed to a pack when one was involved).
+    pub because: String,
+    /// Whether the resident is in this stretch now.
+    pub now: bool,
+}
+
 /// Everything the inspector shows about one resident.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResidentView {
@@ -73,6 +86,10 @@ pub struct ResidentView {
     pub conversations: Vec<ConversationRow>,
     /// What content packs are doing to this resident right now.
     pub pack_effects: Vec<PackEffectRow>,
+    /// Today's reservations in time order, with the reason for each.
+    pub plan: Vec<PlanRow>,
+    /// What was dropped from the day and why, and the latest thing that went wrong.
+    pub plan_notes: Vec<String>,
 }
 
 /// One hook point's effect: the combined value and which pack gave which answer.
@@ -81,6 +98,37 @@ pub struct PackEffectRow {
     pub point: String,
     pub value: i64,
     pub packs: Vec<(String, i64)>,
+}
+
+fn clock(minutes: u32) -> String {
+    format!("{:02}:{:02}", (minutes / 60) % 24, minutes % 60)
+}
+
+fn plan_rows(v: &ResidentView, t: Text) -> Vec<Widget> {
+    let mut rows: Vec<Widget> = Vec::new();
+    for r in &v.plan {
+        let line = t(
+            if r.now {
+                "ui.inspect.plan_now"
+            } else {
+                "ui.inspect.plan_row"
+            },
+            &[
+                ("from", &clock(r.from)),
+                ("to", &clock(r.to)),
+                ("action", &r.action),
+                ("because", &r.because),
+            ],
+        );
+        rows.push(Widget::Note(line));
+    }
+    if rows.is_empty() {
+        rows.push(Widget::Note(t("ui.inspect.plan_empty", &[])));
+    }
+    for n in &v.plan_notes {
+        rows.push(Widget::Note(t("ui.inspect.plan_note", &[("note", n)])));
+    }
+    rows
 }
 
 /// The inspector's window contents.
@@ -123,6 +171,11 @@ pub fn tree(v: &ResidentView, t: Text, dev: bool) -> Tree {
                 permille: u32::try_from((*level).clamp(0, 1000)).unwrap_or(0),
             })
             .collect(),
+    });
+    sections.push(Widget::Group {
+        border: crate::widget::Border::between(1, crate::widget::BorderTone::Normal),
+        title: t("ui.inspect.plan", &[]),
+        children: plan_rows(v, t),
     });
     sections.push(Widget::Group {
         border: crate::widget::Border::between(1, crate::widget::BorderTone::Normal),
@@ -281,6 +334,23 @@ mod tests {
                 affinity: 320,
                 last_topic: Some("food".into()),
             }],
+            plan: vec![
+                PlanRow {
+                    from: 480,
+                    to: 780,
+                    action: "idle_at".into(),
+                    because: "A required duty was placed.".into(),
+                    now: false,
+                },
+                PlanRow {
+                    from: 780,
+                    to: 840,
+                    action: "meet_at".into(),
+                    because: "A commitment was moved from slot 26 to slot 27.".into(),
+                    now: true,
+                },
+            ],
+            plan_notes: vec!["A commitment at slot 30 could not be kept.".into()],
             pack_effects: vec![PackEffectRow {
                 point: "need.decay_modifier".into(),
                 value: 700,
@@ -321,6 +391,9 @@ mod tests {
             "ui.inspect.personality{trait=ui.inspect.trait.outgoing}",
             "Tess: Same here.",
             "ui.inspect.rebuilt",
+            "ui.inspect.plan_row{from=08:00,to=13:00,action=idle_at,because=A required duty was placed.}",
+            "ui.inspect.plan_now{from=13:00,to=14:00,action=meet_at,because=A commitment was moved from slot 26 to slot 27.}",
+            "ui.inspect.plan_note{note=A commitment at slot 30 could not be kept.}",
             "ui.inspect.effect{point=need.decay_modifier,value=700,packs=hardy 700}",
         ] {
             assert!(snap.contains(want), "missing {want:?} in\n{snap}");
@@ -333,9 +406,12 @@ mod tests {
         v.memories.clear();
         v.relationships.clear();
         v.conversations.clear();
+        v.plan.clear();
+        v.plan_notes.clear();
         v.talking_with = Some("Tess".into());
         let snap = tree(&v, &show, true).snapshot(None);
         assert_eq!(snap.matches("ui.inspect.none").count(), 3, "{snap}");
+        assert!(snap.contains("ui.inspect.plan_empty"), "{snap}");
         assert!(
             snap.contains("ui.inspect.talking{other=Tess}") && !snap.contains("ui.inspect.doing")
         );

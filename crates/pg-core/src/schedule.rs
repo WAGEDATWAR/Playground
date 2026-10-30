@@ -828,7 +828,26 @@ pub fn reserve_commitment(
         .filter_map(|id| s.reservation(*id))
         .find(|r| !r.priority.displaceable() || r.start < from)
     {
-        return Err(fail(format!("it overlaps a {}", describe(strong))));
+        let why = if strong.start < from {
+            format!(
+                "it overlaps something already under way ({})",
+                describe(strong)
+            )
+        } else {
+            match strong.priority {
+                Priority::Commitment => format!(
+                    "it overlaps a commitment made earlier, and the earlier one keeps the time ({})",
+                    describe(strong)
+                ),
+                Priority::Duty => format!("duties come first and it overlaps one ({})", describe(strong)),
+                Priority::UrgentNeed => format!(
+                    "urgent needs come first and it overlaps one ({})",
+                    describe(strong)
+                ),
+                _ => format!("it overlaps a {}", describe(strong)),
+            }
+        };
+        return Err(fail(why));
     }
     let lifted: Vec<Reservation> = blockers.into_iter().filter_map(|id| s.remove(id)).collect();
     let result = s

@@ -21,7 +21,7 @@ use crate::map::Tile;
 use crate::pawn::{Intent, Replan, Step, Task};
 use crate::pipeline::{System, TickCtx};
 use crate::reason::ReasonCode;
-use crate::schedule::{plan_day_from, replan_from, reserve_commitment, PlanInputs};
+use crate::schedule::{plan_day_from, replan_from, reserve_commitment, DaySchedule, PlanInputs};
 use crate::time::TICKS_PER_DAY;
 use crate::world::WorldState;
 use pg_content::gamedata::GameData;
@@ -810,13 +810,63 @@ fn evaluate_proposal(ctx: &mut TickCtx<'_>, c: &Commitment, data: Option<&GameDa
     {
         return decline("a participant has no plan for today".to_owned());
     }
-    // Work on copies so a failure on either side leaves both untouched.
-    let (mut a, mut b) = (a, b);
-    let req = c.as_req();
+    // Work on copies so a failure on either side leaves both untouched. A reschedulable commitment may
+    // move, same day, to the nearest start (earlier on a tie) that suits both.
     let from = ctx.flags.slot_of_day;
-    for (who, schedule) in [(c.proposer, &mut a), (c.invitee, &mut b)] {
-        if let Err(reason) = reserve_commitment(schedule, &req, from) {
-            return decline(format!("{who}: {}", reason.explain()));
+    let try_at = |start: u32| -> Result<(DaySchedule, DaySchedule), String> {
+        let mut req = c.as_req();
+        req.start = start;
+        let (mut x, mut y) = (a.clone(), b.clone());
+        for (who, schedule) in [(c.proposer, &mut x), (c.invitee, &mut y)] {
+            if let Err(reason) = reserve_commitment(schedule, &req, from) {
+                return Err(format!("{who}: {}", reason.explain()));
+            }
+        }
+        Ok((x, y))
+    };
+    let mut start = c.start;
+    let (mut a, mut b) = match try_at(c.start) {
+        Ok(pair) => pair,
+        Err(first) if c.reschedulable => {
+            let mut options: Vec<u32> = (from..=slots.saturating_sub(c.len))
+                .filter(|s| *s != c.start)
+                .collect();
+            options.sort_by_key(|s| (s.abs_diff(c.start), *s));
+            let Some((s, pair)) = options
+                .into_iter()
+                .find_map(|s| try_at(s).ok().map(|p| (s, p)))
+            else {
+                return decline(format!("{first}; no other time today suits both of them"));
+            };
+            start = s;
+            pair
+        }
+        Err(first) => return decline(first),
+    };
+    if start != c.start {
+        // Say why the reservation sits where it does.
+        let moved = ReasonCode::builtin(
+            "commitment_moved",
+            [
+                ("from", Canon::Int(i128::from(c.start))),
+                ("to", Canon::Int(i128::from(start))),
+            ],
+        );
+        for schedule in [&mut a, &mut b] {
+            let held: Vec<u32> = schedule
+                .reservations()
+                .filter(|r| r.commitment == Some(c.id))
+                .map(|r| r.id)
+                .collect();
+            for id in held {
+                if let Some(mut r) = schedule.remove(id) {
+                    r.reason = moved.clone();
+                    let _ = schedule.place(r);
+                }
+            }
+        }
+        if let Some(row) = ctx.world.commitments.get_mut(c.id) {
+            row.start = start;
         }
     }
     for (who, schedule) in [(c.proposer, a), (c.invitee, b)] {
@@ -829,8 +879,8 @@ fn evaluate_proposal(ctx: &mut TickCtx<'_>, c: &Commitment, data: Option<&GameDa
         ReasonCode::builtin(
             "commitment_accepted",
             [
-                ("start", Canon::Int(i128::from(c.start))),
-                ("end", Canon::Int(i128::from(c.start.saturating_add(c.len)))),
+                ("start", Canon::Int(i128::from(start))),
+                ("end", Canon::Int(i128::from(start.saturating_add(c.len)))),
             ],
         ),
     ))

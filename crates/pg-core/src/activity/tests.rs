@@ -364,7 +364,7 @@ fn acceptance_is_atomic_when_either_side_cannot_keep_the_slot() {
             .as_ref()
             .unwrap()
             .explain()
-            .contains("overlaps a duty"),
+            .contains("duties come first"),
         "{}",
         c.reason.as_ref().unwrap().explain()
     );
@@ -865,4 +865,120 @@ fn a_pack_can_make_a_pawn_keener_or_less_keen_on_leisure_within_the_clamp() {
     assert!(plain > 0);
     assert_eq!(none, 0, "0 leaves all the time open");
     assert!(keen > plain, "{keen} vs {plain}");
+}
+
+// ---- conflicts between plans, and why (2.4) --------------------------------------------------------
+
+fn propose_flexible(sim: &mut Sim, a: EntityId, b: EntityId, start: u32, len: u32, place: Tile) {
+    command(
+        sim,
+        Command::DevPropose {
+            proposer: a,
+            invitee: b,
+            start,
+            len,
+            at: place,
+            expires_in: 100_000,
+            reschedulable: true,
+        },
+    );
+}
+
+fn commitments(sim: &Sim) -> Vec<&Commitment> {
+    sim.world().commitments.iter().map(|(_, c)| c).collect()
+}
+
+fn reservation_reasons(sim: &Sim, p: EntityId) -> Vec<String> {
+    pawn(sim, p)
+        .schedule
+        .as_ref()
+        .unwrap()
+        .reservations()
+        .filter(|r| r.commitment.is_some())
+        .map(|r| r.reason.explain())
+        .collect()
+}
+
+#[test]
+fn of_two_overlapping_commitments_the_earlier_keeps_the_time_and_the_other_is_told_why() {
+    let (mut sim, ids) = two_free_pawns();
+    run_to(&mut sim, 305);
+    propose(&mut sim, ids[0], ids[1], 6, 2, t(5, 5), 100_000);
+    run(&mut sim, 1);
+    propose(&mut sim, ids[1], ids[0], 7, 2, t(6, 6), 100_000);
+    run_to(&mut sim, 605);
+    let all = commitments(&sim);
+    assert_eq!(all[0].state, CommitState::Accepted);
+    assert_eq!(all[1].state, CommitState::Declined);
+    let why = all[1].reason.as_ref().unwrap().explain();
+    assert!(
+        why.contains("made earlier") && why.contains("keeps the time"),
+        "{why}"
+    );
+}
+
+#[test]
+fn a_commitment_that_meets_a_duty_loses_and_says_duties_come_first() {
+    let busy = PlanInputs {
+        duties: vec![duty("idle_at", at(t(9, 9)), 6, 3)],
+        ..PlanInputs::default()
+    };
+    let (mut sim, _, ids) = world(Arc::new(Fixed(busy)), &[(0, 0), (9, 9)]);
+    run_to(&mut sim, 305);
+    propose(&mut sim, ids[0], ids[1], 7, 2, t(5, 5), 100_000);
+    run_to(&mut sim, 605);
+    let c = only_commitment(&sim);
+    assert_eq!(c.state, CommitState::Declined);
+    let why = c.reason.as_ref().unwrap().explain();
+    assert!(why.contains("duties come first"), "{why}");
+}
+
+#[test]
+fn a_reschedulable_commitment_moves_to_the_nearest_time_that_suits_both_and_says_so() {
+    // Both have a duty over slots 6 to 8, so the asked-for slot 7 is taken; the nearest free two-slot
+    // stretches are 9 to 10 (two slots from the ask) and 4 to 5 (three), so the later one is nearer.
+    let busy = PlanInputs {
+        duties: vec![duty("idle_at", at(t(9, 9)), 6, 3)],
+        ..PlanInputs::default()
+    };
+    let (mut sim, _, ids) = world(Arc::new(Fixed(busy)), &[(0, 0), (9, 9)]);
+    run_to(&mut sim, 305);
+    propose_flexible(&mut sim, ids[0], ids[1], 7, 2, t(5, 5));
+    run_to(&mut sim, 605);
+    let c = only_commitment(&sim);
+    assert_eq!(c.state, CommitState::Accepted, "{:?}", c.reason);
+    assert_eq!(c.start, 9, "moved to the nearest start that suits both");
+    for p in &ids {
+        let s = pawn(&sim, *p).schedule.as_ref().unwrap();
+        let held: Vec<_> = s
+            .reservations()
+            .filter(|r| r.commitment.is_some())
+            .collect();
+        assert_eq!(held.len(), 1);
+        assert_eq!((held[0].start, held[0].len), (9, 2));
+        s.check_invariants().unwrap();
+        let why = reservation_reasons(&sim, *p).remove(0);
+        assert!(why.contains("moved from slot 7 to slot 9"), "{why}");
+    }
+}
+
+#[test]
+fn a_reschedulable_commitment_with_no_time_that_suits_both_is_declined_with_the_reason() {
+    // One of them is busy all day, so there is no other time.
+    let all_day = PlanInputs {
+        duties: vec![duty("idle_at", at(t(9, 9)), 2, 46)],
+        ..PlanInputs::default()
+    };
+    let (mut sim, _, ids) = world(
+        Arc::new(PerPawn(vec![(EntityId::new(Kind::Pawn, 2), all_day)])),
+        &[(0, 0), (9, 9)],
+    );
+    run_to(&mut sim, 305);
+    propose_flexible(&mut sim, ids[0], ids[1], 7, 2, t(5, 5));
+    run_to(&mut sim, 605);
+    let c = only_commitment(&sim);
+    assert_eq!(c.state, CommitState::Declined);
+    let why = c.reason.as_ref().unwrap().explain();
+    assert!(why.contains("no other time today suits both"), "{why}");
+    assert_eq!(c.start, 7, "a declined commitment keeps its asked-for time");
 }

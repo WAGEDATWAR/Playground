@@ -111,6 +111,38 @@ pub fn resident_view(sim: &mut Sim, id: EntityId) -> Option<ResidentView> {
             });
         }
     }
+    let strings = content.map(|c| c.strings());
+    let sentence = |r: &pg_core::reason::ReasonCode| match strings {
+        Some(s) => r.explain_in(s, "en"),
+        None => r.explain(),
+    };
+    let slot_minutes = world.settings.slot_minutes.get();
+    let minute_now =
+        u32::try_from(now % pg_core::time::TICKS_PER_DAY / pg_core::time::TICKS_PER_GAME_MINUTE)
+            .unwrap_or(0);
+    let mut plan = Vec::new();
+    let mut plan_notes = Vec::new();
+    if let Some(s) = p.schedule.as_ref().filter(|s| s.day == world.clock.day()) {
+        for r in s.by_start() {
+            let (from, to) = (
+                r.start.saturating_mul(slot_minutes),
+                r.end().saturating_mul(slot_minutes),
+            );
+            plan.push(pg_ui_model::inspector::PlanRow {
+                from,
+                to,
+                action: r.action.to_string(),
+                because: sentence(&r.reason),
+                now: (from..to).contains(&minute_now),
+            });
+        }
+        for d in &s.dropped {
+            plan_notes.push(sentence(&d.reason));
+        }
+    }
+    if let Some(f) = &p.last_failure {
+        plan_notes.push(sentence(f));
+    }
     Some(ResidentView {
         id,
         name: p.name.clone(),
@@ -126,6 +158,8 @@ pub fn resident_view(sim: &mut Sim, id: EntityId) -> Option<ResidentView> {
         memories,
         relationships,
         conversations,
+        plan,
+        plan_notes,
         pack_effects: effects
             .into_iter()
             .map(|e| pg_ui_model::inspector::PackEffectRow {
@@ -169,6 +203,29 @@ mod tests {
         )
         .unwrap();
         sim
+    }
+
+    #[test]
+    fn a_resident_view_explains_todays_plan_in_time_order() {
+        let mut sim = town();
+        sim.run_ticks(20_000).unwrap();
+        let v = resident_view(&mut sim, EntityId::new(pg_core::id::Kind::Pawn, 1)).unwrap();
+        assert!(!v.plan.is_empty(), "a working resident has a day planned");
+        assert!(v.plan.windows(2).all(|w| w[0].from <= w[1].from));
+        assert!(v
+            .plan
+            .iter()
+            .all(|r| r.from < r.to && !r.because.is_empty()));
+        assert!(
+            v.plan.iter().filter(|r| r.now).count() <= 1,
+            "at most one stretch is happening now"
+        );
+        // The reasons are sentences, not codes.
+        assert!(
+            v.plan.iter().all(|r| !r.because.contains('_')),
+            "{:?}",
+            v.plan
+        );
     }
 
     #[test]
