@@ -787,6 +787,7 @@ mod tests {
         };
         RelationshipParams {
             commitment: Default::default(),
+            meetups: Default::default(),
             start_affinity: 0,
             daily_cap: 120,
             hysteresis: 40,

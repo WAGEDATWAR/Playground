@@ -27,6 +27,7 @@ pub mod input;
 pub mod journal;
 pub mod life;
 pub mod map;
+pub mod meetup;
 pub mod memory;
 pub mod movement;
 pub mod num;

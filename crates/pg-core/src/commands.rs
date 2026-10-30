@@ -7,9 +7,9 @@
 //! replaced by real gameplay commands (and the editor's `EditCommand`s) in later milestones.
 
 use crate::canon::{Canon, CanonError, ToCanon};
-use crate::commitment::{CommitState, Commitment};
+use crate::commitment::CommitState;
 use crate::containment;
-use crate::id::{EntityId, Kind};
+use crate::id::EntityId;
 use crate::map::{MapKind, Tile};
 use crate::object::{Location, Parent};
 use crate::pawn::Route;
@@ -572,61 +572,29 @@ type ProposalArgs = (EntityId, EntityId, u32, u32, Tile, u32, bool);
 
 fn propose(world: &mut WorldState, tick: u64, events: &mut Vec<Event>, args: ProposalArgs) {
     let (proposer, invitee, start, len, at, expires_in, reschedulable) = args;
-    let refuse =
-        |events: &mut Vec<Event>, why: &str| events.push(rejected(tick, "dev_propose", why));
-    if proposer == invitee {
-        return refuse(events, "a pawn cannot meet itself");
-    }
-    let Some(map) = world.pawns.get(proposer).map(|p| p.position.map) else {
-        return refuse(events, &format!("no pawn {proposer}"));
-    };
-    if !world.pawns.contains(invitee) {
-        return refuse(events, &format!("no pawn {invitee}"));
-    }
-    let slots = world.settings.slot_minutes.slots_per_day();
-    if len == 0 || start.checked_add(len).is_none_or(|end| end > slots) {
-        return refuse(
-            events,
-            &format!("slots {start}+{len} do not fit in a day of {slots}"),
-        );
-    }
-    if !world.is_passable(map, at) {
-        return refuse(events, &format!("tile {at} cannot be stood on"));
-    }
-    let Ok(action) = pg_content::ActionId::new("meet_at") else {
-        return refuse(events, "the meet_at action id is invalid");
-    };
-    let id = match world.id_counters.allocate(Kind::Commitment) {
-        Ok(id) => id,
-        Err(e) => return refuse(events, &e.to_string()),
-    };
-    let commitment = Commitment {
-        id,
+    let spec = crate::meetup::NewCommitment {
         proposer,
         invitee,
-        day: world.clock.day(),
         start,
         len,
-        action,
-        params: Canon::map([("at", at.to_canon())]),
-        state: CommitState::Proposed,
-        created_tick: tick,
-        expires_tick: tick.saturating_add(u64::from(expires_in)),
+        at,
+        expires_in,
         reschedulable,
-        reason: None,
     };
-    let _ = world.commitments.insert(id, commitment);
-    events.push(event(
-        tick,
-        "commitment.proposed",
-        Canon::map([
-            ("commitment", id.to_canon()),
-            ("proposer", proposer.to_canon()),
-            ("invitee", invitee.to_canon()),
-            ("start", start.to_canon()),
-            ("len", len.to_canon()),
-        ]),
-    ));
+    match crate::meetup::new_commitment(world, tick, &spec) {
+        Err(why) => events.push(rejected(tick, "dev_propose", &why)),
+        Ok(id) => events.push(event(
+            tick,
+            "commitment.proposed",
+            Canon::map([
+                ("commitment", id.to_canon()),
+                ("proposer", proposer.to_canon()),
+                ("invitee", invitee.to_canon()),
+                ("start", start.to_canon()),
+                ("len", len.to_canon()),
+            ]),
+        )),
+    }
 }
 
 fn cancel(world: &mut WorldState, tick: u64, events: &mut Vec<Event>, id: EntityId) {

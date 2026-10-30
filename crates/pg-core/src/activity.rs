@@ -627,6 +627,10 @@ impl System for CommitmentSystem {
                 }
             }
         }
+        // Residents ask their friends to meet; the answers come at the next boundary.
+        if let Some(data) = self.data.as_deref() {
+            crate::meetup::run(ctx, data);
+        }
     }
 }
 

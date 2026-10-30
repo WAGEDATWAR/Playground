@@ -150,6 +150,7 @@ pub fn digest(spec: &DigestSpec, content: &Arc<ContentSet>) -> Result<String, St
     let mut talks: BTreeMap<EntityId, u64> = BTreeMap::new();
     let mut topics: BTreeMap<String, u64> = BTreeMap::new();
     let (mut total_talks, mut warmings, mut rifts, mut collapses) = (0u64, 0u64, 0u64, 0u64);
+    let mut plans: BTreeMap<String, u64> = BTreeMap::new();
     for _ in 0..spec.days * TICKS_PER_DAY {
         let report = sim.step().map_err(|e| e.to_string())?;
         for e in &report.events {
@@ -205,6 +206,13 @@ pub fn digest(spec: &DigestSpec, content: &Arc<ContentSet>) -> Result<String, St
                             first_warm = Some((e.tick, a, b, from, to));
                         }
                     }
+                }
+                kind @ ("commitment.proposed"
+                | "commitment.completed"
+                | "commitment.failed"
+                | "commitment.declined"
+                | "commitment.expired") => {
+                    *plans.entry(kind.to_owned()).or_default() += 1;
                 }
                 "pawn.collapsed" => {
                     collapses += 1;
@@ -278,6 +286,21 @@ pub fn digest(spec: &DigestSpec, content: &Arc<ContentSet>) -> Result<String, St
     }
     out.push_str(&format!(
         "\nThe town: {total_talks} conversations, {warmings} relationships warmed, {rifts} soured, {collapses} collapses.\n"
+    ));
+    let plan = |kind: &str| {
+        plans
+            .get(&format!("commitment.{kind}"))
+            .copied()
+            .unwrap_or(0)
+    };
+    out.push_str(&format!(
+        "  plans: {} asked, {} kept, {} broken, {} declined, {} unanswered.
+",
+        plan("proposed"),
+        plan("completed"),
+        plan("failed"),
+        plan("declined"),
+        plan("expired")
     ));
     let mut by_topic: Vec<(&String, &u64)> = topics.iter().collect();
     by_topic.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));

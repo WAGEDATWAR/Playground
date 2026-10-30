@@ -115,6 +115,7 @@ pub enum Stream<'a> {
     SchedTiebreak,
     SocialTopic,
     SocialOutcome,
+    SocialProposal,
     PathTiebreak,
     /// DEFERRED: DF-007 (see docs/DEFERRALS.md): streams for the developer fixtures.
     /// `dev.*`: temporary scaffolding streams (removed with the scaffolding, D-009).
@@ -136,7 +137,7 @@ pub enum Stream<'a> {
 
 impl<'a> Stream<'a> {
     /// The fixed built-in streams with their canonical names.
-    pub const BUILTIN: [(Stream<'static>, &'static str); 14] = [
+    pub const BUILTIN: [(Stream<'static>, &'static str); 15] = [
         (Stream::WorldgenTerrain, "worldgen.terrain"),
         (Stream::WorldgenRoads, "worldgen.roads"),
         (Stream::WorldgenPlots, "worldgen.plots"),
@@ -145,6 +146,7 @@ impl<'a> Stream<'a> {
         (Stream::SchedTiebreak, "sched.tiebreak"),
         (Stream::SocialTopic, "social.topic"),
         (Stream::SocialOutcome, "social.outcome"),
+        (Stream::SocialProposal, "social.proposal"),
         (Stream::PathTiebreak, "path.tiebreak"),
         (Stream::DevProbe, "dev.probe"),
         (Stream::DevWander, "dev.wander"),

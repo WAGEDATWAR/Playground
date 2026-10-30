@@ -4,7 +4,7 @@ Updated every time work starts, stops or changes direction. Newest status at the
 
 ## Current focus
 
-**Stage 1 is closed** (1.9 accepted 2026-10-29, tagged `m1.9`; report `docs/gates/stage-1.md`). **Stage 2 is under way** (plan accepted, D-085): 2.0 (action preconditions and effects, D-086) and 2.1 (commitment outcomes, D-087, Blueprint v3.18) are done. 2.2 free-time scheduler is done (D-088, Blueprint v3.19; re-pinned). **Next: 2.3 proposals, friends seek each other out (S-055, DF-024, DF-046).** AccessKit is Stage 11 (DF-010).
+**Stage 1 is closed** (1.9 accepted 2026-10-29, tagged `m1.9`; report `docs/gates/stage-1.md`). **Stage 2 is under way** (plan accepted, D-085): 2.0 (action preconditions and effects, D-086) and 2.1 (commitment outcomes, D-087, Blueprint v3.18) are done. 2.2 free-time scheduler is done (D-088, Blueprint v3.19; re-pinned). 2.3 friends seek each other out is done (D-089, Blueprint v3.20; re-pinned). **Next: 2.4 conflict explanation, with your checkpoint: you watch a town where residents arrange to meet and read why a plan failed.** AccessKit is Stage 11 (DF-010).
 
 **Known, scheduled:** the map view still draws generated towns with the painter-based view (the real renderer is 1.6); building roles are not yet drawn differently; conversation bubbles and the inspector panel come with 1.6/1.7 (the data and `pg residents inspect` exist now).
 

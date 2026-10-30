@@ -222,6 +222,46 @@ impl Default for CommitmentOutcomes {
     }
 }
 
+/// How residents ask friends to meet (Stage 2; all amounts are data).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MeetupParams {
+    /// Only friends at or above this affinity are asked.
+    pub min_affinity: i32,
+    /// Chance per slot boundary, in permille, that a free resident with a friend to ask does so (scaled by
+    /// how outgoing they are).
+    pub chance_permille: u32,
+    /// How long a meet-up is, in slots.
+    pub slots: u32,
+    /// The earliest start, in slots after the ask.
+    pub lead_slots: u32,
+    /// A meet-up must end by this minute of the day.
+    pub latest_end_minutes: u32,
+    /// A pair is not asked again within this many minutes, whatever happened.
+    pub cooldown_minutes: u32,
+    /// How many slots an unanswered ask stays open.
+    pub expires_slots: u32,
+    /// The most asks one slot boundary makes in the whole town.
+    pub max_per_boundary: u32,
+    /// Finished commitments are removed after this many days.
+    pub keep_days: u32,
+}
+
+impl Default for MeetupParams {
+    fn default() -> Self {
+        MeetupParams {
+            min_affinity: 300,
+            chance_permille: 60,
+            slots: 2,
+            lead_slots: 2,
+            latest_end_minutes: 1320,
+            cooldown_minutes: 1440,
+            expires_slots: 2,
+            max_per_boundary: 2,
+            keep_days: 2,
+        }
+    }
+}
+
 /// String keys of the memories a kept or broken plan leaves (each takes `{other}`).
 pub const COMMITMENT_MEMORY_KEYS: [&str; 3] = [
     "memory.commitment.kept",
@@ -232,6 +272,7 @@ pub const COMMITMENT_MEMORY_KEYS: [&str; 3] = [
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationshipParams {
     pub commitment: CommitmentOutcomes,
+    pub meetups: MeetupParams,
     pub start_affinity: i32,
     /// Largest total change per pair per day (diminishing returns).
     pub daily_cap: i32,
@@ -697,6 +738,15 @@ impl GameData {
                     "labels_do_not_cover",
                     RELATIONSHIPS_FILE,
                     "the first label must start at -1000 so every affinity has a label",
+                );
+            }
+            if u64::from(rel.meetups.cooldown_minutes)
+                > u64::from(rel.meetups.keep_days) * u64::from(MINUTES_PER_DAY)
+            {
+                report.error(
+                    "bad_range",
+                    format!("{RELATIONSHIPS_FILE}.meetups"),
+                    "keep_days is shorter than cooldown_minutes, so the cooldown could not be remembered",
                 );
             }
             if !(-SCALE..=SCALE).contains(&rel.start_affinity) {
@@ -1620,6 +1670,7 @@ pub fn parse_relationships(
             "hysteresis",
             "labels",
             "commitment",
+            "meetups",
         ],
         report,
     )?;
@@ -1712,6 +1763,81 @@ pub fn parse_relationships(
             })
             .collect::<Vec<_>>()
     })?;
+    let meetups = match o.map.get("meetups") {
+        None => MeetupParams::default(),
+        Some(v) => {
+            let m = Obj::new(
+                v,
+                format!("{RELATIONSHIPS_FILE}.meetups"),
+                &[
+                    "min_affinity",
+                    "chance_permille",
+                    "slots",
+                    "lead_slots",
+                    "latest_end_minutes",
+                    "cooldown_minutes",
+                    "expires_slots",
+                    "max_per_boundary",
+                    "keep_days",
+                ],
+                report,
+            )?;
+            let d = MeetupParams::default();
+            MeetupParams {
+                min_affinity: i32_of(m.int(
+                    "min_affinity",
+                    -1000,
+                    1000,
+                    Some(i64::from(d.min_affinity)),
+                    report,
+                ))?,
+                chance_permille: u32_of(m.int(
+                    "chance_permille",
+                    0,
+                    1000,
+                    Some(i64::from(d.chance_permille)),
+                    report,
+                ))?,
+                slots: u32_of(m.int("slots", 1, 12, Some(i64::from(d.slots)), report))?,
+                lead_slots: u32_of(m.int(
+                    "lead_slots",
+                    0,
+                    24,
+                    Some(i64::from(d.lead_slots)),
+                    report,
+                ))?,
+                latest_end_minutes: u32_of(m.int(
+                    "latest_end_minutes",
+                    0,
+                    1440,
+                    Some(i64::from(d.latest_end_minutes)),
+                    report,
+                ))?,
+                cooldown_minutes: u32_of(m.int(
+                    "cooldown_minutes",
+                    0,
+                    20_160,
+                    Some(i64::from(d.cooldown_minutes)),
+                    report,
+                ))?,
+                expires_slots: u32_of(m.int(
+                    "expires_slots",
+                    1,
+                    48,
+                    Some(i64::from(d.expires_slots)),
+                    report,
+                ))?,
+                max_per_boundary: u32_of(m.int(
+                    "max_per_boundary",
+                    0,
+                    20,
+                    Some(i64::from(d.max_per_boundary)),
+                    report,
+                ))?,
+                keep_days: u32_of(m.int("keep_days", 1, 30, Some(i64::from(d.keep_days)), report))?,
+            }
+        }
+    };
     let mut labels = labels;
     labels.sort_by_key(|l| l.min);
     if labels
@@ -1734,6 +1860,7 @@ pub fn parse_relationships(
     }
     Some(RelationshipParams {
         commitment,
+        meetups,
         start_affinity: i32_of(o.int("start_affinity", -1000, 1000, Some(0), report))?,
         daily_cap: i32_of(o.int("daily_cap", 1, 2000, None, report))?,
         hysteresis: i32_of(o.int("hysteresis", 0, 500, Some(0), report))?,

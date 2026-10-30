@@ -1,5 +1,5 @@
 # seed=digest-b town=64x48 residents=20 days=30 content=data/base
-Story digest: seed 'digest-b', a 64x48 town, 20 residents, 30 days. Final state 9f01505f.
+Story digest: seed 'digest-b', a 64x48 town, 20 residents, 30 days. Final state 768894dc.
 
 Firsts
   first conversation: day 0, 00:03 - Hana Underhill and Omar Underhill (personal, warm)
@@ -8,19 +8,20 @@ Firsts
   first collapse: day 0, 15:27 - Tess Larsen
 
 Who talked most
-  Wren Young: 221 conversations
-  Olga Young: 212 conversations
-  Elena Larsen: 210 conversations
+  Wren Young: 215 conversations
+  Olga Young: 210 conversations
+  Elena Larsen: 201 conversations
 
-The town: 1523 conversations, 84 relationships warmed, 0 soured, 16 collapses.
-  topics: small talk 458, work 307, food 270, town news 207, remember 159, personal 86, complaint 36
-  relationships (154): Close friend 19, Friend 6, Friendly 7, Acquaintance 39, Stranger 83
-  closest pair: Jonas Rivera and Tariq Rivera (1000); coolest: Grace Okafor and Zane Petrov (-20)
+The town: 1498 conversations, 78 relationships warmed, 0 soured, 16 collapses.
+  plans: 73 asked, 55 kept, 17 broken, 0 declined, 0 unanswered.
+  topics: small talk 443, work 309, food 257, town news 208, remember 153, personal 86, complaint 42
+  relationships (155): Close friend 20, Friend 4, Friendly 8, Acquaintance 33, Stranger 90
+  closest pair: Jonas Rivera and Tariq Rivera (1000); coolest: Tess Larsen and Grace Okafor (-25)
 
 From the journal (the most recent notable entries)
   day 29, 10:50 - Sofia Young is in a bad way: Hunger is critical.
-  day 29, 16:19 - Amir Young and Anya Nakamura are now Acquaintance.
-  day 29, 18:48 - Tariq Rivera and Yara Nakamura are now Friendly.
-  day 29, 19:07 - Amir Young and Zane Petrov are now Acquaintance.
-  day 29, 22:08 - Zane Petrov is in a bad way: Energy is critical.
-  day 29, 22:08 - Zane Petrov collapsed from exhaustion.
+  day 29, 15:11 - Grace Okafor is in a bad way: Social is critical.
+  day 29, 18:53 - Sofia Young and Nadia Okafor are now Acquaintance.
+  day 29, 18:55 - Hana Underhill and Quinn Underhill are now Close friend.
+  day 29, 21:45 - Zane Petrov is in a bad way: Energy is critical.
+  day 29, 21:45 - Zane Petrov collapsed from exhaustion.

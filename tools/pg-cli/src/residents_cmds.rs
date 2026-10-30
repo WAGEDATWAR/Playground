@@ -336,6 +336,7 @@ fn report(args: &[String]) -> Result<ExitCode, String> {
     let mut tones: BTreeMap<String, u64> = BTreeMap::new();
     let mut cancelled = 0u64;
     let mut label_changes = 0u64;
+    let mut plans: BTreeMap<String, u64> = BTreeMap::new();
     for _ in 0..days * pg_core::time::TICKS_PER_DAY {
         let r = sim.step().map_err(|e| e.to_string())?;
         for e in &r.events {
@@ -353,6 +354,11 @@ fn report(args: &[String]) -> Result<ExitCode, String> {
                 }
                 "conversation.cancelled" => cancelled += 1,
                 "relationship.label_changed" => label_changes += 1,
+                kind if kind.starts_with("commitment.") => {
+                    *plans
+                        .entry(kind["commitment.".len()..].to_owned())
+                        .or_default() += 1;
+                }
                 _ => {}
             }
         }
@@ -381,10 +387,18 @@ fn report(args: &[String]) -> Result<ExitCode, String> {
     };
     println!(
         "topics: {}
-tones:  {}
-",
+tones:  {}",
         fmt(&topics),
         fmt(&tones)
+    );
+    println!(
+        "plans:  {}
+",
+        if plans.is_empty() {
+            "none".to_owned()
+        } else {
+            fmt(&plans)
+        }
     );
     // Social need, in fifths.
     let mut lonely = [0u32; 5];
@@ -468,9 +482,14 @@ strongest pairs:"
         .iter()
         .filter(|r| r.affinity >= friend_min)
         .collect();
+    let household = |id: EntityId| world.pawns.get(id).and_then(|p| p.household);
+    let across = friends
+        .iter()
+        .filter(|r| household(r.key.a) != household(r.key.b))
+        .count();
     println!(
         "
-friendship graph ({} edge(s), affinity {friend_min} and up):",
+friendship graph ({} edge(s), affinity {friend_min} and up; {across} across households):",
         friends.len()
     );
     for r in &friends {

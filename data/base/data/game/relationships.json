@@ -11,6 +11,17 @@
     "stood_up_impact": -80,
     "missed_impact": -30
   },
+  "meetups": {
+    "min_affinity": 300,
+    "chance_permille": 60,
+    "slots": 2,
+    "lead_slots": 2,
+    "latest_end_minutes": 1320,
+    "cooldown_minutes": 1440,
+    "expires_slots": 2,
+    "max_per_boundary": 2,
+    "keep_days": 2
+  },
   "labels": [
     { "id": "enemy", "label_key": "relationship.enemy", "min": -1000 },
     { "id": "disliked", "label_key": "relationship.disliked", "min": -600 },
