@@ -5,12 +5,15 @@
 //! theirs during the load phase, then [`ActionRegistry::freeze`] shuts it. Anything that later asks for an
 //! unregistered action (a schedule, a script, an LLM proposal) is refused with `unknown_action`.
 //!
-//! DEFERRED: DF-006 (see docs/DEFERRALS.md): preconditions, permissions, costs and effects are not all built.
+//! Preconditions (checked when a task starts) and effects (applied when it finishes) are declared on the
+//! definition and live in [`crate::effects`]. DEFERRED: DF-006 (see docs/DEFERRALS.md): permissions (who may
+//! run an action) wait for roles and offices, and costs beyond time wait for money.
 //!
-//! Milestone 0.5 ships the skeleton: `move_to` and `idle_at`, with `MoveTo` and `PerformFor` steps.
-//! Preconditions, permissions, costs and effects arrive with the systems that need them (Needs in Stage 1).
+//! Milestone 0.5 shipped the skeleton: `move_to` and `idle_at`, with `MoveTo` and `PerformUntilSlotEnd` steps;
+//! 2.0 added preconditions and effects.
 
 use crate::canon::Canon;
+use crate::effects::{Effect, Precondition, MAX_PER_ACTION};
 use crate::map::Tile;
 use crate::pawn::Step;
 use crate::reason::ReasonCode;
@@ -46,6 +49,10 @@ pub struct ActionDef {
     pub summary: String,
     /// Needs this action restores while a pawn performs it (Blueprint §8.1).
     pub restores: Vec<Restore>,
+    /// Conditions on the acting pawn that must hold when the task starts (checked by the TaskPlanner).
+    pub preconditions: Vec<Precondition>,
+    /// Changes applied atomically when the task finishes, through the core's validation (`effects`).
+    pub effects: Vec<Effect>,
 }
 
 /// A need an action restores while it is being performed.
@@ -75,6 +82,11 @@ pub enum RegisterError {
         id: ActionId,
         param: String,
     },
+    /// A precondition or effect is out of range, too many, or names a parameter that is not a pawn id.
+    BadEffect {
+        id: ActionId,
+        why: String,
+    },
 }
 
 impl fmt::Display for RegisterError {
@@ -84,6 +96,12 @@ impl fmt::Display for RegisterError {
             RegisterError::Duplicate(id) => write!(f, "action '{id}' is already registered"),
             RegisterError::BadNamespace { id, expected } => {
                 write!(f, "action '{id}' must be named {expected}")
+            }
+            RegisterError::BadEffect { id, why } => {
+                write!(
+                    f,
+                    "action '{id}' has an invalid precondition or effect: {why}"
+                )
             }
             RegisterError::BadStep { id, param } => write!(
                 f,
@@ -139,6 +157,8 @@ impl ActionRegistry {
                 ai_proposable: true,
                 summary: "Walk to a tile.".into(),
                 restores: Vec::new(),
+                preconditions: Vec::new(),
+                effects: Vec::new(),
             },
             ActionDef {
                 id: id("idle_at"),
@@ -155,6 +175,8 @@ impl ActionRegistry {
                 ai_proposable: true,
                 summary: "Walk to a tile and stay there for the reserved time.".into(),
                 restores: Vec::new(),
+                preconditions: Vec::new(),
+                effects: Vec::new(),
             },
             ActionDef {
                 id: id("meet_at"),
@@ -171,6 +193,8 @@ impl ActionRegistry {
                 ai_proposable: false,
                 summary: "Gather within a couple of tiles of a place (used by commitments).".into(),
                 restores: Vec::new(),
+                preconditions: Vec::new(),
+                effects: Vec::new(),
             },
         ];
         // Actions that restore a need while they are performed (Blueprint §8.1): walk to a tile and stay.
@@ -195,6 +219,8 @@ impl ActionRegistry {
                         per_hour,
                         company,
                     }],
+                    preconditions: Vec::new(),
+                    effects: Vec::new(),
                 }
             };
         let defs = defs.into_iter().chain([
@@ -274,6 +300,9 @@ impl ActionRegistry {
                     });
                 }
             }
+        }
+        if let Err(why) = check_declared(&def) {
+            return Err(RegisterError::BadEffect { id: def.id, why });
         }
         if self.defs.contains_key(&def.id) {
             return Err(RegisterError::Duplicate(def.id));
@@ -358,6 +387,29 @@ impl ActionRegistry {
     }
 }
 
+/// Static checks on an action's declared preconditions and effects: counts, ranges, and that every pawn
+/// reference names a parameter of the action that holds a pawn id.
+fn check_declared(def: &ActionDef) -> Result<(), String> {
+    if def.preconditions.len() > MAX_PER_ACTION || def.effects.len() > MAX_PER_ACTION {
+        return Err(format!("at most {MAX_PER_ACTION} of each"));
+    }
+    for pre in &def.preconditions {
+        pre.check_shape()?;
+    }
+    for effect in &def.effects {
+        effect.check_shape()?;
+        if let Some(name) = effect.param() {
+            let is_pawn = def.params.fields.get(name).is_some_and(
+                |f| matches!(&f.schema, FieldSchema::EntityId { kind } if kind == "pawn"),
+            );
+            if !is_pawn {
+                return Err(format!("'{name}' is not a pawn parameter"));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn id(s: &str) -> ActionId {
     // Only called with literals that are valid ids; the unit tests prove it.
     ActionId::new(s).unwrap_or_else(|_| ActionId::new("move_to").unwrap_or_else(|_| unreachable!()))
@@ -390,6 +442,8 @@ mod tests {
             ai_proposable: false,
             summary: "test".into(),
             restores: Vec::new(),
+            preconditions: Vec::new(),
+            effects: Vec::new(),
         }
     }
 

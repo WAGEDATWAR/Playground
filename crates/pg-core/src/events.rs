@@ -132,6 +132,12 @@ fn signed() -> Field {
     Field::required_int(-1_000_000_000, 1_000_000_000)
 }
 
+fn maybe_id(kind: &str) -> Field {
+    Field::maybe(FieldSchema::EntityId {
+        kind: kind.to_owned(),
+    })
+}
+
 fn text(max: usize) -> Field {
     Field::required_text(max)
 }
@@ -431,7 +437,7 @@ impl EventCatalog {
             &[
                 ("pawn", id("pawn")),
                 ("memory", id("mem")),
-                ("other", id("pawn")),
+                ("other", maybe_id("pawn")),
                 ("topic", text(48)),
                 ("importance", int()),
             ],

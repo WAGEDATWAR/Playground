@@ -211,6 +211,12 @@ pub fn actions_cmd() -> ExitCode {
                 }
             );
         }
+        for pre in &d.preconditions {
+            println!("    requires {}", pre.describe());
+        }
+        for e in &d.effects {
+            println!("    on finishing: {}", e.describe());
+        }
         let steps: Vec<String> = d
             .steps
             .iter()

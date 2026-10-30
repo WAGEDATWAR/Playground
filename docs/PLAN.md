@@ -2,7 +2,7 @@
 
 Working plan for building Playground in Rust. The three documents in `docs/reference/` are the **binding specification**:
 
-- `architecture-blueprint-v3.16.md` — how (crates, determinism, scripting, persistence)
+- `architecture-blueprint-v3.17.md` — how (crates, determinism, scripting, persistence)
 - `design-document-v3.4.md` — what and why (pillars, scope, modding boundaries)
 - `roadmap-v4.9.md` — when (stages, gates, decisions to confirm)
 
@@ -114,7 +114,7 @@ Started 2026-10-29. Each step is small, tested and committed on its own; the gat
 
 ## Phase 2 — Scheduler and social autonomy (Roadmap Stage 2)
 
-**Status: groundwork done 2026-10-29 (D-085); the plan below is proposed and waits for your answers before 2.0 starts.**
+**Status: plan accepted 2026-10-29 as proposed (order, one re-pin per milestone, checkpoints at 2.4 and 2.8, retargets of DF-012/014/019). 2.0 done.**
 
 Goal (Roadmap "Done when"): repeat runs from the same seed and inputs produce the same valid schedules; accepted plans reserve both residents; conflict outcomes are explainable; a sample pack adds an action and a system that run deterministically under replay.
 
@@ -128,7 +128,7 @@ Goal (Roadmap "Done when"): repeat runs from the same seed and inputs produce th
 
 | Milestone | Scope | Tests | Dev-mode feature |
 | --- | --- | --- | --- |
-| **2.0 Action system pieces (DF-006)** | Closed `Effect` set (`AddNeed`, `SetFlag`, `AddMemory`, `AdjustRelationship`, `SetField`; more as later stages need them), preconditions and permissions as declarative predicates, costs (time only for now), validation and clamping in one place in the core; the existing needs-restoring activities re-expressed as action effects without changing their numbers (hash-neutral where possible); reason codes `precondition_failed`, `unauthorized` | Effects clamp and are atomic; a failed precondition ends the task with a reason and replans; replay of the base town is byte-identical or the diff is the documented re-pin; hostile effect lists from scripts rejected | `pg action list` / `pg action explain <id>`; overlay Reasons tab shows precondition failures |
+| **2.0 Action system pieces (DF-006)** ✅ (D-086) | Closed `Effect` set (`AddNeed`, `SetFlag`, `AddMemory`, `AdjustRelationship`, `SetField`; more as later stages need them), preconditions and permissions as declarative predicates, costs (time only for now), validation and clamping in one place in the core; the existing needs-restoring activities re-expressed as action effects without changing their numbers (hash-neutral where possible); reason codes `precondition_failed`, `unauthorized` | Effects clamp and are atomic; a failed precondition ends the task with a reason and replans; replay of the base town is byte-identical or the diff is the documented re-pin; hostile effect lists from scripts rejected | `pg action list` / `pg action explain <id>`; overlay Reasons tab shows precondition failures |
 | **2.1 Commitment outcomes** | Completed and failed commitments write memories for both parties (a no-show: a negative memory for the one stood up), adjust affinity under the existing diminishing-returns and daily cap, and restore the social need; hostility is consulted when the invitee answers (decline with reason); declines and expiries remembered lightly so the same pair does not retry at once | Property: outcomes are symmetric where the Blueprint says so, caps hold, no memory flood over 30 days; golden for a hand-made meet-up; failure paths (path blocked, one pawn collapsed) | `pg residents inspect` shows the shared-plan memories; the journal logs kept and broken plans |
 | **2.2 Free-time scheduler** | Leisure candidates weighted by mood, needs, time of day, environment (place type, who is there) and relationship; chores and personal goals as priority-4 inputs from data; unreserved time stays open; `schedule.leisure_weight` hook declared; slot size, activity length and mood list tuned **in data** (Roadmap playtest item) | Same seed gives same schedules; weights are bounded; a day always validates (existing invariants); schedule goldens re-pinned once | `pg schedule explain` shows the weighted choice and the weights, attributed to packs when a hook moved them |
 | **2.3 Proposals: friends seek each other out (S-055, DF-024)** | A proposer step at slot boundaries: a resident with a free window and a friendly-or-better label picks who they have not seen lately (a small bounded candidate list, seeded tie-break), proposes a `meet_at` at a place that fits the window; one open proposal per resident; per-pair cooldown | Proposals only go to people who could say yes; a 20-resident, 30-day town has no proposal storm (bound on live commitments); two proposals to one invitee resolve by the equal-priority rules | The social report gains kept, broken and declined plans and cross-household friendships (DF-024); `pg sim --events commitment` |

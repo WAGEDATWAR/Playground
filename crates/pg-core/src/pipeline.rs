@@ -271,6 +271,7 @@ pub trait SystemProbe: Send {
 
 /// The ordered set of systems that make up one tick.
 pub struct Pipeline {
+    actions: Arc<ActionRegistry>,
     entries: Vec<Entry>,
     order: Vec<usize>,
     next_seq: u64,
@@ -299,7 +300,7 @@ fn builtin_system(
         }
         SystemSlot::TaskPlanner => Box::new(TaskPlannerSystem::new(Arc::clone(registry))),
         SystemSlot::Movement => Box::new(MovementSystem),
-        SystemSlot::Activity => Box::new(ActivitySystem),
+        SystemSlot::Activity => Box::new(ActivitySystem::new(Arc::clone(registry), None)),
         other => Box::new(NoOp(other.name())),
     }
 }
@@ -312,7 +313,11 @@ impl Pipeline {
 
     /// A pipeline whose planner takes its inputs from `source`.
     pub fn with_plan_source(plans: Arc<dyn PlanSource>) -> Pipeline {
-        let registry = Arc::new(ActionRegistry::builtin());
+        Pipeline::with_actions(plans, Arc::new(ActionRegistry::builtin()))
+    }
+
+    /// A pipeline with its own action registry (the built-ins plus whatever has been registered).
+    pub fn with_actions(plans: Arc<dyn PlanSource>, registry: Arc<ActionRegistry>) -> Pipeline {
         let entries = SystemSlot::ALL
             .into_iter()
             .map(|slot| Entry {
@@ -324,6 +329,7 @@ impl Pipeline {
             })
             .collect();
         let mut p = Pipeline {
+            actions: registry,
             entries,
             order: Vec::new(),
             next_seq: 1,
@@ -331,6 +337,11 @@ impl Pipeline {
         };
         p.rebuild_order();
         p
+    }
+
+    /// The action registry the task planner and the activity system use.
+    pub fn actions(&self) -> &Arc<ActionRegistry> {
+        &self.actions
     }
 
     /// Replaces the system in a built-in slot (its cadence stays the slot's).

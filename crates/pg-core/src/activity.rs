@@ -15,6 +15,7 @@
 use crate::action::{ActionRegistry, MEET_RADIUS};
 use crate::canon::{Canon, ToCanon};
 use crate::commitment::{CommitState, Commitment};
+use crate::effects;
 use crate::id::EntityId;
 use crate::map::Tile;
 use crate::pawn::{Intent, Replan, Step, Task};
@@ -23,6 +24,7 @@ use crate::reason::ReasonCode;
 use crate::schedule::{plan_day_from, replan_from, reserve_commitment, PlanInputs};
 use crate::time::TICKS_PER_DAY;
 use crate::world::WorldState;
+use pg_content::gamedata::GameData;
 use std::sync::Arc;
 
 /// Supplies the planner's inputs for a pawn's day. Pure: it reads the world and decides nothing random
@@ -309,6 +311,12 @@ impl System for TaskPlannerSystem {
             let end_tick = day_start
                 .saturating_add(u64::from(end_slot).saturating_mul(slot_ticks))
                 .saturating_sub(1);
+            if let Some(def) = self.registry.get(&action) {
+                if let Err(reason) = effects::check_preconditions(ctx.world, pawn, def) {
+                    fail_task(ctx, pawn, reason, true);
+                    continue;
+                }
+            }
             match self.registry.instantiate(&action, &params, end_tick) {
                 Ok(inst) => {
                     if let Some(p) = ctx.world.pawns.get_mut(pawn) {
@@ -338,7 +346,17 @@ impl System for TaskPlannerSystem {
 }
 
 /// Runs the current step of each pawn's task.
-pub struct ActivitySystem;
+pub struct ActivitySystem {
+    registry: Arc<ActionRegistry>,
+    /// Needed to apply effects that touch relationships and memories; without it only need changes apply.
+    data: Option<Arc<GameData>>,
+}
+
+impl ActivitySystem {
+    pub fn new(registry: Arc<ActionRegistry>, data: Option<Arc<GameData>>) -> ActivitySystem {
+        ActivitySystem { registry, data }
+    }
+}
 
 impl System for ActivitySystem {
     fn id(&self) -> &str {
@@ -359,13 +377,18 @@ impl System for ActivitySystem {
                 fail_task(ctx, pawn, ReasonCode::simple("interrupted"), false);
                 continue;
             }
-            advance(ctx, pawn);
+            advance(ctx, pawn, &self.registry, self.data.as_deref());
         }
     }
 }
 
 /// Moves a task along as far as it can go this tick.
-fn advance(ctx: &mut TickCtx<'_>, pawn: EntityId) {
+fn advance(
+    ctx: &mut TickCtx<'_>,
+    pawn: EntityId,
+    registry: &ActionRegistry,
+    data: Option<&GameData>,
+) {
     // A step can finish and the next begin in the same tick; the step count bounds the loop.
     let limit = ctx
         .world
@@ -390,7 +413,7 @@ fn advance(ctx: &mut TickCtx<'_>, pawn: EntityId) {
                             p.route = None; // close enough: stop walking
                         }
                     }
-                    step_done(ctx, pawn);
+                    step_done(ctx, pawn, registry, data);
                 } else if !moving {
                     let Some(target) = walk_target(ctx.world, pawn, map, goal, within) else {
                         fail_task(ctx, pawn, ReasonCode::simple("blocked_destination"), true);
@@ -417,7 +440,9 @@ fn advance(ctx: &mut TickCtx<'_>, pawn: EntityId) {
                     return;
                 }
             }
-            Some(Step::PerformUntil(end)) if ctx.flags.tick >= end => step_done(ctx, pawn),
+            Some(Step::PerformUntil(end)) if ctx.flags.tick >= end => {
+                step_done(ctx, pawn, registry, data)
+            }
             Some(Step::PerformUntil(_)) => return,
         }
     }
@@ -465,7 +490,12 @@ fn walk_target(
     best.map(|(_, y, x)| Tile::new(x, y))
 }
 
-fn step_done(ctx: &mut TickCtx<'_>, pawn: EntityId) {
+fn step_done(
+    ctx: &mut TickCtx<'_>,
+    pawn: EntityId,
+    registry: &ActionRegistry,
+    data: Option<&GameData>,
+) {
     let mut done = None;
     if let Some(t) = ctx.world.pawns.get_mut(pawn).and_then(|p| p.task.as_mut()) {
         t.current += 1;
@@ -475,6 +505,11 @@ fn step_done(ctx: &mut TickCtx<'_>, pawn: EntityId) {
         }
     }
     if let Some((reservation, action)) = done {
+        // The action's effects land together or not at all; a refusal ends the task with its reason.
+        if let Err(reason) = finish_effects(ctx, pawn, reservation, &action, registry, data) {
+            fail_task(ctx, pawn, reason, true);
+            return;
+        }
         ctx.emit(
             "task.done",
             Canon::map([
@@ -485,6 +520,33 @@ fn step_done(ctx: &mut TickCtx<'_>, pawn: EntityId) {
         );
     }
     ctx.mark_changed(pawn);
+}
+
+/// Validates and applies the effects an action declares, using the parameters of the reservation that
+/// started the task.
+fn finish_effects(
+    ctx: &mut TickCtx<'_>,
+    pawn: EntityId,
+    reservation: u32,
+    action: &pg_content::ActionId,
+    registry: &ActionRegistry,
+    data: Option<&GameData>,
+) -> Result<(), ReasonCode> {
+    let Some(def) = registry.get(action).filter(|d| !d.effects.is_empty()) else {
+        return Ok(());
+    };
+    let params = ctx
+        .world
+        .pawns
+        .get(pawn)
+        .and_then(|p| p.schedule.as_ref())
+        .and_then(|s| s.reservation(reservation))
+        .map_or(Canon::Null, |r| r.params.clone());
+    let empty = GameData::default();
+    let data = data.unwrap_or(&empty);
+    let planned = effects::plan_effects(ctx.world, pawn, def, &params, data)?;
+    effects::apply_planned(ctx, pawn, &planned, data);
+    Ok(())
 }
 
 /// Moves commitments through the protocol at each slot boundary.

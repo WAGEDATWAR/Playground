@@ -562,7 +562,7 @@ impl PlanSource for LifePlanSource {
 /// Installs the needs and mood systems and the plan source that knows about needs, replacing the
 /// scaffolding probe. Called when content with game data is loaded.
 pub fn install(pipeline: &mut Pipeline, data: Arc<GameData>) {
-    let actions = Arc::new(ActionRegistry::builtin());
+    let actions = Arc::clone(pipeline.actions());
     let plans: Arc<dyn PlanSource> = Arc::new(LifePlanSource::new(Arc::clone(&data)));
     pipeline.set_builtin(
         SystemSlot::Needs,
@@ -571,6 +571,13 @@ pub fn install(pipeline: &mut Pipeline, data: Arc<GameData>) {
     pipeline.set_builtin(
         SystemSlot::Mood,
         Box::new(MoodSystem::new(Arc::clone(&data))),
+    );
+    pipeline.set_builtin(
+        SystemSlot::Activity,
+        Box::new(crate::activity::ActivitySystem::new(
+            Arc::clone(pipeline.actions()),
+            Some(Arc::clone(&data)),
+        )),
     );
     crate::conversation::install(pipeline, data);
     pipeline.set_builtin(

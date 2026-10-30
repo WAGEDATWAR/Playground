@@ -17,6 +17,7 @@ pub mod commitment;
 pub mod containment;
 pub mod conversation;
 pub mod dev;
+pub mod effects;
 pub mod events;
 pub mod ext;
 pub mod hash;
